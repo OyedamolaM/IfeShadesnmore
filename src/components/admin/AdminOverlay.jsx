@@ -39,6 +39,13 @@ function AdminOverlay({
               />
             </label>
             <label>
+              Brand tagline
+              <input
+                value={settingsDraft.brandTagline}
+                onChange={(event) => onSettingsDraftChange("brandTagline", event.target.value)}
+              />
+            </label>
+            <label>
               Hero title
               <input
                 value={settingsDraft.heroTitle}
@@ -68,6 +75,14 @@ function AdminOverlay({
               />
             </label>
             <label>
+              Paystack public key
+              <input
+                placeholder="pk_test_..."
+                value={settingsDraft.paystackPublicKey}
+                onChange={(event) => onSettingsDraftChange("paystackPublicKey", event.target.value)}
+              />
+            </label>
+            <label>
               Or upload hero image
               <input type="file" accept="image/*" onChange={onHeroUpload} />
             </label>
@@ -84,7 +99,7 @@ function AdminOverlay({
               />
             </label>
             <label>
-              Price (USD)
+              Price (NGN)
               <input
                 type="number"
                 min="0"
@@ -99,9 +114,36 @@ function AdminOverlay({
                 value={productDraft.section}
                 onChange={(event) => onProductDraftChange("section", event.target.value)}
               >
-                <option value="arrival">New Arrivals grid</option>
-                <option value="featured">Large featured row</option>
+                <option value="category">Top category cards</option>
+                <option value="bestseller">Best sellers row</option>
               </select>
+            </label>
+            <label>
+              Audience section
+              <select
+                value={productDraft.audience}
+                onChange={(event) => onProductDraftChange("audience", event.target.value)}
+              >
+                <option value="women">Women</option>
+                <option value="men">Men</option>
+                <option value="unisex">Unisex</option>
+              </select>
+            </label>
+            <label>
+              Category button label
+              <input
+                placeholder="Shop Women's"
+                value={productDraft.ctaLabel}
+                onChange={(event) => onProductDraftChange("ctaLabel", event.target.value)}
+              />
+            </label>
+            <label>
+              Product description
+              <input
+                placeholder="Short product details"
+                value={productDraft.description}
+                onChange={(event) => onProductDraftChange("description", event.target.value)}
+              />
             </label>
             <label>
               Fallback frame style
@@ -113,6 +155,8 @@ function AdminOverlay({
                 <option value="tortoise">Tortoise</option>
                 <option value="cat">Cat-Eye</option>
                 <option value="clear">Clear</option>
+                <option value="square">Square</option>
+                <option value="aviator">Aviator</option>
               </select>
             </label>
             <label>
@@ -149,7 +193,8 @@ function AdminOverlay({
                     <strong>{product.name}</strong>
                     <span>
                       {toPrice(product.price)} |{" "}
-                      {product.section === "arrival" ? "New Arrivals" : "Featured"}
+                      {product.section === "category" ? "Category Card" : "Best Seller"} |{" "}
+                      {(product.audience || "unisex").toUpperCase()}
                     </span>
                   </div>
                   <div className="list-actions">
