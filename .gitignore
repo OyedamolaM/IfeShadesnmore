@@ -1,1 +1,6 @@
 node_modules/
+.env
+dist/
+server/data/
+cookies.txt
+tmp_checkpoint.mjs
