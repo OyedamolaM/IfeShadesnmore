@@ -15,7 +15,7 @@ export const DEFAULT_PRODUCTS = [
     variant: "tortoise",
     description: "Elegant everyday frames for women with lightweight comfort.",
     image:
-      "https://images.pexels.com/photos/14482342/pexels-photo-14482342.jpeg?cs=srgb&dl=pexels-studioautenticamx-14482342.jpg&fm=jpg"
+      "/hero/female-glasses.jpg"
   },
   {
     id: "men-category",
@@ -27,19 +27,19 @@ export const DEFAULT_PRODUCTS = [
     variant: "square",
     description: "Classic masculine silhouettes built for daily wear.",
     image:
-      "https://images.pexels.com/photos/5752395/pexels-photo-5752395.jpeg?cs=srgb&dl=pexels-kseniachernaya-5752395.jpg&fm=jpg"
+      "/hero/male-glasses.jpg"
   },
   {
     id: "sunglasses-category",
     name: "Sunglasses",
     price: 36000,
     section: "category",
-    audience: "unisex",
+    audience: "sunglasses",
     ctaLabel: "Shop Sunglasses",
     variant: "aviator",
     description: "UV-protected shades with polished fashion-forward finish.",
     image:
-      "https://images.pexels.com/photos/46710/pexels-photo-46710.jpeg?cs=srgb&dl=pexels-pixabay-46710.jpg&fm=jpg"
+      "/hero/Sunglasses.jpg"
   },
   {
     id: "classic-round",
@@ -79,7 +79,7 @@ export const DEFAULT_PRODUCTS = [
     name: "Aviator Sunglasses",
     price: 38000,
     section: "bestseller",
-    audience: "unisex",
+    audience: "sunglasses",
     variant: "aviator",
     description: "Modern aviator shape with dark lens for full sun coverage.",
     image:
@@ -88,13 +88,12 @@ export const DEFAULT_PRODUCTS = [
 ];
 
 export const DEFAULT_SETTINGS = {
-  brandName: "Ife_ShadesnMore",
-  brandTagline: "EYEWEAR",
-  heroTitle: "Find Your Perfect Frames",
-  heroSubtitle: "Discover stylish and affordable eyeglasses.",
+  brandName: "IfeShadesnMore",
+  brandTagline: "Fashion, Prescription, all in one place",
+  heroTitle: "Confidence Perfectly Framed",
+  heroSubtitle: "Look the class, style with pride, pay with less.",
   heroButtonLabel: "Shop Now",
-  heroImage: "/hero/hero-candidate2.jpg",
-  paystackPublicKey: ""
+  heroImage: "/hero/hero-candidate2.jpg"
 };
 
 export const EMPTY_PRODUCT = {
@@ -117,12 +116,12 @@ export const FEATURE_ITEMS = [
   },
   {
     type: "shipping",
-    title: "Free Shipping",
+    title: "Nationwide Delivery",
     description: "On All Orders"
   },
   {
     type: "returns",
-    title: "30-Day Returns",
+    title: "7-Day Money-Back Guarantee",
     description: "Satisfaction Guaranteed"
   }
 ];
@@ -179,10 +178,10 @@ export const DEFAULT_HERO_ROTATION_IMAGES = [
   },
   {
     src: "/hero/hero-recent-5.jpg",
-    alt: "Woman wearing premium metal eyeglasses",
+    alt: "Portrait model wearing premium eyeglasses",
     effect: "zoom",
     position: "center",
-    focus: "50% 16%"
+    focus: "50% 14%"
   },
   {
     src: "/hero/hero-recent-6.jpg",

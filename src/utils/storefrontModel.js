@@ -1,0 +1,91 @@
+const BLOCKED_HERO_IMAGE_BASE_URLS = new Set([
+  "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f"
+]);
+
+export function isBlockedHeroImageSource(source) {
+  const value = String(source || "").trim();
+  if (!value) return false;
+  const [baseUrl] = value.split("?");
+  return BLOCKED_HERO_IMAGE_BASE_URLS.has(baseUrl);
+}
+
+export function normalizeSection(section) {
+  if (section === "arrival") return "category";
+  if (section === "featured") return "bestseller";
+  return section;
+}
+
+export function normalizeAudience(value) {
+  const source = String(value || "").trim().toLowerCase();
+  const compact = source.replace(/[^a-z]/g, "");
+
+  if (
+    compact.includes("women") ||
+    compact.includes("woman") ||
+    compact.includes("female") ||
+    compact.includes("lady")
+  ) {
+    return "women";
+  }
+
+  if (compact === "men" || compact === "man" || compact.includes("male") || compact.includes("gent")) {
+    return "men";
+  }
+
+  if (compact.includes("sunglass") || compact.includes("shades")) {
+    return "sunglasses";
+  }
+
+  if (
+    compact.includes("antiblue") ||
+    compact.includes("bluelight") ||
+    compact.includes("antiglare")
+  ) {
+    return "antiblue";
+  }
+
+  if (compact.includes("prescrip") || compact.includes("prescription") || compact === "rx") {
+    return "prescrip";
+  }
+
+  if (compact.includes("unisex")) return "unisex";
+  return "unisex";
+}
+
+export function normalizeProduct(product) {
+  return {
+    ...product,
+    section: normalizeSection(product.section),
+    audience: normalizeAudience(product.audience),
+    ctaLabel: product.ctaLabel || "",
+    description: product.description || "",
+    variant: product.variant || "round",
+    image: product.image || ""
+  };
+}
+
+export function buildHeroSlides(primaryHeroImage, rotationImages) {
+  const uniqueSlides = [];
+
+  const pushSlide = (src, alt, effect = "fade", position = "center", focus = "50% 16%") => {
+    const value = String(src || "").trim();
+    if (!value) return;
+    if (isBlockedHeroImageSource(value)) return;
+    if (uniqueSlides.some((slide) => slide.src === value)) return;
+    uniqueSlides.push({ src: value, alt, effect, position, focus });
+  };
+
+  pushSlide(
+    primaryHeroImage,
+    "Model wearing Ife ShadesnMore glasses",
+    "fade",
+    "center",
+    "50% 14%"
+  );
+
+  (rotationImages || []).forEach((slide) => {
+    pushSlide(slide.src, slide.alt, slide.effect, slide.position, slide.focus);
+  });
+
+  return uniqueSlides;
+}
