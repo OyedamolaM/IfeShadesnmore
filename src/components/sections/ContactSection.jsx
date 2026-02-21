@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+
 function SocialIcon({ type }) {
   if (type === "facebook") {
     return (
@@ -17,6 +19,14 @@ function SocialIcon({ type }) {
     );
   }
 
+  if (type === "tiktok") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14.8 3.5c.6 1.6 1.8 2.8 3.4 3.4v2.6a6.1 6.1 0 0 1-3.4-1v5.6a5.8 5.8 0 1 1-5-5.8v2.7a3.2 3.2 0 1 0 2.4 3.1V3.5h2.6Z" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M19 7.5c-.5.2-1 .3-1.6.4a2.8 2.8 0 0 0 1.2-1.5c-.5.3-1.1.5-1.7.6a2.8 2.8 0 0 0-4.7 2.6a8 8 0 0 1-5.8-3A2.8 2.8 0 0 0 7.3 11c-.4 0-.8-.1-1.1-.3v.1a2.8 2.8 0 0 0 2.2 2.8c-.3.1-.6.1-.9.1h-.5A2.8 2.8 0 0 0 9.7 16a5.6 5.6 0 0 1-3.5 1.2H5a7.9 7.9 0 0 0 4.3 1.2c5.1 0 8-4.3 8-8V10a5.8 5.8 0 0 0 1.4-1.5Z" />
@@ -24,7 +34,41 @@ function SocialIcon({ type }) {
   );
 }
 
-function ContactSection({ email, emailStatus, onEmailChange, onSubscribe }) {
+function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubscribing = false }) {
+  const [openLegalModal, setOpenLegalModal] = useState("");
+  const emailAddress = "oluborodedeborah2000@gmail.com";
+  const phoneNumber = "09063556765";
+  const officeAddress = "1, Sunday Akinbo Str, command Ipaja, Lagos";
+  const whatsappLink =
+    "https://wa.me/2349063556765?text=Hello%20Ife_ShadesnMore%2C%20I%20would%20like%20to%20make%20an%20order.";
+  const savansWhatsAppLink =
+    "https://wa.me/2348165258326?text=Hello%20Savans%20Technologies%2C%20I%20need%20a%20website.";
+  const isLegalOpen = openLegalModal === "privacy" || openLegalModal === "terms";
+
+  const legalContent = useMemo(() => {
+    if (openLegalModal === "privacy") {
+      return {
+        title: "Privacy Policy",
+        body: [
+          "We only collect details needed to process orders, deliver products, and send updates you subscribe for. We do not sell your personal information.",
+          "Payments are processed securely through Paystack. To request update or removal of your information, contact us via email or WhatsApp."
+        ]
+      };
+    }
+
+    if (openLegalModal === "terms") {
+      return {
+        title: "Terms of Service",
+        body: [
+          "By placing an order, you agree to provide accurate delivery details and make payment through approved channels.",
+          "Prices and stock may change. Orders are confirmed after successful payment. For support on delivery, returns, or order issues, contact us through email, phone, or WhatsApp."
+        ]
+      };
+    }
+
+    return null;
+  }, [openLegalModal]);
+
   return (
     <>
       <section className="subscribe-section" id="contact">
@@ -36,8 +80,11 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe }) {
               placeholder="Sign up for exclusive offers & updates"
               value={email}
               onChange={(event) => onEmailChange(event.target.value)}
+              disabled={isSubscribing}
             />
-            <button type="submit">Subscribe</button>
+            <button type="submit" disabled={isSubscribing}>
+              {isSubscribing ? "Subscribing..." : "Subscribe"}
+            </button>
           </form>
         </div>
         {emailStatus ? <p className="subscribe-status">{emailStatus}</p> : null}
@@ -46,23 +93,93 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe }) {
       <footer className="site-footer">
         <div className="container footer-inner">
           <div className="footer-links">
-            <a href="#privacy">Privacy Policy</a>
+            <button type="button" className="footer-link-button" onClick={() => setOpenLegalModal("privacy")}>
+              Privacy Policy
+            </button>
             <span>|</span>
-            <a href="#terms">Terms of Service</a>
+            <button type="button" className="footer-link-button" onClick={() => setOpenLegalModal("terms")}>
+              Terms of Service
+            </button>
           </div>
+
+          <div className="footer-contact-stack">
+            <div className="footer-contact-links">
+              <a href={`mailto:${emailAddress}`}
+              target="_blank"
+              rel="noopener noreferrer">{emailAddress}</a>
+              <span>|</span>
+              <a href={`tel:${phoneNumber}`}>{phoneNumber}</a>
+              <span>|</span>
+              <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                WhatsApp
+              </a>
+            </div>
+            <p>{officeAddress}</p>
+            <p className="footer-credit">
+              Powered by{" "}
+              <a
+                className="footer-credit-link"
+                href={savansWhatsAppLink}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Savans Technologies
+              </a>
+            </p>
+          </div>
+
           <div className="footer-socials" aria-label="Social media links">
-            <a href="#facebook" aria-label="Facebook">
+            <a
+              href="https://www.facebook.com/share/1CJYVRj8hQ/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Facebook"
+            >
               <SocialIcon type="facebook" />
             </a>
-            <a href="#instagram" aria-label="Instagram">
+            <a
+              href="https://www.instagram.com/ife_shadesnmore?igsh=MW90cDlmdXRzZzRncQ=="
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Instagram"
+            >
               <SocialIcon type="instagram" />
             </a>
-            <a href="#twitter" aria-label="Twitter">
-              <SocialIcon type="twitter" />
+            <a
+              href="https://www.tiktok.com/@ife_shadesnmore?_r=1&_t=ZS-946goatDDNp"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="TikTok"
+            >
+              <SocialIcon type="tiktok" />
             </a>
           </div>
         </div>
       </footer>
+
+      {isLegalOpen && legalContent ? (
+        <div className="commerce-overlay legal-modal-overlay" onClick={() => setOpenLegalModal("")}>
+          <div
+            className="legal-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={legalContent.title}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="close-x" onClick={() => setOpenLegalModal("")} aria-label="Close legal modal">
+              x
+            </button>
+            <h3>{legalContent.title}</h3>
+            {legalContent.body.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+            <p>
+              Contact: <a href={`mailto:${emailAddress}`}>{emailAddress}</a> |{" "}
+              <a href={`tel:${phoneNumber}`}>{phoneNumber}</a>
+            </p>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

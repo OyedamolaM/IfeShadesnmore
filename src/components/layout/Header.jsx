@@ -9,7 +9,9 @@ function Header({
   cartCount,
   onOpenCart,
   onOpenProfile,
-  onOpenSearch
+  onOpenSearch,
+  onOpenAbout,
+  showCart = true
 }) {
   const normalizedCount = Math.max(0, Number(cartCount) || 0);
 
@@ -22,11 +24,19 @@ function Header({
         </button>
 
         <nav aria-label="Primary navigation" className="primary-nav">
-          <a className="active" href="#home">
+          <a href="#home">
             Home
           </a>
           <a href="#shop">Shop</a>
-          <a href="#about">About</a>
+          <a
+            href="#about"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpenAbout?.();
+            }}
+          >
+            About
+          </a>
           <a href="#contact">Contact</a>
         </nav>
 
@@ -39,12 +49,19 @@ function Header({
             <ProfileIcon />
           </button>
 
-          <button type="button" className="header-icon-button header-cart" onClick={onOpenCart} aria-label="Open cart">
-            <CartIcon />
-            {normalizedCount > 0 ? (
-              <span className="cart-count">{normalizedCount > 99 ? "99+" : normalizedCount}</span>
-            ) : null}
-          </button>
+          {showCart ? (
+            <button
+              type="button"
+              className="header-icon-button header-cart"
+              onClick={onOpenCart}
+              aria-label="Open cart"
+            >
+              <CartIcon />
+              {normalizedCount > 0 ? (
+                <span className="cart-count">{normalizedCount > 99 ? "99+" : normalizedCount}</span>
+              ) : null}
+            </button>
+          ) : null}
         </div>
       </div>
     </header>
