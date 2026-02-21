@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import HeroArtwork from "../art/HeroArtwork";
+import { useEffect, useMemo, useRef, useState } from "react";
 import FeatureIcon from "../icons/FeatureIcon";
 
-const ROTATION_INTERVAL_MS = 10000;
+const ROTATION_INTERVAL_MS = 5000;
+const EFFECT_SEQUENCE = ["fade", "zoom", "slide", "pan", "lift"];
 
 const HERO_PROMISE_ITEMS = [
   {
     type: "shipping",
-    title: "Free Shipping",
+    title: "Nation-wide Shipping",
     description: "Fast delivery on every order"
   },
   {
@@ -43,12 +43,14 @@ function normalizeFocus(value) {
 function HeroSection({ settings, heroSlides }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const [failedSlides, setFailedSlides] = useState({});
+  const preloadedRef = useRef({});
 
   const slides = useMemo(() => {
     if (!Array.isArray(heroSlides) || heroSlides.length === 0) return [];
-    return heroSlides.map((slide) => ({
+    return heroSlides.map((slide, index) => ({
       ...slide,
-      effect: normalizeEffect(slide.effect),
+      // Keep transitions modern and varied per slide.
+      effect: normalizeEffect(slide.effect || EFFECT_SEQUENCE[index % EFFECT_SEQUENCE.length]),
       position: normalizePosition(slide.position),
       focus: normalizeFocus(slide.focus)
     }));
@@ -57,22 +59,56 @@ function HeroSection({ settings, heroSlides }) {
   useEffect(() => {
     setHeroIndex(0);
     setFailedSlides({});
+    preloadedRef.current = {};
   }, [slides.length]);
 
   useEffect(() => {
-    if (slides.length <= 1) return undefined;
+    slides.forEach((slide) => {
+      const src = slide.src || "";
+      if (!src || preloadedRef.current[src] || failedSlides[src]) return;
+
+      preloadedRef.current[src] = true;
+      const preload = new Image();
+      preload.decoding = "async";
+      preload.onerror = () => {
+        setFailedSlides((current) => ({ ...current, [src]: true }));
+      };
+      preload.src = src;
+    });
+  }, [slides, failedSlides]);
+
+  const usableSlides = useMemo(
+    () => slides.filter((slide) => Boolean(slide.src) && !failedSlides[slide.src]),
+    [slides, failedSlides]
+  );
+
+  useEffect(() => {
+    if (!usableSlides.length) {
+      setHeroIndex(0);
+      return;
+    }
+    setHeroIndex((current) => current % usableSlides.length);
+  }, [usableSlides.length]);
+
+  useEffect(() => {
+    if (usableSlides.length <= 1) return undefined;
     const timer = window.setInterval(() => {
-      setHeroIndex((current) => (current + 1) % slides.length);
+      setHeroIndex((current) => (current + 1) % usableSlides.length);
     }, ROTATION_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [slides.length]);
+  }, [usableSlides.length]);
 
-  const activeSlide = slides[heroIndex];
-  const activeSrc = activeSlide?.src ?? "";
-  const activeEffect = activeSlide?.effect ?? "fade";
-  const activePosition = activeSlide?.position ?? "center";
-  const activeFocus = activeSlide?.focus ?? DEFAULT_FOCUS;
-  const isImageUsable = Boolean(activeSrc) && !failedSlides[activeSrc];
+  const isImageUsable = usableSlides.length > 0;
+
+  const goToPreviousSlide = () => {
+    if (usableSlides.length <= 1) return;
+    setHeroIndex((current) => (current - 1 + usableSlides.length) % usableSlides.length);
+  };
+
+  const goToNextSlide = () => {
+    if (usableSlides.length <= 1) return;
+    setHeroIndex((current) => (current + 1) % usableSlides.length);
+  };
 
   return (
     <section className="hero-section" id="home">
@@ -92,20 +128,48 @@ function HeroSection({ settings, heroSlides }) {
           </div>
 
           <div className="hero-image-wrap">
-            {isImageUsable ? (
-              <img
-                key={`${activeSrc}-${heroIndex}`}
-                className={`hero-rotating-image hero-transition-${activeEffect} hero-position-${activePosition}`}
-                src={activeSrc}
-                alt={activeSlide.alt || "Model wearing eyeglasses"}
-                style={{ objectPosition: activeFocus }}
-                onError={() => {
-                  setFailedSlides((current) => ({ ...current, [activeSrc]: true }));
-                }}
-              />
-            ) : (
-              <HeroArtwork />
-            )}
+            <div className="hero-image-stage">
+              {isImageUsable
+                ? usableSlides.map((slide, index) => (
+                    <img
+                      key={slide.src}
+                      className={`hero-rotating-image hero-transition-${slide.effect} hero-position-${slide.position} ${
+                        index === heroIndex ? "is-active" : ""
+                      }`}
+                      src={slide.src}
+                      alt={slide.alt || "Model wearing eyeglasses"}
+                      style={{
+                        objectPosition: slide.focus || DEFAULT_FOCUS,
+                        "--hero-transition-duration": `${1800 + (index % 5) * 250}ms`
+                      }}
+                      onError={() => {
+                        setFailedSlides((current) => ({ ...current, [slide.src]: true }));
+                      }}
+                    />
+                  ))
+                : null}
+
+              {usableSlides.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="hero-nav-button hero-nav-prev"
+                    onClick={goToPreviousSlide}
+                    aria-label="Previous slide"
+                  >
+                    <span aria-hidden="true">&#8249;</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="hero-nav-button hero-nav-next"
+                    onClick={goToNextSlide}
+                    aria-label="Next slide"
+                  >
+                    <span aria-hidden="true">&#8250;</span>
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

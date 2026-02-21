@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 import ProductMedia from "./ProductMedia";
 import { toPrice } from "../../utils/format";
 
-function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow }) {
-  const [quantity, setQuantity] = useState(1);
+function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrdering = true }) {
+  const [quantityInput, setQuantityInput] = useState("1");
 
   useEffect(() => {
-    setQuantity(1);
+    setQuantityInput("1");
   }, [product?.id]);
 
   if (!product) return null;
 
-  const nextQuantity = Math.max(1, Number(quantity) || 1);
+  const resolveQuantity = () => {
+    const parsed = Number.parseInt(String(quantityInput || "").trim(), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  };
+  const nextQuantity = resolveQuantity();
   const description =
     (product.description || "").trim() || "Premium frame with modern finish and lasting comfort.";
 
@@ -42,24 +46,42 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow }) {
             <li>Free cleaning cloth included</li>
           </ul>
 
-          <label className="quantity-control">
-            Quantity
-            <input
-              type="number"
-              min="1"
-              value={nextQuantity}
-              onChange={(event) => setQuantity(event.target.value)}
-            />
-          </label>
+          {allowOrdering ? (
+            <>
+              <label className="quantity-control">
+                Quantity
+                <input
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={quantityInput}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (!/^\d*$/.test(nextValue)) return;
+                    setQuantityInput(nextValue);
+                  }}
+                  onBlur={() => {
+                    setQuantityInput(String(resolveQuantity()));
+                  }}
+                />
+              </label>
 
-          <div className="product-modal-actions">
-            <button type="button" className="secondary-action" onClick={() => onAddToCart(product, nextQuantity)}>
-              Add to Cart
-            </button>
-            <button type="button" className="primary-action" onClick={() => onBuyNow(product, nextQuantity)}>
-              Buy Now
-            </button>
-          </div>
+              <div className="product-modal-actions">
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => onAddToCart(product, nextQuantity)}
+                >
+                  Add to Cart
+                </button>
+                <button type="button" className="primary-action" onClick={() => onBuyNow(product, nextQuantity)}>
+                  Buy Now
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="product-modal-readonly">Ordering is disabled in admin preview mode.</p>
+          )}
         </div>
       </div>
     </div>
