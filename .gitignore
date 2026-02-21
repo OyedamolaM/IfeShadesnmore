@@ -4,3 +4,4 @@ dist/
 server/data/
 cookies.txt
 tmp_checkpoint.mjs
+.env.example
