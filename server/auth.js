@@ -35,13 +35,19 @@ export function cookieOptions() {
   };
 }
 
+function clearCookieOptions() {
+  const { maxAge, ...rest } = cookieOptions();
+  void maxAge;
+  return rest;
+}
+
 export function setAuthCookie(res, user) {
   const token = signAuthToken(user);
   res.cookie(TOKEN_COOKIE_NAME, token, cookieOptions());
 }
 
 export function clearAuthCookie(res) {
-  res.clearCookie(TOKEN_COOKIE_NAME, cookieOptions());
+  res.clearCookie(TOKEN_COOKIE_NAME, clearCookieOptions());
 }
 
 async function findUserById(id) {
