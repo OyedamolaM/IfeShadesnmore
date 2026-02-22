@@ -236,11 +236,6 @@ function ArrivalsSection({
 
   const sortedCollectionCards = useMemo(() => {
     return [...COLLECTION_CARDS]
-      .filter((card) => {
-        const hasProducts = (allProductsByAudience[card.audience] || []).length > 0;
-        // Keep explicit "coming soon" collections hidden from full listing until products exist.
-        return hasProducts || !card.comingSoon;
-      })
       .sort((cardA, cardB) => {
         const aHasProducts = (allProductsByAudience[cardA.audience] || []).length > 0;
         const bHasProducts = (allProductsByAudience[cardB.audience] || []).length > 0;
@@ -273,7 +268,7 @@ function ArrivalsSection({
         isAvailable,
         comingSoon
       };
-    }).filter((card) => card.isAvailable || card.comingSoon);
+    });
   }, [allProductsByAudience]);
 
   useEffect(() => {
@@ -293,9 +288,18 @@ function ArrivalsSection({
       scrollToSection(card.sectionId);
       return;
     }
+
+    if (card.comingSoon) {
+      setCategoryInfoNotice({
+        id: card.id,
+        message: "Product not yet arrived, but your lens can be converted for a service fee."
+      });
+      return;
+    }
+
     setCategoryInfoNotice({
       id: card.id,
-      message: "Product not yet arrived, but your lens can be converted for a service fee."
+      message: "Products are being restocked. Please check back soon."
     });
   };
 
@@ -351,7 +355,11 @@ function ArrivalsSection({
                       className="secondary-action"
                       onClick={() => onCategoryCardAction(card)}
                     >
-                      {card.isAvailable ? card.ctaLabel : "Coming Soon"}
+                      {card.isAvailable
+                        ? card.ctaLabel
+                        : card.comingSoon
+                        ? "Coming Soon"
+                        : card.ctaLabel}
                     </button>
                   </div>
                   {categoryInfoNotice.id === card.id ? (

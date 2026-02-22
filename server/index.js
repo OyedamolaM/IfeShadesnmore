@@ -267,14 +267,26 @@ async function bootstrapAdminIfConfigured() {
   );
 }
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8).max(128),
-  fullName: z.string().min(1).max(120),
-  phone: z.string().max(40).optional().default(""),
-  address: z.string().max(300).optional().default(""),
-  city: z.string().max(120).optional().default("")
-});
+const registerSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(8).max(128),
+    firstName: z.string().max(60).optional().default(""),
+    lastName: z.string().max(60).optional().default(""),
+    fullName: z.string().max(120).optional().default(""),
+    phone: z.string().max(40).optional().default(""),
+    address: z.string().max(300).optional().default(""),
+    city: z.string().max(120).optional().default("")
+  })
+  .refine(
+    (value) =>
+      (Boolean(`${value.firstName || ""}`.trim()) && Boolean(`${value.lastName || ""}`.trim())) ||
+      Boolean(`${value.fullName || ""}`.trim()),
+    {
+      message: "First and last name are required.",
+      path: ["firstName"]
+    }
+  );
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -332,12 +344,29 @@ const checkoutSchema = z.object({
     )
     .min(1),
   paymentMethod: z.enum(["card", "transfer"]),
-  customer: z.object({
-    fullName: z.string().min(1).max(120),
-    phone: z.string().min(1).max(40),
-    address: z.string().min(1).max(300),
-    city: z.string().min(1).max(120)
-  })
+  customer: z
+    .object({
+      firstName: z.string().max(60).optional().default(""),
+      lastName: z.string().max(60).optional().default(""),
+      fullName: z.string().max(120).optional().default(""),
+      email: z.string().email().optional().or(z.literal("")).default(""),
+      phone: z.string().max(40).optional().default(""),
+      address: z.string().min(1).max(300),
+      city: z.string().min(1).max(120)
+    })
+    .refine((value) => Boolean(`${value.phone || ""}`.trim()) || Boolean(`${value.email || ""}`.trim()), {
+      message: "Phone or email is required.",
+      path: ["phone"]
+    })
+    .refine(
+      (value) =>
+        (Boolean(`${value.firstName || ""}`.trim()) && Boolean(`${value.lastName || ""}`.trim())) ||
+        Boolean(`${value.fullName || ""}`.trim()),
+      {
+        message: "First and last name are required.",
+        path: ["firstName"]
+      }
+    )
 });
 
 const orderStatusSchema = z.object({
@@ -379,6 +408,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
 
   const payload = parsed.data;
   const email = normalizeEmail(payload.email);
+  const fullName = `${payload.firstName || ""} ${payload.lastName || ""}`.trim() || payload.fullName.trim();
 
   const existing = await queryOne("SELECT id FROM users WHERE email = ?", [email]);
   if (existing) {
@@ -395,7 +425,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
     [
       email,
       passwordHash,
-      payload.fullName.trim(),
+      fullName,
       payload.phone.trim(),
       payload.address.trim(),
       payload.city.trim()
@@ -409,14 +439,14 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
     fullName: userRow.full_name,
     verificationUrl: verification.verificationUrl
   });
+  const message = delivery.delivered
+    ? "Account created. Please verify your email before login."
+    : "Account created, but verification email could not be delivered. Please use Resend Verification Email.";
 
   res.status(201).json({
     ok: true,
     requiresEmailVerification: true,
-    message: "Account created. Please verify your email before login.",
-    ...(process.env.NODE_ENV !== "production" && !delivery.delivered
-      ? { verificationUrl: verification.verificationUrl }
-      : {})
+    message
   });
 });
 
@@ -515,13 +545,13 @@ app.post("/api/auth/resend-verification", authLimiter, async (req, res) => {
     fullName: userRow.full_name,
     verificationUrl: verification.verificationUrl
   });
+  const message = delivery.delivered
+    ? "Verification email sent."
+    : "Verification email could not be delivered right now. Please try again later.";
 
   res.json({
     ok: true,
-    message: "Verification email sent.",
-    ...(process.env.NODE_ENV !== "production" && !delivery.delivered
-      ? { verificationUrl: verification.verificationUrl }
-      : {})
+    message
   });
 });
 
@@ -739,6 +769,10 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
   const orderId = createOrderId();
   const reference = createPaymentReference();
   const customer = payload.customer;
+  const customerFullName =
+    `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || customer.fullName.trim();
+  const customerEmail = normalizeEmail(customer.email || "");
+  const customerPhone = String(customer.phone || "").trim();
 
   await withTransaction(async (tx) => {
     await tx.execute(
@@ -752,9 +786,9 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
       [
         orderId,
         req.user.id,
-        req.user.email,
-        customer.fullName.trim(),
-        customer.phone.trim(),
+        customerEmail || req.user.email,
+        customerFullName,
+        customerPhone,
         customer.address.trim(),
         customer.city.trim(),
         payload.paymentMethod,
@@ -779,7 +813,7 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
   try {
     const channels = payload.paymentMethod === "transfer" ? ["bank_transfer", "bank"] : ["card"];
     const checkout = await initializeTransaction({
-      email: req.user.email,
+      email: customerEmail || req.user.email,
       amountInKobo: subtotal * 100,
       reference,
       callbackUrl: `${FRONTEND_URL}/payment/callback`,
@@ -796,7 +830,7 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
         SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now')
         WHERE id = ?
       `,
-      [customer.fullName.trim(), customer.phone.trim(), customer.address.trim(), customer.city.trim(), req.user.id]
+      [customerFullName, customerPhone, customer.address.trim(), customer.city.trim(), req.user.id]
     );
 
     res.json({

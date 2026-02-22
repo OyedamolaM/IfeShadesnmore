@@ -19,34 +19,58 @@ function parseBoolean(value, fallback = false) {
   return fallback;
 }
 
-const SMTP_HOST = stripWrappingQuotes(process.env.SMTP_HOST || "");
-const SMTP_PORT = Number(stripWrappingQuotes(process.env.SMTP_PORT || "587")) || 587;
-const SMTP_USER = stripWrappingQuotes(process.env.SMTP_USER || "");
-const SMTP_PASS = stripWrappingQuotes(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "");
-const SMTP_SECURE = parseBoolean(process.env.SMTP_SECURE, SMTP_PORT === 465);
-const SMTP_REQUIRE_TLS = parseBoolean(process.env.SMTP_REQUIRE_TLS, false);
-const SMTP_IGNORE_TLS = parseBoolean(process.env.SMTP_IGNORE_TLS, false);
-const SMTP_TLS_REJECT_UNAUTHORIZED = parseBoolean(
-  process.env.SMTP_TLS_REJECT_UNAUTHORIZED,
-  true
-);
-const MAIL_FROM = stripWrappingQuotes(
-  process.env.MAIL_FROM ||
-    (SMTP_USER ? `IfeShadesnMore <${SMTP_USER}>` : "no-reply@ife-shadesnmore.local")
-);
+function getMailerConfig() {
+  const host = stripWrappingQuotes(process.env.SMTP_HOST || "");
+  const port = Number(stripWrappingQuotes(process.env.SMTP_PORT || "587")) || 587;
+  const user = stripWrappingQuotes(process.env.SMTP_USER || "");
+  const pass = stripWrappingQuotes(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "");
+  const secure = parseBoolean(process.env.SMTP_SECURE, port === 465);
+  const requireTLS = parseBoolean(process.env.SMTP_REQUIRE_TLS, false);
+  const ignoreTLS = parseBoolean(process.env.SMTP_IGNORE_TLS, false);
+  const rejectUnauthorized = parseBoolean(process.env.SMTP_TLS_REJECT_UNAUTHORIZED, true);
+  const from = stripWrappingQuotes(
+    process.env.MAIL_FROM || (user ? `IfeShadesnMore <${user}>` : "no-reply@ife-shadesnmore.local")
+  );
+
+  return {
+    host,
+    port,
+    user,
+    pass,
+    secure,
+    requireTLS,
+    ignoreTLS,
+    rejectUnauthorized,
+    from
+  };
+}
+
+function getMailerConfigKey(config) {
+  return JSON.stringify([
+    config.host,
+    config.port,
+    config.user,
+    config.pass,
+    config.secure,
+    config.requireTLS,
+    config.ignoreTLS,
+    config.rejectUnauthorized
+  ]);
+}
 
 let transporter = null;
+let transporterConfigKey = "";
 
-function getMailerConfigurationError() {
-  if (!SMTP_HOST) {
+function getMailerConfigurationError(config) {
+  if (!config.host) {
     return "SMTP_HOST is not configured.";
   }
 
-  if (SMTP_USER && !SMTP_PASS) {
+  if (config.user && !config.pass) {
     return "SMTP_USER is set but SMTP_PASS is missing.";
   }
 
-  if (!SMTP_USER && SMTP_PASS) {
+  if (!config.user && config.pass) {
     return "SMTP_PASS is set but SMTP_USER is missing.";
   }
 
@@ -54,41 +78,48 @@ function getMailerConfigurationError() {
 }
 
 export function isMailerConfigured() {
-  return !getMailerConfigurationError();
+  const config = getMailerConfig();
+  return !getMailerConfigurationError(config);
 }
 
 function getTransporter() {
-  if (!isMailerConfigured()) return null;
-  if (transporter) return transporter;
+  const config = getMailerConfig();
+  const configError = getMailerConfigurationError(config);
+  if (configError) return { transport: null, config, configError };
+
+  const configKey = getMailerConfigKey(config);
+  if (transporter && transporterConfigKey === configKey) {
+    return { transport: transporter, config, configError: "" };
+  }
 
   const transportOptions = {
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
-    requireTLS: SMTP_REQUIRE_TLS,
-    ignoreTLS: SMTP_IGNORE_TLS,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: config.requireTLS,
+    ignoreTLS: config.ignoreTLS,
     tls: {
-      rejectUnauthorized: SMTP_TLS_REJECT_UNAUTHORIZED
+      rejectUnauthorized: config.rejectUnauthorized
     },
     connectionTimeout: 20_000,
     greetingTimeout: 15_000,
     socketTimeout: 30_000
   };
 
-  if (SMTP_USER && SMTP_PASS) {
+  if (config.user && config.pass) {
     transportOptions.auth = {
-      user: SMTP_USER,
-      pass: SMTP_PASS
+      user: config.user,
+      pass: config.pass
     };
   }
 
   transporter = nodemailer.createTransport(transportOptions);
-
-  return transporter;
+  transporterConfigKey = configKey;
+  return { transport: transporter, config, configError: "" };
 }
 
 export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
-  const transport = getTransporter();
+  const { transport, config, configError } = getTransporter();
   const greetingName = String(fullName || "").trim() || "there";
 
   const subject = "Verify your IfeShadesnMore account";
@@ -112,19 +143,13 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
   `;
 
   if (!transport) {
-    const configError = getMailerConfigurationError();
     // eslint-disable-next-line no-console
-    console.log(
-      "[email-verification] Mailer not configured.",
-      configError || "",
-      "Verification URL:",
-      verificationUrl
-    );
+    console.log("[email-verification] Mailer not configured.", configError || "");
     return { delivered: false };
   }
 
   await transport.sendMail({
-    from: MAIL_FROM,
+    from: config.from,
     to: toEmail,
     subject,
     text,

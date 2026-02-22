@@ -32,15 +32,30 @@ function CheckoutModal({
 
         <div className="checkout-content">
           <form className="checkout-form" onSubmit={onSubmit}>
-            <label>
-              Full name
-              <input
-                value={form.fullName}
-                onChange={(event) => onFieldChange("fullName", event.target.value)}
-                placeholder="Customer full name"
-                disabled={isSubmitting}
-              />
-            </label>
+            <div className="split-input-row">
+              <label>
+                <span>
+                  First name <span className="required-mark">*</span>
+                </span>
+                <input
+                  value={form.firstName}
+                  onChange={(event) => onFieldChange("firstName", event.target.value)}
+                  placeholder="First name"
+                  disabled={isSubmitting}
+                />
+              </label>
+              <label>
+                <span>
+                  Last name <span className="required-mark">*</span>
+                </span>
+                <input
+                  value={form.lastName}
+                  onChange={(event) => onFieldChange("lastName", event.target.value)}
+                  placeholder="Last name"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
             <label>
               Email
               <input
@@ -60,8 +75,11 @@ function CheckoutModal({
                 disabled={isSubmitting}
               />
             </label>
+            <p className="checkout-hint">Phone or email is required for order updates.</p>
             <label>
-              Delivery address
+              <span>
+                Delivery address <span className="required-mark">*</span>
+              </span>
               <input
                 value={form.address}
                 onChange={(event) => onFieldChange("address", event.target.value)}
@@ -70,7 +88,9 @@ function CheckoutModal({
               />
             </label>
             <label>
-              City
+              <span>
+                City <span className="required-mark">*</span>
+              </span>
               <input
                 value={form.city}
                 onChange={(event) => onFieldChange("city", event.target.value)}

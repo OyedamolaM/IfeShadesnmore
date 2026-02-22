@@ -19,6 +19,7 @@ function AuthContainer({ title, subtitle, children }) {
 function AdminLoginPage({ currentUser, onAuthenticated }) {
   const navigate = useNavigate();
   const [state, setState] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasAdmin, setHasAdmin] = useState(true);
@@ -81,12 +82,23 @@ function AdminLoginPage({ currentUser, onAuthenticated }) {
         </label>
         <label>
           Password
-          <input
-            type="password"
-            value={state.password}
-            onChange={(event) => setState((prev) => ({ ...prev, password: event.target.value }))}
-            required
-          />
+          <div className="auth-password-field">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={state.password}
+              onChange={(event) => setState((prev) => ({ ...prev, password: event.target.value }))}
+              required
+            />
+            <button
+              type="button"
+              className="auth-password-toggle"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
         </label>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="submit" className="primary-action" disabled={isSubmitting}>

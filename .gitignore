@@ -8,3 +8,4 @@ tmp_checkpoint.mjs
 .agents/
 .claude/
 skills-lock.json
+tmp_hero/

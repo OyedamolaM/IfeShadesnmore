@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { login, register, resendVerificationEmail } from "../utils/api";
 
-function AuthContainer({ title, subtitle, children }) {
+function AuthContainer({ title, subtitle, children, shellClassName = "" }) {
+  const shellClass = ["site-shell", "auth-shell", shellClassName].filter(Boolean).join(" ");
   return (
     <div className="page auth-page">
-      <div className="site-shell auth-shell">
+      <div className={shellClass}>
         <article className="auth-card">
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
@@ -22,7 +23,8 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
   const redirect = searchParams.get("redirect") || "/account";
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     phone: "",
@@ -34,6 +36,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -55,11 +58,17 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           password: form.password
         });
         onAuthenticated(payload.user);
-        setNotice("Login successful.");
+        setNotice("Login successful. Redirecting to your account...");
         navigate(payload.user?.role === "admin" ? "/admin" : redirect, { replace: true });
       } else {
+        if (!form.firstName.trim() || !form.lastName.trim()) {
+          setError("First name and last name are required.");
+          return;
+        }
+
         const payload = await register({
-          fullName: form.fullName.trim(),
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
           email: form.email.trim(),
           password: form.password,
           phone: form.phone.trim(),
@@ -67,23 +76,27 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           city: form.city.trim()
         });
 
-        const fallbackLink =
-          payload?.verificationUrl ? ` Verification link: ${payload.verificationUrl}` : "";
-        setNotice(
-          (payload?.message || "Account created. Please verify your email before logging in.") +
-            fallbackLink
-        );
+        setNotice(payload?.message || "Signup successful. Please verify your email, then login.");
         setPendingVerificationEmail(form.email.trim());
         setMode("login");
       }
     } catch (requestError) {
       if (requestError?.details?.requiresEmailVerification) {
         setPendingVerificationEmail(requestError.details.email || form.email.trim());
-        setNotice(requestError.message || "Please verify your email before logging in.");
+        setNotice(
+          mode === "login"
+            ? requestError.message ||
+                "Login blocked: your email is not verified yet. Check your inbox or resend verification."
+            : requestError.message || "Signup complete. Please verify your email before login."
+        );
         setError("");
         return;
       }
-      setError(requestError.message || "Could not authenticate.");
+      setError(
+        mode === "login"
+          ? requestError.message || "Login failed. Check your email and password."
+          : requestError.message || "Signup failed. Please check your details and try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -95,9 +108,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
     setError("");
     try {
       const payload = await resendVerificationEmail(pendingVerificationEmail);
-      const fallbackLink =
-        payload?.verificationUrl ? ` Verification link: ${payload.verificationUrl}` : "";
-      setNotice((payload?.message || "Verification email sent.") + fallbackLink);
+      setNotice(payload?.message || "Verification email sent. Please check your inbox and spam folder.");
     } catch (requestError) {
       setError(requestError.message || "Could not resend verification email.");
     } finally {
@@ -109,6 +120,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
     <AuthContainer
       title={mode === "login" ? "Customer Login" : "Create Customer Account"}
       subtitle="Login to view orders and complete secure checkout. New accounts must verify email."
+      shellClassName={mode === "login" ? "auth-shell-login" : ""}
     >
       <div className="auth-mode-switch">
         <button
@@ -139,17 +151,33 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
 
       <form className="auth-form" onSubmit={submit}>
         {mode === "register" ? (
-          <label>
-            Full name
-            <input
-              value={form.fullName}
-              onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
-              required
-            />
-          </label>
+          <div className="split-input-row">
+            <label>
+              <span>
+                First name <span className="required-mark">*</span>
+              </span>
+              <input
+                value={form.firstName}
+                onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                required
+              />
+            </label>
+            <label>
+              <span>
+                Last name <span className="required-mark">*</span>
+              </span>
+              <input
+                value={form.lastName}
+                onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                required
+              />
+            </label>
+          </div>
         ) : null}
         <label>
-          Email
+          <span>
+            Email <span className="required-mark">*</span>
+          </span>
           <input
             type="email"
             value={form.email}
@@ -158,14 +186,27 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           />
         </label>
         <label>
-          Password
-          <input
-            type="password"
-            value={form.password}
-            onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-            required
-            minLength={8}
-          />
+          <span>
+            Password <span className="required-mark">*</span>
+          </span>
+          <div className="auth-password-field">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={form.password}
+              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+              required
+              minLength={8}
+            />
+            <button
+              type="button"
+              className="auth-password-toggle"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
         </label>
         {mode === "register" ? (
           <>

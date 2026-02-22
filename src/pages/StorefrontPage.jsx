@@ -9,9 +9,21 @@ import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
 import { createSubscription, initializeCheckout } from "../utils/api";
 
+function splitFullName(value) {
+  const parts = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
 function createCheckoutForm(user) {
+  const nameParts = splitFullName(user?.fullName);
   return {
-    fullName: user?.fullName || "",
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
     email: user?.email || "",
     phone: user?.phone || "",
     address: user?.address || "",
@@ -48,9 +60,11 @@ function StorefrontPage({
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
+    const nameParts = splitFullName(currentUser?.fullName || "");
     setCheckoutForm((current) => ({
       ...current,
-      fullName: current.fullName || currentUser?.fullName || "",
+      firstName: current.firstName || nameParts.firstName,
+      lastName: current.lastName || nameParts.lastName,
       email: current.email || currentUser?.email || "",
       phone: current.phone || currentUser?.phone || "",
       address: current.address || currentUser?.address || "",
@@ -179,9 +193,11 @@ function StorefrontPage({
 
     setCheckoutError("");
     setCheckoutNotice("");
+    const nameParts = splitFullName(currentUser.fullName || "");
     setCheckoutForm((current) => ({
       ...current,
-      fullName: current.fullName || currentUser.fullName || "",
+      firstName: current.firstName || nameParts.firstName,
+      lastName: current.lastName || nameParts.lastName,
       email: current.email || currentUser.email || "",
       phone: current.phone || currentUser.phone || "",
       address: current.address || currentUser.address || "",
@@ -203,10 +219,14 @@ function StorefrontPage({
       return;
     }
 
-    const required = ["fullName", "email", "phone", "address", "city"];
+    const required = ["firstName", "lastName", "address", "city"];
     const missing = required.find((field) => !String(checkoutForm[field] || "").trim());
     if (missing) {
       setCheckoutError("Please complete all checkout fields.");
+      return;
+    }
+    if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {
+      setCheckoutError("Phone or email is required.");
       return;
     }
 
@@ -222,7 +242,10 @@ function StorefrontPage({
         })),
         paymentMethod: checkoutForm.paymentMethod,
         customer: {
-          fullName: checkoutForm.fullName.trim(),
+          firstName: checkoutForm.firstName.trim(),
+          lastName: checkoutForm.lastName.trim(),
+          fullName: `${checkoutForm.firstName || ""} ${checkoutForm.lastName || ""}`.trim(),
+          email: checkoutForm.email.trim(),
           phone: checkoutForm.phone.trim(),
           address: checkoutForm.address.trim(),
           city: checkoutForm.city.trim()
