@@ -48,6 +48,18 @@ const __dirname = path.dirname(__filename);
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
 const DIST_INDEX_HTML = path.join(DIST_DIR, "index.html");
 
+function resolveTrustProxy(rawValue) {
+  const normalized = String(rawValue ?? "").trim().toLowerCase();
+  if (!normalized) return process.env.NODE_ENV === "production" ? 1 : false;
+  if (["true", "1", "yes", "on"].includes(normalized)) return 1;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+  const asNumber = Number(normalized);
+  if (Number.isInteger(asNumber) && asNumber >= 0) return asNumber;
+  return rawValue;
+}
+
+app.set("trust proxy", resolveTrustProxy(process.env.TRUST_PROXY));
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -174,6 +186,8 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
       command: error?.command || "",
       responseCode: error?.responseCode || "",
       response: error?.response || "",
+      mailerTarget: error?.mailerTarget || null,
+      mailerAttempted: error?.mailerAttempted || null,
       stack: error?.stack || "",
       mailer: getMailerRuntimeInfo()
     });

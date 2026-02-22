@@ -114,16 +114,7 @@ export function getMailerRuntimeInfo() {
   };
 }
 
-function getTransporter() {
-  const config = getMailerConfig();
-  const configError = getMailerConfigurationError(config);
-  if (configError) return { transport: null, config, configError };
-
-  const configKey = getMailerConfigKey(config);
-  if (transporter && transporterConfigKey === configKey) {
-    return { transport: transporter, config, configError: "" };
-  }
-
+function createTransportFromConfig(config) {
   const transportOptions = {
     host: config.host,
     port: config.port,
@@ -147,7 +138,20 @@ function getTransporter() {
     };
   }
 
-  transporter = nodemailer.createTransport(transportOptions);
+  return nodemailer.createTransport(transportOptions);
+}
+
+function getTransporter() {
+  const config = getMailerConfig();
+  const configError = getMailerConfigurationError(config);
+  if (configError) return { transport: null, config, configError };
+
+  const configKey = getMailerConfigKey(config);
+  if (transporter && transporterConfigKey === configKey) {
+    return { transport: transporter, config, configError: "" };
+  }
+
+  transporter = createTransportFromConfig(config);
   transporterConfigKey = configKey;
   return { transport: transporter, config, configError: "" };
 }
@@ -172,41 +176,118 @@ function isRetryableSmtpError(error) {
   return false;
 }
 
+function summarizeMailerTarget(config) {
+  return {
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: config.requireTLS,
+    ignoreTLS: config.ignoreTLS
+  };
+}
+
+function getFallbackMailerConfig(config) {
+  const host = String(config.host || "").trim().toLowerCase();
+  if (host !== "smtp.gmail.com") return null;
+
+  if (Number(config.port) === 465) {
+    return {
+      ...config,
+      port: 587,
+      secure: false,
+      requireTLS: true
+    };
+  }
+
+  if (Number(config.port) === 587) {
+    return {
+      ...config,
+      port: 465,
+      secure: true,
+      requireTLS: false
+    };
+  }
+
+  return null;
+}
+
+async function sendWithTransport(transport, config, { toEmail, subject, text, html }) {
+  await transport.sendMail({
+    from: config.from,
+    to: toEmail,
+    subject,
+    text,
+    html
+  });
+}
+
 async function sendVerificationMessageWithRetry({ config, toEmail, subject, text, html }) {
   const first = getTransporter();
   if (!first.transport) {
     throw Object.assign(new Error("Mailer transport is unavailable."), { code: "MAILER_UNAVAILABLE" });
   }
 
+  const attemptedTargets = [];
+
   try {
-    await first.transport.sendMail({
-      from: config.from,
-      to: toEmail,
-      subject,
-      text,
-      html
-    });
+    attemptedTargets.push(summarizeMailerTarget(config));
+    await sendWithTransport(first.transport, config, { toEmail, subject, text, html });
     return;
   } catch (error) {
+    error.mailerTarget = summarizeMailerTarget(config);
     if (!isRetryableSmtpError(error)) {
+      error.mailerAttempted = attemptedTargets;
       throw error;
     }
+  }
 
-    // Reset cached transport and retry once with a fresh connection.
-    transporter = null;
-    transporterConfigKey = "";
+  let lastError = null;
+
+  // Retry once using a fresh transport with the same SMTP profile.
+  transporter = null;
+  transporterConfigKey = "";
+  try {
     const retry = getTransporter();
     if (!retry.transport) {
+      throw Object.assign(new Error("Mailer transport is unavailable on retry."), {
+        code: "MAILER_UNAVAILABLE_RETRY"
+      });
+    }
+    attemptedTargets.push(summarizeMailerTarget(config));
+    await sendWithTransport(retry.transport, config, { toEmail, subject, text, html });
+    return;
+  } catch (error) {
+    lastError = error;
+    error.mailerTarget = summarizeMailerTarget(config);
+    if (!isRetryableSmtpError(error)) {
+      error.mailerAttempted = attemptedTargets;
       throw error;
     }
+  }
 
-    await retry.transport.sendMail({
-      from: config.from,
-      to: toEmail,
-      subject,
-      text,
-      html
-    });
+  // Final attempt: switch Gmail between implicit TLS (465) and STARTTLS (587).
+  const fallbackConfig = getFallbackMailerConfig(config);
+  if (!fallbackConfig) {
+    if (lastError) {
+      lastError.mailerAttempted = attemptedTargets;
+      throw lastError;
+    }
+    throw new Error("Mailer send failed.");
+  }
+
+  const fallbackTransport = createTransportFromConfig(fallbackConfig);
+  try {
+    attemptedTargets.push(summarizeMailerTarget(fallbackConfig));
+    await sendWithTransport(fallbackTransport, fallbackConfig, { toEmail, subject, text, html });
+    return;
+  } catch (error) {
+    error.mailerTarget = summarizeMailerTarget(fallbackConfig);
+    error.mailerAttempted = attemptedTargets;
+    throw error;
+  } finally {
+    if (typeof fallbackTransport.close === "function") {
+      fallbackTransport.close();
+    }
   }
 }
 
