@@ -1,21 +1,134 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import pg from "pg";
 import { DEFAULT_PRODUCTS, DEFAULT_SETTINGS } from "./defaults.js";
 
-const DATA_DIR = path.join(process.cwd(), "server", "data");
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "ife-store.db");
+const { Pool } = pg;
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
+const USE_POSTGRES = Boolean(DATABASE_URL);
+
+const DATA_DIR = path.join(process.cwd(), "server", "data");
+const SQLITE_DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "ife-store.db");
+
+let sqliteDb = null;
+let pgPool = null;
+
+if (USE_POSTGRES) {
+  const disableSsl = String(process.env.PG_DISABLE_SSL || "")
+    .trim()
+    .toLowerCase();
+  const shouldDisableSsl = disableSsl === "true" || disableSsl === "1";
+  pgPool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: shouldDisableSsl ? false : { rejectUnauthorized: false }
+  });
+} else {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  sqliteDb = new Database(SQLITE_DB_PATH);
+  sqliteDb.pragma("journal_mode = WAL");
+  sqliteDb.pragma("foreign_keys = ON");
 }
 
-export const db = new Database(DB_PATH);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+export const databaseDriver = USE_POSTGRES ? "postgres" : "sqlite";
 
-function runMigrations() {
-  db.exec(`
+function normalizeSqlForPostgres(sql) {
+  let normalized = String(sql || "");
+  normalized = normalized.replace(/datetime\('now'\)/gi, "CURRENT_TIMESTAMP");
+  normalized = normalized.replace(/datetime\(([^)]+)\)/gi, "$1");
+
+  let index = 0;
+  normalized = normalized.replace(/\?/g, () => {
+    index += 1;
+    return `$${index}`;
+  });
+  return normalized;
+}
+
+async function pgQuery(sql, params = [], client = null) {
+  const target = client || pgPool;
+  const text = normalizeSqlForPostgres(sql);
+  return target.query(text, params);
+}
+
+function sqliteQueryOne(sql, params = []) {
+  return sqliteDb.prepare(sql).get(...params);
+}
+
+function sqliteQueryAll(sql, params = []) {
+  return sqliteDb.prepare(sql).all(...params);
+}
+
+function sqliteExecute(sql, params = []) {
+  const info = sqliteDb.prepare(sql).run(...params);
+  return {
+    rowCount: Number(info.changes) || 0,
+    lastInsertRowid: info.lastInsertRowid || null
+  };
+}
+
+export async function queryOne(sql, params = [], client = null) {
+  if (!USE_POSTGRES) return sqliteQueryOne(sql, params);
+  const result = await pgQuery(sql, params, client);
+  return result.rows[0] || null;
+}
+
+export async function queryAll(sql, params = [], client = null) {
+  if (!USE_POSTGRES) return sqliteQueryAll(sql, params);
+  const result = await pgQuery(sql, params, client);
+  return result.rows || [];
+}
+
+export async function execute(sql, params = [], client = null) {
+  if (!USE_POSTGRES) return sqliteExecute(sql, params);
+  const result = await pgQuery(sql, params, client);
+  return {
+    rowCount: Number(result.rowCount) || 0,
+    rows: result.rows || [],
+    lastInsertRowid: result.rows?.[0]?.id || null
+  };
+}
+
+export async function withTransaction(work) {
+  if (!USE_POSTGRES) {
+    sqliteDb.exec("BEGIN");
+    try {
+      const result = await work({
+        queryOne: (sql, params = []) => queryOne(sql, params),
+        queryAll: (sql, params = []) => queryAll(sql, params),
+        execute: (sql, params = []) => execute(sql, params)
+      });
+      sqliteDb.exec("COMMIT");
+      return result;
+    } catch (error) {
+      sqliteDb.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await work({
+      queryOne: (sql, params = []) => queryOne(sql, params, client),
+      queryAll: (sql, params = []) => queryAll(sql, params, client),
+      execute: (sql, params = []) => execute(sql, params, client)
+    });
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function runMigrationsSqlite() {
+  sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
@@ -83,7 +196,7 @@ function runMigrations() {
       unit_price INTEGER NOT NULL,
       quantity INTEGER NOT NULL,
       line_total INTEGER NOT NULL,
-        FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+      FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS subscriptions (
@@ -103,70 +216,167 @@ function runMigrations() {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
-}
 
-function hasColumn(tableName, columnName) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
-  return columns.some((column) => column.name === columnName);
-}
-
-function runAlterMigrations() {
-  if (!hasColumn("orders", "order_status")) {
-    db.exec(`ALTER TABLE orders ADD COLUMN order_status TEXT NOT NULL DEFAULT 'pending'`);
+  const orderColumns = sqliteDb.prepare("PRAGMA table_info(orders)").all();
+  if (!orderColumns.some((column) => column.name === "order_status")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN order_status TEXT NOT NULL DEFAULT 'pending'`);
   }
 
-  if (!hasColumn("users", "is_email_verified")) {
-    db.exec(`ALTER TABLE users ADD COLUMN is_email_verified INTEGER NOT NULL DEFAULT 1`);
+  const userColumns = sqliteDb.prepare("PRAGMA table_info(users)").all();
+  if (!userColumns.some((column) => column.name === "is_email_verified")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN is_email_verified INTEGER NOT NULL DEFAULT 1`);
   }
 }
 
-function seedSettingsIfEmpty() {
-  const existing = db.prepare("SELECT id FROM settings WHERE id = 1").get();
+async function runMigrationsPostgres() {
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'customer' CHECK(role IN ('admin','customer')),
+      is_email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+      full_name TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      address TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      id SMALLINT PRIMARY KEY,
+      brand_name TEXT NOT NULL,
+      brand_tagline TEXT NOT NULL,
+      hero_title TEXT NOT NULL,
+      hero_subtitle TEXT NOT NULL,
+      hero_button_label TEXT NOT NULL,
+      hero_image TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      price INTEGER NOT NULL DEFAULT 0,
+      section TEXT NOT NULL DEFAULT 'category',
+      audience TEXT NOT NULL DEFAULT 'unisex',
+      cta_label TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      variant TEXT DEFAULT 'round',
+      image TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT NOT NULL,
+      city TEXT NOT NULL,
+      payment_method TEXT NOT NULL CHECK(payment_method IN ('card','transfer')),
+      payment_reference TEXT NOT NULL UNIQUE,
+      payment_channel TEXT DEFAULT '',
+      payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','cancelled')),
+      order_status TEXT NOT NULL DEFAULT 'pending',
+      subtotal INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS order_items (
+      id BIGSERIAL PRIMARY KEY,
+      order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      unit_price INTEGER NOT NULL,
+      quantity INTEGER NOT NULL,
+      line_total INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id BIGSERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      source TEXT NOT NULL DEFAULT 'footer',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      consumed_at TIMESTAMPTZ DEFAULT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
+}
+
+async function seedSettingsIfEmpty() {
+  const existing = await queryOne("SELECT id FROM settings WHERE id = 1");
   if (existing) return;
 
-  db.prepare(
+  await execute(
     `
       INSERT INTO settings (
         id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image
       )
-      VALUES (
-        1, @brandName, @brandTagline, @heroTitle, @heroSubtitle, @heroButtonLabel, @heroImage
-      )
-    `
-  ).run(DEFAULT_SETTINGS);
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      1,
+      DEFAULT_SETTINGS.brandName,
+      DEFAULT_SETTINGS.brandTagline,
+      DEFAULT_SETTINGS.heroTitle,
+      DEFAULT_SETTINGS.heroSubtitle,
+      DEFAULT_SETTINGS.heroButtonLabel,
+      DEFAULT_SETTINGS.heroImage
+    ]
+  );
 }
 
-function seedProductsIfEmpty() {
+async function seedProductsIfEmpty() {
   const shouldSeedDefaults =
     String(process.env.SEED_DEFAULT_PRODUCTS || "")
       .trim()
       .toLowerCase() === "true";
   if (!shouldSeedDefaults) return;
 
-  const countRow = db.prepare("SELECT COUNT(*) AS count FROM products").get();
-  if ((countRow?.count || 0) > 0) return;
+  const countRow = await queryOne("SELECT COUNT(*) AS count FROM products");
+  if ((Number(countRow?.count) || 0) > 0) return;
 
-  const insert = db.prepare(`
-    INSERT INTO products (
-      id, name, price, section, audience, cta_label, description, variant, image
-    )
-    VALUES (
-      @id, @name, @price, @section, @audience, @ctaLabel, @description, @variant, @image
-    )
-  `);
-  const insertMany = db.transaction((items) => {
-    items.forEach((item) =>
-      insert.run({
-        ...item,
-        ctaLabel: item.ctaLabel || ""
-      })
+  for (const item of DEFAULT_PRODUCTS) {
+    await execute(
+      `
+        INSERT INTO products (
+          id, name, price, section, audience, cta_label, description, variant, image
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        item.id,
+        item.name,
+        item.price,
+        item.section,
+        item.audience,
+        item.ctaLabel || "",
+        item.description || "",
+        item.variant || "round",
+        item.image || ""
+      ]
     );
-  });
-  insertMany(DEFAULT_PRODUCTS);
+  }
 }
 
-function backfillSunglassesAudience() {
-  db.prepare(
+async function backfillSunglassesAudience() {
+  await execute(
     `
       UPDATE products
       SET
@@ -184,7 +394,27 @@ function backfillSunglassesAudience() {
           )
         )
     `
-  ).run();
+  );
+}
+
+export async function initDatabase() {
+  if (USE_POSTGRES) {
+    await runMigrationsPostgres();
+  } else {
+    await runMigrationsSqlite();
+  }
+  await seedSettingsIfEmpty();
+  await seedProductsIfEmpty();
+  await backfillSunglassesAudience();
+}
+
+export async function closeDatabase() {
+  if (USE_POSTGRES && pgPool) {
+    await pgPool.end();
+  }
+  if (!USE_POSTGRES && sqliteDb) {
+    sqliteDb.close();
+  }
 }
 
 export function mapProductRow(row) {
@@ -214,7 +444,7 @@ export function mapSettingsRow(row) {
 
 export function mapUserRow(row) {
   return {
-    id: row.id,
+    id: Number(row.id),
     email: row.email,
     role: row.role,
     isEmailVerified: Boolean(row.is_email_verified),
@@ -225,8 +455,3 @@ export function mapUserRow(row) {
   };
 }
 
-runMigrations();
-runAlterMigrations();
-seedSettingsIfEmpty();
-seedProductsIfEmpty();
-backfillSunglassesAudience();

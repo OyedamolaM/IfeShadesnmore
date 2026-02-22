@@ -7,17 +7,15 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run start:server
     healthCheckPath: /api/health
-    disk:
-      name: ife-store-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: DB_PATH
-        value: /var/data/ife-store.db
+      - key: DATABASE_URL
+        sync: false
+      - key: PG_DISABLE_SSL
+        value: false
       - key: FRONTEND_URL
         sync: false
       - key: CORS_ORIGIN

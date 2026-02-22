@@ -5,3 +5,6 @@ server/data/
 cookies.txt
 tmp_checkpoint.mjs
 .env.example
+.agents/
+.claude/
+skills-lock.json

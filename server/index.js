@@ -10,7 +10,16 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { z } from "zod";
-import { db, mapProductRow, mapSettingsRow, mapUserRow } from "./db.js";
+import {
+  execute,
+  initDatabase,
+  mapProductRow,
+  mapSettingsRow,
+  mapUserRow,
+  queryAll,
+  queryOne,
+  withTransaction
+} from "./db.js";
 import {
   clearAuthCookie,
   getCurrentUserFromRequest,
@@ -59,7 +68,7 @@ app.use(
 );
 app.use(cookieParser());
 
-app.post("/api/paystack/webhook", express.raw({ type: "*/*" }), (req, res) => {
+app.post("/api/paystack/webhook", express.raw({ type: "*/*" }), async (req, res) => {
   const verification = verifyWebhookSignature(req.body, req.headers["x-paystack-signature"]);
   if (!verification.ok) {
     if (verification.reason === "missing_secret") {
@@ -87,9 +96,12 @@ app.post("/api/paystack/webhook", express.raw({ type: "*/*" }), (req, res) => {
     const channel = event?.data?.channel || "";
     const amountKobo = Number(event?.data?.amount || 0);
     if (reference) {
-      const order = db.prepare("SELECT id, subtotal FROM orders WHERE payment_reference = ?").get(reference);
+      const order = await queryOne(
+        "SELECT id, subtotal FROM orders WHERE payment_reference = ?",
+        [reference]
+      );
       if (order && amountKobo === Number(order.subtotal || 0) * 100) {
-        db.prepare(
+        await execute(
           `
             UPDATE orders
             SET payment_status = 'paid',
@@ -97,8 +109,9 @@ app.post("/api/paystack/webhook", express.raw({ type: "*/*" }), (req, res) => {
                 order_status = CASE WHEN order_status = 'pending' THEN 'processing' ELSE order_status END,
                 updated_at = datetime('now')
             WHERE id = ?
-          `
-        ).run(channel, order.id);
+          `,
+          [channel, order.id]
+        );
       }
     }
   }
@@ -123,26 +136,28 @@ function hashVerificationToken(rawToken) {
   return crypto.createHash("sha256").update(String(rawToken || "")).digest("hex");
 }
 
-function createVerificationToken(userId) {
+async function createVerificationToken(userId) {
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashVerificationToken(rawToken);
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS).toISOString();
 
-  db.prepare(
+  await execute(
     `
       DELETE FROM email_verification_tokens
       WHERE user_id = ? AND consumed_at IS NULL
-    `
-  ).run(userId);
+    `,
+    [userId]
+  );
 
-  db.prepare(
+  await execute(
     `
       INSERT INTO email_verification_tokens (
         user_id, token_hash, expires_at
       )
       VALUES (?, ?, ?)
-    `
-  ).run(userId, tokenHash, expiresAt);
+    `,
+    [userId, tokenHash, expiresAt]
+  );
 
   const verificationUrl = `${FRONTEND_URL}/account/verify-email?token=${encodeURIComponent(rawToken)}`;
   return { rawToken, verificationUrl, expiresAt };
@@ -158,9 +173,9 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
   }
 }
 
-function getStorefrontPayload() {
-  const settingsRow = db.prepare("SELECT * FROM settings WHERE id = 1").get();
-  const productsRows = db.prepare("SELECT * FROM products ORDER BY created_at DESC").all();
+async function getStorefrontPayload() {
+  const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
+  const productsRows = await queryAll("SELECT * FROM products ORDER BY created_at DESC");
 
   return {
     settings: settingsRow ? mapSettingsRow(settingsRow) : null,
@@ -168,18 +183,18 @@ function getStorefrontPayload() {
   };
 }
 
-function getOrderItems(orderId) {
-  return db
-    .prepare(
+async function getOrderItems(orderId) {
+  const rows = await queryAll(
       `
         SELECT id, product_id, name, unit_price, quantity, line_total
         FROM order_items
         WHERE order_id = ?
         ORDER BY id ASC
-      `
-    )
-    .all(orderId)
-    .map((item) => ({
+      `,
+      [orderId]
+    );
+
+  return rows.map((item) => ({
       id: item.id,
       productId: item.product_id,
       name: item.name,
@@ -210,11 +225,13 @@ function mapOrderRow(row) {
   };
 }
 
-function withOrderItems(rows) {
-  return rows.map((row) => {
+async function withOrderItems(rows) {
+  return Promise.all(
+    rows.map(async (row) => {
     const order = mapOrderRow(row);
-    return { ...order, items: getOrderItems(order.id) };
-  });
+      return { ...order, items: await getOrderItems(order.id) };
+    })
+  );
 }
 
 function normalizeEmail(value) {
@@ -226,26 +243,28 @@ async function bootstrapAdminIfConfigured() {
   const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
   if (!adminEmail || !adminPassword) return;
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(adminEmail);
+  const existing = await queryOne("SELECT id FROM users WHERE email = ?", [adminEmail]);
   const passwordHash = await bcrypt.hash(adminPassword, 12);
 
   if (existing) {
-    db.prepare(
+    await execute(
       `
         UPDATE users
-        SET password_hash = ?, role = 'admin', is_email_verified = 1, updated_at = datetime('now')
+        SET password_hash = ?, role = 'admin', is_email_verified = true, updated_at = datetime('now')
         WHERE id = ?
-      `
-    ).run(passwordHash, existing.id);
+      `,
+      [passwordHash, existing.id]
+    );
     return;
   }
 
-  db.prepare(
+  await execute(
     `
       INSERT INTO users (email, password_hash, role, is_email_verified, full_name)
-      VALUES (?, ?, 'admin', 1, 'Administrator')
-    `
-  ).run(adminEmail, passwordHash);
+      VALUES (?, ?, 'admin', true, 'Administrator')
+    `,
+    [adminEmail, passwordHash]
+  );
 }
 
 const registerSchema = z.object({
@@ -334,13 +353,21 @@ app.get("/api/health", (_, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/storefront", (_, res) => {
-  res.json(getStorefrontPayload());
+app.get("/api/storefront", async (_, res, next) => {
+  try {
+    res.json(await getStorefrontPayload());
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/auth/me", (req, res) => {
-  const user = getCurrentUserFromRequest(req);
-  res.json({ user });
+app.get("/api/auth/me", async (req, res, next) => {
+  try {
+    const user = await getCurrentUserFromRequest(req);
+    res.json({ user });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post("/api/auth/register", authLimiter, async (req, res) => {
@@ -353,24 +380,30 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   const payload = parsed.data;
   const email = normalizeEmail(payload.email);
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const existing = await queryOne("SELECT id FROM users WHERE email = ?", [email]);
   if (existing) {
     res.status(409).json({ error: "Email already in use." });
     return;
   }
 
   const passwordHash = await bcrypt.hash(payload.password, 12);
-  const info = db
-    .prepare(
-      `
-        INSERT INTO users (email, password_hash, role, is_email_verified, full_name, phone, address, city)
-        VALUES (?, ?, 'customer', 0, ?, ?, ?, ?)
-      `
-    )
-    .run(email, passwordHash, payload.fullName.trim(), payload.phone.trim(), payload.address.trim(), payload.city.trim());
+  await execute(
+    `
+      INSERT INTO users (email, password_hash, role, is_email_verified, full_name, phone, address, city)
+      VALUES (?, ?, 'customer', false, ?, ?, ?, ?)
+    `,
+    [
+      email,
+      passwordHash,
+      payload.fullName.trim(),
+      payload.phone.trim(),
+      payload.address.trim(),
+      payload.city.trim()
+    ]
+  );
 
-  const userRow = db.prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid);
-  const verification = createVerificationToken(userRow.id);
+  const userRow = await queryOne("SELECT * FROM users WHERE email = ?", [email]);
+  const verification = await createVerificationToken(userRow.id);
   const delivery = await sendVerificationEmailSafe({
     toEmail: userRow.email,
     fullName: userRow.full_name,
@@ -387,16 +420,16 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   });
 });
 
-app.post("/api/auth/verify-email", authLimiter, (req, res) => {
+app.post("/api/auth/verify-email", authLimiter, async (req, res, next) => {
   const parsed = verifyEmailSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid verification token." });
     return;
   }
 
-  const tokenHash = hashVerificationToken(parsed.data.token);
-  const tokenRow = db
-    .prepare(
+  try {
+    const tokenHash = hashVerificationToken(parsed.data.token);
+    const tokenRow = await queryOne(
       `
         SELECT evt.id, evt.user_id, evt.expires_at, u.*
         FROM email_verification_tokens evt
@@ -404,51 +437,56 @@ app.post("/api/auth/verify-email", authLimiter, (req, res) => {
         WHERE evt.token_hash = ?
           AND evt.consumed_at IS NULL
         LIMIT 1
-      `
-    )
-    .get(tokenHash);
+      `,
+      [tokenHash]
+    );
 
-  if (!tokenRow) {
-    res.status(400).json({ error: "Verification link is invalid or already used." });
-    return;
+    if (!tokenRow) {
+      res.status(400).json({ error: "Verification link is invalid or already used." });
+      return;
+    }
+
+    const expiresAtMs = Date.parse(tokenRow.expires_at);
+    if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+      await execute(
+        `
+          UPDATE email_verification_tokens
+          SET consumed_at = datetime('now')
+          WHERE id = ?
+        `,
+        [tokenRow.id]
+      );
+      res.status(400).json({ error: "Verification link has expired. Request a new one." });
+      return;
+    }
+
+    await withTransaction(async (tx) => {
+      await tx.execute(
+        `
+          UPDATE users
+          SET is_email_verified = true, updated_at = datetime('now')
+          WHERE id = ?
+        `,
+        [tokenRow.user_id]
+      );
+
+      await tx.execute(
+        `
+          UPDATE email_verification_tokens
+          SET consumed_at = datetime('now')
+          WHERE user_id = ? AND consumed_at IS NULL
+        `,
+        [tokenRow.user_id]
+      );
+    });
+
+    const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [tokenRow.user_id]);
+    const user = mapUserRow(userRow);
+    setAuthCookie(res, user);
+    res.json({ ok: true, user, message: "Email verified successfully." });
+  } catch (error) {
+    next(error);
   }
-
-  const expiresAtMs = Date.parse(tokenRow.expires_at);
-  if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
-    db.prepare(
-      `
-        UPDATE email_verification_tokens
-        SET consumed_at = datetime('now')
-        WHERE id = ?
-      `
-    ).run(tokenRow.id);
-    res.status(400).json({ error: "Verification link has expired. Request a new one." });
-    return;
-  }
-
-  const verifyTx = db.transaction(() => {
-    db.prepare(
-      `
-        UPDATE users
-        SET is_email_verified = 1, updated_at = datetime('now')
-        WHERE id = ?
-      `
-    ).run(tokenRow.user_id);
-
-    db.prepare(
-      `
-        UPDATE email_verification_tokens
-        SET consumed_at = datetime('now')
-        WHERE user_id = ? AND consumed_at IS NULL
-      `
-    ).run(tokenRow.user_id);
-  });
-  verifyTx();
-
-  const userRow = db.prepare("SELECT * FROM users WHERE id = ?").get(tokenRow.user_id);
-  const user = mapUserRow(userRow);
-  setAuthCookie(res, user);
-  res.json({ ok: true, user, message: "Email verified successfully." });
 });
 
 app.post("/api/auth/resend-verification", authLimiter, async (req, res) => {
@@ -459,7 +497,7 @@ app.post("/api/auth/resend-verification", authLimiter, async (req, res) => {
   }
 
   const email = normalizeEmail(parsed.data.email);
-  const userRow = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  const userRow = await queryOne("SELECT * FROM users WHERE email = ?", [email]);
 
   if (!userRow || userRow.role !== "customer") {
     res.json({ ok: true, message: "If this account exists, a verification email has been sent." });
@@ -471,7 +509,7 @@ app.post("/api/auth/resend-verification", authLimiter, async (req, res) => {
     return;
   }
 
-  const verification = createVerificationToken(userRow.id);
+  const verification = await createVerificationToken(userRow.id);
   const delivery = await sendVerificationEmailSafe({
     toEmail: userRow.email,
     fullName: userRow.full_name,
@@ -495,7 +533,7 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   }
 
   const email = normalizeEmail(parsed.data.email);
-  const userRow = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  const userRow = await queryOne("SELECT * FROM users WHERE email = ?", [email]);
   if (!userRow) {
     res.status(401).json({ error: "Invalid email or password." });
     return;
@@ -526,24 +564,29 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-app.patch("/api/auth/profile", requireAuth, (req, res) => {
+app.patch("/api/auth/profile", requireAuth, async (req, res, next) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid profile payload." });
     return;
   }
 
-  const payload = parsed.data;
-  db.prepare(
-    `
-      UPDATE users
-      SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `
-  ).run(payload.fullName.trim(), payload.phone.trim(), payload.address.trim(), payload.city.trim(), req.user.id);
+  try {
+    const payload = parsed.data;
+    await execute(
+      `
+        UPDATE users
+        SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `,
+      [payload.fullName.trim(), payload.phone.trim(), payload.address.trim(), payload.city.trim(), req.user.id]
+    );
 
-  const userRow = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
-  res.json({ user: mapUserRow(userRow) });
+    const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [req.user.id]);
+    res.json({ user: mapUserRow(userRow) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.patch("/api/auth/password", requireAuth, async (req, res) => {
@@ -553,7 +596,7 @@ app.patch("/api/auth/password", requireAuth, async (req, res) => {
     return;
   }
 
-  const userRow = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [req.user.id]);
   if (!userRow) {
     res.status(404).json({ error: "User not found." });
     return;
@@ -575,59 +618,72 @@ app.patch("/api/auth/password", requireAuth, async (req, res) => {
   }
 
   const nextHash = await bcrypt.hash(parsed.data.newPassword, 12);
-  db.prepare(
+  await execute(
     `
       UPDATE users
       SET password_hash = ?, updated_at = datetime('now')
       WHERE id = ?
-    `
-  ).run(nextHash, req.user.id);
+    `,
+    [nextHash, req.user.id]
+  );
 
   res.json({ ok: true, message: "Password updated successfully." });
 });
 
-app.get("/api/orders/my", requireAuth, (req, res) => {
-  const rows = db
-    .prepare(
+app.get("/api/orders/my", requireAuth, async (req, res, next) => {
+  try {
+    const rows = await queryAll(
       `
         SELECT *
         FROM orders
         WHERE user_id = ?
-        ORDER BY datetime(created_at) DESC
-      `
-    )
-    .all(req.user.id);
-  res.json({ orders: withOrderItems(rows) });
+        ORDER BY created_at DESC
+      `,
+      [req.user.id]
+    );
+    res.json({ orders: await withOrderItems(rows) });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/orders", requireAdmin, (_, res) => {
-  const rows = db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all();
-  res.json({ orders: withOrderItems(rows) });
+app.get("/api/orders", requireAdmin, async (_req, res, next) => {
+  try {
+    const rows = await queryAll("SELECT * FROM orders ORDER BY created_at DESC");
+    res.json({ orders: await withOrderItems(rows) });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.patch("/api/orders/:id/status", requireAdmin, (req, res) => {
+app.patch("/api/orders/:id/status", requireAdmin, async (req, res, next) => {
   const parsed = orderStatusSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid order status payload." });
     return;
   }
 
-  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
-  if (!order) {
-    res.status(404).json({ error: "Order not found." });
-    return;
+  try {
+    const order = await queryOne("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+    if (!order) {
+      res.status(404).json({ error: "Order not found." });
+      return;
+    }
+
+    await execute(
+      `
+        UPDATE orders
+        SET order_status = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `,
+      [parsed.data.orderStatus, req.params.id]
+    );
+
+    const refreshed = await queryOne("SELECT * FROM orders WHERE id = ?", [req.params.id]);
+    res.json({ order: { ...mapOrderRow(refreshed), items: await getOrderItems(req.params.id) } });
+  } catch (error) {
+    next(error);
   }
-
-  db.prepare(
-    `
-      UPDATE orders
-      SET order_status = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `
-  ).run(parsed.data.orderStatus, req.params.id);
-
-  const refreshed = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
-  res.json({ order: { ...mapOrderRow(refreshed), items: getOrderItems(req.params.id) } });
 });
 
 app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
@@ -646,12 +702,12 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
 
   const payload = parsed.data;
   const uniqueIds = [...new Set(payload.items.map((item) => item.productId))];
-  const products = db
-    .prepare(
-      `SELECT * FROM products WHERE id IN (${uniqueIds.map(() => "?").join(",")})`
-    )
-    .all(...uniqueIds)
-    .map(mapProductRow);
+  const placeholders = uniqueIds.map(() => "?").join(",");
+  const productsRows = await queryAll(
+    `SELECT * FROM products WHERE id IN (${placeholders})`,
+    uniqueIds
+  );
+  const products = productsRows.map(mapProductRow);
 
   const productMap = new Map(products.map((product) => [product.id, product]));
 
@@ -684,42 +740,41 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
   const reference = createPaymentReference();
   const customer = payload.customer;
 
-  const createOrderTx = db.transaction(() => {
-    db.prepare(
+  await withTransaction(async (tx) => {
+    await tx.execute(
       `
         INSERT INTO orders (
           id, user_id, email, full_name, phone, address, city,
           payment_method, payment_reference, payment_status, subtotal
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-      `
-    ).run(
-      orderId,
-      req.user.id,
-      req.user.email,
-      customer.fullName.trim(),
-      customer.phone.trim(),
-      customer.address.trim(),
-      customer.city.trim(),
-      payload.paymentMethod,
-      reference,
-      subtotal
+      `,
+      [
+        orderId,
+        req.user.id,
+        req.user.email,
+        customer.fullName.trim(),
+        customer.phone.trim(),
+        customer.address.trim(),
+        customer.city.trim(),
+        payload.paymentMethod,
+        reference,
+        subtotal
+      ]
     );
 
-    const insertItem = db.prepare(
-      `
-        INSERT INTO order_items (
-          order_id, product_id, name, unit_price, quantity, line_total
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `
-    );
-    validItems.forEach((item) => {
-      insertItem.run(orderId, item.productId, item.name, item.unitPrice, item.quantity, item.lineTotal);
-    });
+    for (const item of validItems) {
+      await tx.execute(
+        `
+          INSERT INTO order_items (
+            order_id, product_id, name, unit_price, quantity, line_total
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [orderId, item.productId, item.name, item.unitPrice, item.quantity, item.lineTotal]
+      );
+    }
   });
-
-  createOrderTx();
 
   try {
     const channels = payload.paymentMethod === "transfer" ? ["bank_transfer", "bank"] : ["card"];
@@ -735,13 +790,14 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
       }
     });
 
-    db.prepare(
+    await execute(
       `
         UPDATE users
         SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now')
         WHERE id = ?
-      `
-    ).run(customer.fullName.trim(), customer.phone.trim(), customer.address.trim(), customer.city.trim(), req.user.id);
+      `,
+      [customer.fullName.trim(), customer.phone.trim(), customer.address.trim(), customer.city.trim(), req.user.id]
+    );
 
     res.json({
       orderId,
@@ -750,13 +806,14 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
       accessCode: checkout.access_code
     });
   } catch (error) {
-    db.prepare(
+    await execute(
       `
         UPDATE orders
         SET payment_status = 'failed', updated_at = datetime('now')
         WHERE id = ?
-      `
-    ).run(orderId);
+      `,
+      [orderId]
+    );
     res.status(502).json({ error: error.message || "Could not initialize payment." });
   }
 });
@@ -768,9 +825,10 @@ app.get("/api/checkout/verify", requireAuth, async (req, res) => {
     return;
   }
 
-  const orderRow = db
-    .prepare("SELECT * FROM orders WHERE payment_reference = ? AND user_id = ?")
-    .get(reference, req.user.id);
+  const orderRow = await queryOne(
+    "SELECT * FROM orders WHERE payment_reference = ? AND user_id = ?",
+    [reference, req.user.id]
+  );
 
   if (!orderRow) {
     res.status(404).json({ error: "Order not found for this account." });
@@ -784,17 +842,18 @@ app.get("/api/checkout/verify", requireAuth, async (req, res) => {
     const expectedKobo = Number(orderRow.subtotal || 0) * 100;
     const isPaid = paystackStatus === "success" && amountKobo === expectedKobo;
 
-    db.prepare(
+    await execute(
       `
         UPDATE orders
         SET payment_status = ?, payment_channel = ?, updated_at = datetime('now')
         WHERE id = ?
-      `
-    ).run(isPaid ? "paid" : "failed", payment.channel || "", orderRow.id);
+      `,
+      [isPaid ? "paid" : "failed", payment.channel || "", orderRow.id]
+    );
 
-    const refreshed = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderRow.id);
+    const refreshed = await queryOne("SELECT * FROM orders WHERE id = ?", [orderRow.id]);
     res.json({
-      order: { ...mapOrderRow(refreshed), items: getOrderItems(refreshed.id) },
+      order: { ...mapOrderRow(refreshed), items: await getOrderItems(refreshed.id) },
       payment: {
         status: isPaid ? "paid" : "failed",
         gatewayStatus: paystackStatus,
@@ -807,123 +866,147 @@ app.get("/api/checkout/verify", requireAuth, async (req, res) => {
   }
 });
 
-app.patch("/api/settings", requireAdmin, (req, res) => {
+app.patch("/api/settings", requireAdmin, async (req, res, next) => {
   const parsed = settingsSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid settings payload." });
     return;
   }
 
-  const payload = parsed.data;
-  db.prepare(
-    `
-      UPDATE settings
-      SET brand_name = ?, brand_tagline = ?, hero_title = ?, hero_subtitle = ?,
-          hero_button_label = ?, hero_image = ?, updated_at = datetime('now')
-      WHERE id = 1
-    `
-  ).run(
-    payload.brandName.trim(),
-    payload.brandTagline.trim(),
-    payload.heroTitle.trim(),
-    payload.heroSubtitle.trim(),
-    payload.heroButtonLabel.trim(),
-    payload.heroImage.trim()
-  );
+  try {
+    const payload = parsed.data;
+    await execute(
+      `
+        UPDATE settings
+        SET brand_name = ?, brand_tagline = ?, hero_title = ?, hero_subtitle = ?,
+            hero_button_label = ?, hero_image = ?, updated_at = datetime('now')
+        WHERE id = 1
+      `,
+      [
+        payload.brandName.trim(),
+        payload.brandTagline.trim(),
+        payload.heroTitle.trim(),
+        payload.heroSubtitle.trim(),
+        payload.heroButtonLabel.trim(),
+        payload.heroImage.trim()
+      ]
+    );
 
-  const row = db.prepare("SELECT * FROM settings WHERE id = 1").get();
-  res.json({ settings: mapSettingsRow(row) });
+    const row = await queryOne("SELECT * FROM settings WHERE id = 1");
+    res.json({ settings: mapSettingsRow(row) });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.post("/api/products", requireAdmin, (req, res) => {
+app.post("/api/products", requireAdmin, async (req, res, next) => {
   const parsed = productSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid product payload." });
     return;
   }
 
-  const payload = parsed.data;
-  const id = payload.id || crypto.randomUUID();
+  try {
+    const payload = parsed.data;
+    const id = payload.id || crypto.randomUUID();
 
-  db.prepare(
-    `
-      INSERT INTO products (
-        id, name, price, section, audience, cta_label, description, variant, image
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-  ).run(
-    id,
-    payload.name.trim(),
-    payload.price,
-    payload.section,
-    payload.audience,
-    payload.ctaLabel.trim(),
-    payload.description.trim(),
-    payload.variant.trim() || "round",
-    payload.image.trim()
-  );
+    await execute(
+      `
+        INSERT INTO products (
+          id, name, price, section, audience, cta_label, description, variant, image
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        id,
+        payload.name.trim(),
+        payload.price,
+        payload.section,
+        payload.audience,
+        payload.ctaLabel.trim(),
+        payload.description.trim(),
+        payload.variant.trim() || "round",
+        payload.image.trim()
+      ]
+    );
 
-  const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
-  res.status(201).json({ product: mapProductRow(row) });
+    const row = await queryOne("SELECT * FROM products WHERE id = ?", [id]);
+    res.status(201).json({ product: mapProductRow(row) });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.put("/api/products/:id", requireAdmin, (req, res) => {
+app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
   const parsed = productSchema.safeParse({ ...req.body, id: req.params.id });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid product payload." });
     return;
   }
 
-  const payload = parsed.data;
-  const existing = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
-  if (!existing) {
-    res.status(404).json({ error: "Product not found." });
-    return;
+  try {
+    const payload = parsed.data;
+    const existing = await queryOne("SELECT id FROM products WHERE id = ?", [req.params.id]);
+    if (!existing) {
+      res.status(404).json({ error: "Product not found." });
+      return;
+    }
+
+    await execute(
+      `
+        UPDATE products
+        SET name = ?, price = ?, section = ?, audience = ?, cta_label = ?, description = ?,
+            variant = ?, image = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `,
+      [
+        payload.name.trim(),
+        payload.price,
+        payload.section,
+        payload.audience,
+        payload.ctaLabel.trim(),
+        payload.description.trim(),
+        payload.variant.trim() || "round",
+        payload.image.trim(),
+        req.params.id
+      ]
+    );
+
+    const row = await queryOne("SELECT * FROM products WHERE id = ?", [req.params.id]);
+    res.json({ product: mapProductRow(row) });
+  } catch (error) {
+    next(error);
   }
-
-  db.prepare(
-    `
-      UPDATE products
-      SET name = ?, price = ?, section = ?, audience = ?, cta_label = ?, description = ?,
-          variant = ?, image = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `
-  ).run(
-    payload.name.trim(),
-    payload.price,
-    payload.section,
-    payload.audience,
-    payload.ctaLabel.trim(),
-    payload.description.trim(),
-    payload.variant.trim() || "round",
-    payload.image.trim(),
-    req.params.id
-  );
-
-  const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
-  res.json({ product: mapProductRow(row) });
 });
 
-app.delete("/api/products/:id", requireAdmin, (req, res) => {
-  const existing = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
-  if (!existing) {
-    res.status(404).json({ error: "Product not found." });
-    return;
+app.delete("/api/products/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const existing = await queryOne("SELECT id FROM products WHERE id = ?", [req.params.id]);
+    if (!existing) {
+      res.status(404).json({ error: "Product not found." });
+      return;
+    }
+
+    await execute("DELETE FROM products WHERE id = ?", [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
   }
-
-  db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
-  res.json({ ok: true });
 });
 
-app.get("/api/admin/bootstrap-state", (_, res) => {
-  const count = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get()?.count || 0;
-  res.json({ hasAdmin: count > 0 });
+app.get("/api/admin/bootstrap-state", async (_, res, next) => {
+  try {
+    const row = await queryOne("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'");
+    const count = Number(row?.count) || 0;
+    res.json({ hasAdmin: count > 0 });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/admin/customers", requireAdmin, (_req, res) => {
-  const rows = db
-    .prepare(
+app.get("/api/admin/customers", requireAdmin, async (_req, res, next) => {
+  try {
+    const rows = await queryAll(
       `
         SELECT
           u.id,
@@ -940,65 +1023,76 @@ app.get("/api/admin/customers", requireAdmin, (_req, res) => {
         LEFT JOIN orders o ON o.user_id = u.id
         WHERE u.role = 'customer'
         GROUP BY u.id
-        ORDER BY datetime(u.created_at) DESC
+        ORDER BY u.created_at DESC
       `
-    )
-    .all()
-    .map((row) => ({
-      id: row.id,
-      email: row.email,
-      fullName: row.full_name || "",
-      phone: row.phone || "",
-      address: row.address || "",
-      city: row.city || "",
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      orderCount: Number(row.order_count) || 0,
-      totalSpent: Number(row.total_spent) || 0
-    }));
+    );
 
-  res.json({ customers: rows });
+    res.json({
+      customers: rows.map((row) => ({
+        id: Number(row.id),
+        email: row.email,
+        fullName: row.full_name || "",
+        phone: row.phone || "",
+        address: row.address || "",
+        city: row.city || "",
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        orderCount: Number(row.order_count) || 0,
+        totalSpent: Number(row.total_spent) || 0
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.post("/api/subscriptions", authLimiter, (req, res) => {
+app.post("/api/subscriptions", authLimiter, async (req, res, next) => {
   const parsed = subscriptionSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Enter a valid email address." });
     return;
   }
 
-  const email = normalizeEmail(parsed.data.email);
-  const source = String(parsed.data.source || "footer").trim() || "footer";
+  try {
+    const email = normalizeEmail(parsed.data.email);
+    const source = String(parsed.data.source || "footer").trim() || "footer";
 
-  db.prepare(
-    `
-      INSERT INTO subscriptions (email, source)
-      VALUES (?, ?)
-      ON CONFLICT(email) DO UPDATE SET source = excluded.source
-    `
-  ).run(email, source);
+    await execute(
+      `
+        INSERT INTO subscriptions (email, source)
+        VALUES (?, ?)
+        ON CONFLICT(email) DO UPDATE SET source = excluded.source
+      `,
+      [email, source]
+    );
 
-  res.status(201).json({ ok: true, email });
+    res.status(201).json({ ok: true, email });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/subscriptions", requireAdmin, (_req, res) => {
-  const rows = db
-    .prepare(
+app.get("/api/subscriptions", requireAdmin, async (_req, res, next) => {
+  try {
+    const rows = await queryAll(
       `
         SELECT id, email, source, created_at
         FROM subscriptions
-        ORDER BY datetime(created_at) DESC
+        ORDER BY created_at DESC
       `
-    )
-    .all()
-    .map((row) => ({
-      id: row.id,
-      email: row.email,
-      source: row.source,
-      createdAt: row.created_at
-    }));
+    );
 
-  res.json({ subscriptions: rows });
+    res.json({
+      subscriptions: rows.map((row) => ({
+        id: Number(row.id),
+        email: row.email,
+        source: row.source,
+        createdAt: row.created_at
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 if (fs.existsSync(DIST_DIR)) {
@@ -1018,7 +1112,8 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: message });
 });
 
-bootstrapAdminIfConfigured()
+initDatabase()
+  .then(() => bootstrapAdminIfConfigured())
   .then(() => {
     app.listen(PORT, () => {
       // eslint-disable-next-line no-console
@@ -1027,6 +1122,6 @@ bootstrapAdminIfConfigured()
   })
   .catch((error) => {
     // eslint-disable-next-line no-console
-    console.error("Failed to bootstrap admin account:", error);
+    console.error("Failed to initialize server:", error);
     process.exit(1);
   });

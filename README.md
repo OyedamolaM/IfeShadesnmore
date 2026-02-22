@@ -1,23 +1,25 @@
-# Ife_ShadesnMore
+ #  Ife_ShadesnMore
 
-Secure React + Express storefront with:
-- Admin login route (`/admin/login`) and protected admin manager (`/admin`)
-- Customer auth (`/account/login`) and order history (`/account`)
-- Server-side product/settings storage (SQLite backend)
-- Server-side Paystack initialize + verify flow (no payment secrets in frontend)
-- Email verification flow for customer signup
+React + Express storefront with:
+- Admin dashboard (`/admin`)
+- Customer auth/profile/orders (`/account`)
+- Paystack checkout + webhook verification
+- Email verification for customer signup
+- Dual DB support:
+  - SQLite for local development
+  - Postgres (`DATABASE_URL`) for production (Render free tier friendly)
 
 ## 1) Setup
 
 1. Copy `.env.example` to `.env`
-2. Fill:
+2. Fill at least:
    - `JWT_SECRET`
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `PAYSTACK_SECRET_KEY`
-   - SMTP vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM`) if you want real verification emails
+3. For real verification emails, also fill SMTP values.
 
-## 2) Run
+## 2) Run Locally
 
 ```bash
 npm install
@@ -25,79 +27,67 @@ npm run dev
 ```
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:4000`
+- API: `http://localhost:4000`
+
+Local DB defaults to `server/data/ife-store.db` unless `DATABASE_URL` is set.
 
 ## 3) Admin Access
 
-- Open `http://localhost:5173/admin/login`
-- Login with `ADMIN_EMAIL` + `ADMIN_PASSWORD`
-- Manage brand settings and products from `/admin`
+- Visit `http://localhost:5173/admin/login`
+- Login with `ADMIN_EMAIL` and `ADMIN_PASSWORD`
 
-## 4) Customer Flow
+## 4) Render Deployment (Free Tier)
 
-- Register/Login at `/account/login`
-- Add products to cart and checkout
-- Payment redirects to Paystack hosted checkout
-- On return, payment is verified server-side and order appears in `/account`
-- New customer logins require email verification first
+The included `render.yaml` is now configured for free tier without a disk.
 
-## Security Notes
+Required env vars in Render:
+- `DATABASE_URL` (Neon/Postgres)
+- `FRONTEND_URL` (your Render app URL)
+- `CORS_ORIGIN` (same as frontend URL)
+- `JWT_SECRET`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `PAYSTACK_SECRET_KEY`
+- SMTP vars if you want real email delivery
 
-- Auth uses hashed passwords (`bcrypt`) and HTTP-only session cookie
-- Role-protected endpoints for admin operations
-- Payment verification is done in backend with Paystack secret key
-- Storefront data is server-backed; sensitive flows are not stored in browser localStorage
+## 5) Migrate Existing SQLite Data to Postgres
+
+After setting `DATABASE_URL`:
+
+```bash
+npm run migrate:sqlite-to-postgres
+```
+
+Optional source override:
+
+```bash
+SQLITE_MIGRATION_SOURCE=server/data/ife-store.db npm run migrate:sqlite-to-postgres
+```
+
+Windows CMD:
+
+```bash
+set SQLITE_MIGRATION_SOURCE=server/data/ife-store.db&& npm run migrate:sqlite-to-postgres
+```
 
 ## Paystack Checklist
 
-Use this exact setup for reliable checkout and webhook processing:
-
-1. Set `PAYSTACK_SECRET_KEY` to a **secret** key (`sk_test_...` or `sk_live_...`), not a public `pk_...` key.
-2. Set `FRONTEND_URL` to your deployed frontend URL (used for Paystack callback URL).
-3. In Paystack dashboard, set webhook URL to:
+1. Use `PAYSTACK_SECRET_KEY` (`sk_test_...` or `sk_live_...`), never `pk_...`.
+2. Set Paystack webhook URL to:
    - `https://<your-domain>/api/paystack/webhook`
-4. Confirm the webhook event `charge.success` is enabled.
-
-If checkout initialization fails with key errors, double-check:
-- No `Bearer ` prefix in env value
-- No accidental copy of public key (`pk_...`)
-- No stale secret key from a different Paystack environment (test vs live)
+3. Ensure `charge.success` webhook event is enabled.
 
 ## SMTP Checklist
 
-Minimum required vars:
+Set:
 - `SMTP_HOST`
 - `SMTP_PORT`
-- `SMTP_USER` + `SMTP_PASS` (or neither, for open relay setups)
+- `SMTP_USER`
+- `SMTP_PASS`
 - `MAIL_FROM`
 
-Optional TLS controls:
-- `SMTP_SECURE` (typically `true` on 465, `false` on 587)
+Optional TLS flags:
+- `SMTP_SECURE`
 - `SMTP_REQUIRE_TLS`
 - `SMTP_IGNORE_TLS`
 - `SMTP_TLS_REJECT_UNAUTHORIZED`
-
-## Hosting (Render)
-
-This repo includes `render.yaml` for one-service hosting (API + frontend on the same domain).
-
-### Steps
-
-1. Push this project to GitHub/GitLab/Bitbucket.
-2. In Render, create a new Blueprint and select your repo.
-3. Set required environment variables in Render:
-   - `FRONTEND_URL` = your Render app URL (for example `https://ife-shadesnmore.onrender.com`)
-   - `CORS_ORIGIN` = same URL as above
-   - `JWT_SECRET`
-   - `ADMIN_EMAIL`
-   - `ADMIN_PASSWORD`
-   - `PAYSTACK_SECRET_KEY`
-   - SMTP vars (for real email delivery)
-4. Keep `DB_PATH=/var/data/ife-store.db` and attach disk `ife-store-data`.
-5. Deploy.
-
-### Important
-
-- If SMTP is not configured, email verification still works for local testing through fallback verification links, but no real emails are sent.
-- For production checkout, use Paystack live key (`sk_live...`) and webhook URL:
-  - `https://<your-render-domain>/api/paystack/webhook`

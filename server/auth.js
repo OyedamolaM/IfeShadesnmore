@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { db, mapUserRow } from "./db.js";
+import { mapUserRow, queryOne } from "./db.js";
 
 export const TOKEN_COOKIE_NAME = "ife_session";
 const JWT_TTL = "7d";
@@ -44,17 +44,17 @@ export function clearAuthCookie(res) {
   res.clearCookie(TOKEN_COOKIE_NAME, cookieOptions());
 }
 
-function findUserById(id) {
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+async function findUserById(id) {
+  return queryOne("SELECT * FROM users WHERE id = ?", [id]);
 }
 
-export function getCurrentUserFromRequest(req) {
+export async function getCurrentUserFromRequest(req) {
   const token = req.cookies?.[TOKEN_COOKIE_NAME];
   if (!token) return null;
 
   try {
     const payload = verifyAuthToken(token);
-    const userRow = findUserById(Number(payload.sub));
+    const userRow = await findUserById(Number(payload.sub));
     if (!userRow) return null;
     return mapUserRow(userRow);
   } catch {
@@ -62,26 +62,34 @@ export function getCurrentUserFromRequest(req) {
   }
 }
 
-export function requireAuth(req, res, next) {
-  const user = getCurrentUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ error: "Authentication required." });
-    return;
+export async function requireAuth(req, res, next) {
+  try {
+    const user = await getCurrentUserFromRequest(req);
+    if (!user) {
+      res.status(401).json({ error: "Authentication required." });
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
   }
-  req.user = user;
-  next();
 }
 
-export function requireAdmin(req, res, next) {
-  const user = getCurrentUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ error: "Authentication required." });
-    return;
+export async function requireAdmin(req, res, next) {
+  try {
+    const user = await getCurrentUserFromRequest(req);
+    if (!user) {
+      res.status(401).json({ error: "Authentication required." });
+      return;
+    }
+    if (user.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
   }
-  if (user.role !== "admin") {
-    res.status(403).json({ error: "Admin access required." });
-    return;
-  }
-  req.user = user;
-  next();
 }
