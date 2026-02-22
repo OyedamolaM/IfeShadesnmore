@@ -245,11 +245,11 @@ function ArrivalsSection({
   }, [allProductsByAudience]);
 
   const visibleCollectionCards = useMemo(() => {
-    if (!isSearching) return sortedCollectionCards;
-    return sortedCollectionCards.filter(
-      (card) => (visibleProductsByAudience[card.audience] || []).length > 0
-    );
-  }, [isSearching, sortedCollectionCards, visibleProductsByAudience]);
+    if (!isSearching) {
+      return sortedCollectionCards.filter((card) => (allProductsByAudience[card.audience] || []).length > 0);
+    }
+    return sortedCollectionCards.filter((card) => (visibleProductsByAudience[card.audience] || []).length > 0);
+  }, [allProductsByAudience, isSearching, sortedCollectionCards, visibleProductsByAudience]);
 
   const categoryCards = useMemo(() => {
     const bySectionId = COLLECTION_CARDS.reduce((acc, card) => {
@@ -372,16 +372,13 @@ function ArrivalsSection({
         ) : null}
 
         {visibleCollectionCards.map((card) => {
-          const catalogItems = allProductsByAudience[card.audience] || [];
           const visibleItemsAll = visibleProductsByAudience[card.audience] || [];
-          const hasCatalogItems = catalogItems.length > 0;
-          const hasVisibleItems = visibleItemsAll.length > 0;
           const listItems = visibleItemsAll;
           const isExpanded = Boolean(expandedSections[card.audience]);
           const visibleItems = isExpanded
             ? listItems
             : listItems.slice(0, collapsedItemCount);
-          const canExpand = hasVisibleItems && visibleItemsAll.length > collapsedItemCount;
+          const canExpand = visibleItemsAll.length > collapsedItemCount;
 
           return (
             <section className="collection-block" id={card.sectionId} key={card.sectionId}>
@@ -392,16 +389,6 @@ function ArrivalsSection({
                   <span />
                 </div>
               </div>
-
-              {!hasVisibleItems ? (
-                <p className="collection-empty">
-                  {isSearching && hasCatalogItems
-                    ? "No matching products found in this collection."
-                    : card.comingSoon
-                    ? "Coming soon. We would notify you when they arrive."
-                    : "Products not yet available. Hit the notify me to let us notify you when products arrive."}
-                </p>
-              ) : null}
 
               {visibleItems.length > 0 ? (
                 <div className="collection-grid">

@@ -18,7 +18,7 @@ export const DEFAULT_PRODUCTS = [
     variant: "tortoise",
     description: "Elegant everyday frames for women with lightweight comfort.",
     image:
-      "https://images.pexels.com/photos/14482342/pexels-photo-14482342.jpeg?cs=srgb&dl=pexels-studioautenticamx-14482342.jpg&fm=jpg"
+      "/hero/Female-glasses.jpg"
   },
   {
     id: "men-category",
@@ -30,7 +30,7 @@ export const DEFAULT_PRODUCTS = [
     variant: "square",
     description: "Classic masculine silhouettes built for daily wear.",
     image:
-      "https://images.pexels.com/photos/5752395/pexels-photo-5752395.jpeg?cs=srgb&dl=pexels-kseniachernaya-5752395.jpg&fm=jpg"
+      "/hero/male-glasses.jpg"
   },
   {
     id: "sunglasses-category",
@@ -42,7 +42,7 @@ export const DEFAULT_PRODUCTS = [
     variant: "aviator",
     description: "UV-protected shades with polished fashion-forward finish.",
     image:
-      "https://images.pexels.com/photos/46710/pexels-photo-46710.jpeg?cs=srgb&dl=pexels-pixabay-46710.jpg&fm=jpg"
+      "/hero/Sunglasses.jpg"
   },
   {
     id: "classic-round",

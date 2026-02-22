@@ -15,7 +15,7 @@ export const DEFAULT_PRODUCTS = [
     variant: "tortoise",
     description: "Elegant everyday frames for women with lightweight comfort.",
     image:
-      "/hero/female-glasses.jpg"
+      "/hero/Female-glasses.jpg"
   },
   {
     id: "men-category",

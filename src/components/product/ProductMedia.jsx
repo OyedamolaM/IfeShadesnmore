@@ -1,16 +1,23 @@
 import { useEffect, useState } from "react";
 
-const FALLBACK_GLASSES_IMAGE =
-  "https://images.pexels.com/photos/46710/pexels-photo-46710.jpeg?cs=srgb&dl=pexels-pixabay-46710.jpg&fm=jpg";
+const FALLBACK_GLASSES_IMAGE = "/hero/UnisexGlasses.jpg";
+
+function normalizeHeroPath(value) {
+  const src = String(value || "").trim();
+  if (!src) return "";
+  if (src === "/hero/female-glasses.jpg") return "/hero/Female-glasses.jpg";
+  return src;
+}
 
 function ProductMedia({ product }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const normalizedImage = normalizeHeroPath(product.image);
 
   useEffect(() => {
     setImageFailed(false);
-  }, [product.image]);
+  }, [normalizedImage]);
 
-  const src = !imageFailed && product.image ? product.image : FALLBACK_GLASSES_IMAGE;
+  const src = !imageFailed && normalizedImage ? normalizedImage : FALLBACK_GLASSES_IMAGE;
   const alt = product.name || "Eyeglasses";
 
   return (
