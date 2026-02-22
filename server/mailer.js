@@ -57,6 +57,40 @@ function getResendConfig() {
   };
 }
 
+function getSendGridConfig() {
+  return {
+    apiKey: stripWrappingQuotes(process.env.SENDGRID_API_KEY || ""),
+    apiBaseUrl: stripWrappingQuotes(process.env.SENDGRID_API_BASE_URL || "https://api.sendgrid.com").replace(
+      /\/+$/,
+      ""
+    )
+  };
+}
+
+function resolveMailProvider({ resend, sendgrid }) {
+  const preferred = stripWrappingQuotes(process.env.MAIL_PROVIDER || "").toLowerCase();
+  if (preferred === "smtp" || preferred === "resend" || preferred === "sendgrid") {
+    return preferred;
+  }
+  if (sendgrid.apiKey) return "sendgrid";
+  if (resend.apiKey) return "resend";
+  return "smtp";
+}
+
+function parseFromAddress(from) {
+  const text = String(from || "").trim();
+  if (!text) {
+    return { name: "", email: "" };
+  }
+  const match = text.match(/^(.*)<([^<>]+)>$/);
+  if (!match) {
+    return { name: "", email: text };
+  }
+  const rawName = match[1].trim().replace(/^["']|["']$/g, "");
+  const email = match[2].trim();
+  return { name: rawName, email };
+}
+
 function getMailerConfigKey(config) {
   return JSON.stringify([
     config.host,
@@ -90,8 +124,39 @@ function getMailerConfigurationError(config) {
   return "";
 }
 
+function getResendConfigurationError(resend, config) {
+  if (!resend.apiKey) {
+    return "RESEND_API_KEY is not configured.";
+  }
+  const from = parseFromAddress(config.from);
+  if (!from.email) {
+    return "MAIL_FROM is not configured.";
+  }
+  return "";
+}
+
+function getSendGridConfigurationError(sendgrid, config) {
+  if (!sendgrid.apiKey) {
+    return "SENDGRID_API_KEY is not configured.";
+  }
+  const from = parseFromAddress(config.from);
+  if (!from.email) {
+    return "MAIL_FROM is not configured.";
+  }
+  return "";
+}
+
 export function isMailerConfigured() {
   const config = getMailerConfig();
+  const resend = getResendConfig();
+  const sendgrid = getSendGridConfig();
+  const provider = resolveMailProvider({ resend, sendgrid });
+  if (provider === "resend") {
+    return !getResendConfigurationError(resend, config);
+  }
+  if (provider === "sendgrid") {
+    return !getSendGridConfigurationError(sendgrid, config);
+  }
   return !getMailerConfigurationError(config);
 }
 
@@ -107,10 +172,18 @@ function maskEmail(value) {
 export function getMailerRuntimeInfo() {
   const config = getMailerConfig();
   const resend = getResendConfig();
-  const configError = getMailerConfigurationError(config);
+  const sendgrid = getSendGridConfig();
+  const provider = resolveMailProvider({ resend, sendgrid });
+  const configError =
+    provider === "resend"
+      ? getResendConfigurationError(resend, config)
+      : provider === "sendgrid"
+        ? getSendGridConfigurationError(sendgrid, config)
+        : getMailerConfigurationError(config);
   return {
-    provider: resend.apiKey ? "resend" : "smtp",
+    provider,
     resendConfigured: Boolean(resend.apiKey),
+    sendgridConfigured: Boolean(sendgrid.apiKey),
     configured: !configError,
     configError: configError || "",
     host: config.host,
@@ -167,6 +240,85 @@ async function sendWithResend({ config, toEmail, subject, text, html }) {
     if (error?.name === "AbortError") {
       throw Object.assign(new Error("Resend request timed out."), {
         code: "RESEND_TIMEOUT"
+      });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sendWithSendGrid({ config, toEmail, subject, text, html }) {
+  const sendgrid = getSendGridConfig();
+  if (!sendgrid.apiKey) {
+    throw Object.assign(new Error("SENDGRID_API_KEY is missing."), {
+      code: "SENDGRID_MISSING_KEY"
+    });
+  }
+
+  const from = parseFromAddress(config.from);
+  if (!from.email) {
+    throw Object.assign(new Error("MAIL_FROM is missing or invalid for SendGrid."), {
+      code: "SENDGRID_INVALID_FROM"
+    });
+  }
+
+  const body = {
+    personalizations: [
+      {
+        to: [{ email: toEmail }]
+      }
+    ],
+    from: {
+      email: from.email,
+      ...(from.name ? { name: from.name } : {})
+    },
+    subject,
+    content: [
+      { type: "text/plain", value: text },
+      { type: "text/html", value: html }
+    ]
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(`${sendgrid.apiBaseUrl}/v3/mail/send`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sendgrid.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+
+    let payload = "";
+    try {
+      payload = await response.text();
+    } catch (error) {
+      payload = "";
+    }
+
+    if (!response.ok) {
+      let details = payload;
+      if (payload) {
+        try {
+          details = JSON.stringify(JSON.parse(payload));
+        } catch (error) {
+          details = payload;
+        }
+      }
+      throw Object.assign(new Error(`SendGrid request failed (${response.status})`), {
+        code: `SENDGRID_HTTP_${response.status}`,
+        responseCode: response.status,
+        response: details || ""
+      });
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw Object.assign(new Error("SendGrid request timed out."), {
+        code: "SENDGRID_TIMEOUT"
       });
     }
     throw error;
@@ -353,8 +505,10 @@ async function sendVerificationMessageWithRetry({ config, toEmail, subject, text
 }
 
 export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
+  const config = getMailerConfig();
   const resend = getResendConfig();
-  const { transport, config, configError } = getTransporter();
+  const sendgrid = getSendGridConfig();
+  const provider = resolveMailProvider({ resend, sendgrid });
   const greetingName = String(fullName || "").trim() || "there";
 
   const subject = "Verify your IfeShadesnMore account";
@@ -377,15 +531,13 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
     <p>If you did not create this account, you can ignore this email.</p>
   `;
 
-  if (!transport) {
-    if (!resend.apiKey) {
+  if (provider === "resend") {
+    const configError = getResendConfigurationError(resend, config);
+    if (configError) {
       // eslint-disable-next-line no-console
-      console.log("[email-verification] Mailer not configured.", configError || "");
+      console.log("[email-verification] Mailer not configured.", configError);
       return { delivered: false };
     }
-  }
-
-  if (resend.apiKey) {
     await sendWithResend({
       config,
       toEmail,
@@ -394,6 +546,30 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
       html
     });
     return { delivered: true };
+  }
+
+  if (provider === "sendgrid") {
+    const configError = getSendGridConfigurationError(sendgrid, config);
+    if (configError) {
+      // eslint-disable-next-line no-console
+      console.log("[email-verification] Mailer not configured.", configError);
+      return { delivered: false };
+    }
+    await sendWithSendGrid({
+      config,
+      toEmail,
+      subject,
+      text,
+      html
+    });
+    return { delivered: true };
+  }
+
+  const { transport, configError } = getTransporter();
+  if (!transport) {
+    // eslint-disable-next-line no-console
+    console.log("[email-verification] Mailer not configured.", configError || "");
+    return { delivered: false };
   }
 
   await sendVerificationMessageWithRetry({

@@ -17,7 +17,10 @@ React + Express storefront with:
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `PAYSTACK_SECRET_KEY`
-3. For real verification emails, also fill SMTP values.
+3. For real verification emails, configure one provider:
+   - SMTP (`MAIL_PROVIDER=smtp`) or
+   - Resend (`MAIL_PROVIDER=resend`) or
+   - SendGrid (`MAIL_PROVIDER=sendgrid`)
 4. If frontend and backend are deployed on different Render services/domains,
    set `VITE_API_BASE_URL` on the frontend service to your backend URL
    (for example `https://ife-shadesnmore.onrender.com`).
@@ -51,7 +54,7 @@ Required env vars in Render:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `PAYSTACK_SECRET_KEY`
-- SMTP vars if you want real email delivery
+- Mail provider vars if you want real email delivery
 
 ## 5) Migrate Existing SQLite Data to Postgres
 
@@ -83,6 +86,7 @@ set SQLITE_MIGRATION_SOURCE=server/data/ife-store.db&& npm run migrate:sqlite-to
 ## SMTP Checklist
 
 Set:
+- `MAIL_PROVIDER=smtp`
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_USER`
@@ -100,9 +104,26 @@ Optional TLS flags:
 - `SMTP_IGNORE_TLS`
 - `SMTP_TLS_REJECT_UNAUTHORIZED`
 
+## SendGrid Checklist (No Custom Domain Needed)
+
+If you do not have a domain yet, use SendGrid API over HTTPS:
+
+1. Create a SendGrid API key with Mail Send permission.
+2. Verify a Single Sender Identity in SendGrid (an email you control).
+3. Set:
+   - `MAIL_PROVIDER=sendgrid`
+   - `SENDGRID_API_KEY`
+   - `SENDGRID_API_BASE_URL=https://api.sendgrid.com`
+   - `MAIL_FROM=IfeShadesnMore <your-verified-sender-email>`
+4. Redeploy and test signup/resend verification.
+
 ### Render SMTP Timeout Note
 If logs show SMTP `ETIMEDOUT`/`ENETUNREACH` to `smtp.gmail.com`, use Resend API fallback on HTTPS:
+- `MAIL_PROVIDER=resend`
 - `RESEND_API_KEY`
 - `RESEND_API_BASE_URL=https://api.resend.com`
 
-When `RESEND_API_KEY` is set, email verification sends through Resend instead of SMTP.
+If `MAIL_PROVIDER` is not set, provider priority is:
+1. SendGrid (`SENDGRID_API_KEY`)
+2. Resend (`RESEND_API_KEY`)
+3. SMTP
