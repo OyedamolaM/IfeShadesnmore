@@ -91,6 +91,12 @@ export function fetchAdminCustomers() {
   return request("/api/admin/customers");
 }
 
+export function deleteAdminCustomer(customerId) {
+  return request(`/api/admin/customers/${encodeURIComponent(customerId)}`, {
+    method: "DELETE"
+  });
+}
+
 export function createSubscription(payload) {
   return request("/api/subscriptions", {
     method: "POST",

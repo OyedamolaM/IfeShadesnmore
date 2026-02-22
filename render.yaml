@@ -33,13 +33,13 @@ services:
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
-        value: 587
+        value: 465
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS
         sync: false
       - key: SMTP_SECURE
-        value: false
+        value: true
       - key: SMTP_REQUIRE_TLS
         value: false
       - key: SMTP_IGNORE_TLS

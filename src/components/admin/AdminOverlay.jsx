@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 import {
+  deleteAdminCustomer,
   fetchAdminCustomers,
   fetchAllOrders,
   fetchSubscriptions,
@@ -46,6 +47,8 @@ function AdminOverlay({
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
   const [orderStatusNotice, setOrderStatusNotice] = useState("");
   const [orderStatusError, setOrderStatusError] = useState("");
+  const [customerActionNotice, setCustomerActionNotice] = useState("");
+  const [customerActionError, setCustomerActionError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -124,6 +127,37 @@ function AdminOverlay({
     }
   };
 
+  const handleDeleteCustomer = async (customer) => {
+    const label = customer.fullName?.trim() || customer.email;
+    const shouldDelete = window.confirm(
+      `Delete customer "${label}"? This will also delete their orders and cannot be undone.`
+    );
+    if (!shouldDelete) return;
+
+    setCustomerActionNotice("");
+    setCustomerActionError("");
+
+    try {
+      const removedOrderIds = orders
+        .filter((order) => Number(order.userId) === Number(customer.id))
+        .map((order) => String(order.id));
+
+      await deleteAdminCustomer(customer.id);
+      setCustomers((current) => current.filter((item) => item.id !== customer.id));
+      setOrders((current) => current.filter((order) => Number(order.userId) !== Number(customer.id)));
+      if (removedOrderIds.length > 0) {
+        setOrderStatusDrafts((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(([orderId]) => !removedOrderIds.includes(String(orderId)))
+          )
+        );
+      }
+      setCustomerActionNotice(`Customer "${label}" was removed.`);
+    } catch (requestError) {
+      setCustomerActionError(requestError.message || "Could not delete customer.");
+    }
+  };
+
   return (
     <div className="page admin-page">
       <div className="site-shell admin-shell">
@@ -180,6 +214,8 @@ function AdminOverlay({
         {dataError ? <p className="form-error">{dataError}</p> : null}
         {orderStatusNotice ? <p className="form-success">{orderStatusNotice}</p> : null}
         {orderStatusError ? <p className="form-error">{orderStatusError}</p> : null}
+        {customerActionNotice ? <p className="form-success">{customerActionNotice}</p> : null}
+        {customerActionError ? <p className="form-error">{customerActionError}</p> : null}
         {adminMessage ? <p className="form-success">{adminMessage}</p> : null}
 
         <div className="admin-sections">
@@ -286,12 +322,13 @@ function AdminOverlay({
                       <th>City</th>
                       <th>Orders</th>
                       <th>Total Spent</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {customers.length === 0 ? (
                       <tr>
-                        <td colSpan={6}>No customers yet.</td>
+                        <td colSpan={7}>No customers yet.</td>
                       </tr>
                     ) : (
                       customers.map((customer) => (
@@ -302,6 +339,15 @@ function AdminOverlay({
                           <td>{customer.city || "-"}</td>
                           <td>{customer.orderCount}</td>
                           <td>{toPrice(customer.totalSpent)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="secondary-action danger-action"
+                              onClick={() => handleDeleteCustomer(customer)}
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}

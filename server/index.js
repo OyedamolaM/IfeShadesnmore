@@ -1080,6 +1080,49 @@ app.get("/api/admin/customers", requireAdmin, async (_req, res, next) => {
   }
 });
 
+app.delete("/api/admin/customers/:id", requireAdmin, async (req, res, next) => {
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId) || customerId <= 0) {
+    res.status(400).json({ error: "Invalid customer id." });
+    return;
+  }
+
+  try {
+    const customer = await queryOne(
+      `
+        SELECT id, role, email, full_name
+        FROM users
+        WHERE id = ?
+      `,
+      [customerId]
+    );
+
+    if (!customer || customer.role !== "customer") {
+      res.status(404).json({ error: "Customer not found." });
+      return;
+    }
+
+    await execute(
+      `
+        DELETE FROM users
+        WHERE id = ? AND role = 'customer'
+      `,
+      [customerId]
+    );
+
+    res.json({
+      ok: true,
+      customer: {
+        id: Number(customer.id),
+        email: customer.email,
+        fullName: customer.full_name || ""
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/subscriptions", authLimiter, async (req, res, next) => {
   const parsed = subscriptionSchema.safeParse(req.body);
   if (!parsed.success) {

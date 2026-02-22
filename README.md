@@ -86,6 +86,11 @@ Set:
 - `SMTP_PASS`
 - `MAIL_FROM`
 
+For Gmail app-password SMTP, use:
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=465`
+- `SMTP_SECURE=true`
+
 Optional TLS flags:
 - `SMTP_SECURE`
 - `SMTP_REQUIRE_TLS`
