@@ -174,6 +174,7 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
       command: error?.command || "",
       responseCode: error?.responseCode || "",
       response: error?.response || "",
+      stack: error?.stack || "",
       mailer: getMailerRuntimeInfo()
     });
     return { delivered: false };

@@ -24,6 +24,7 @@ function getMailerConfig() {
   const port = Number(stripWrappingQuotes(process.env.SMTP_PORT || "587")) || 587;
   const user = stripWrappingQuotes(process.env.SMTP_USER || "");
   const pass = stripWrappingQuotes(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "");
+  const debug = parseBoolean(process.env.SMTP_DEBUG, false);
   const secure = parseBoolean(process.env.SMTP_SECURE, port === 465);
   const requireTLS = parseBoolean(process.env.SMTP_REQUIRE_TLS, false);
   const ignoreTLS = parseBoolean(process.env.SMTP_IGNORE_TLS, false);
@@ -37,6 +38,7 @@ function getMailerConfig() {
     port,
     user,
     pass,
+    debug,
     secure,
     requireTLS,
     ignoreTLS,
@@ -51,6 +53,7 @@ function getMailerConfigKey(config) {
     config.port,
     config.user,
     config.pass,
+    config.debug,
     config.secure,
     config.requireTLS,
     config.ignoreTLS,
@@ -100,6 +103,7 @@ export function getMailerRuntimeInfo() {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    debugEnabled: config.debug,
     requireTLS: config.requireTLS,
     ignoreTLS: config.ignoreTLS,
     rejectUnauthorized: config.rejectUnauthorized,
@@ -124,6 +128,8 @@ function getTransporter() {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    logger: config.debug,
+    debug: config.debug,
     requireTLS: config.requireTLS,
     ignoreTLS: config.ignoreTLS,
     tls: {
