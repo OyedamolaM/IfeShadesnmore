@@ -99,3 +99,10 @@ Optional TLS flags:
 - `SMTP_REQUIRE_TLS`
 - `SMTP_IGNORE_TLS`
 - `SMTP_TLS_REJECT_UNAUTHORIZED`
+
+### Render SMTP Timeout Note
+If logs show SMTP `ETIMEDOUT`/`ENETUNREACH` to `smtp.gmail.com`, use Resend API fallback on HTTPS:
+- `RESEND_API_KEY`
+- `RESEND_API_BASE_URL=https://api.resend.com`
+
+When `RESEND_API_KEY` is set, email verification sends through Resend instead of SMTP.

@@ -47,6 +47,16 @@ function getMailerConfig() {
   };
 }
 
+function getResendConfig() {
+  return {
+    apiKey: stripWrappingQuotes(process.env.RESEND_API_KEY || ""),
+    apiBaseUrl: stripWrappingQuotes(process.env.RESEND_API_BASE_URL || "https://api.resend.com").replace(
+      /\/+$/,
+      ""
+    )
+  };
+}
+
 function getMailerConfigKey(config) {
   return JSON.stringify([
     config.host,
@@ -96,8 +106,11 @@ function maskEmail(value) {
 
 export function getMailerRuntimeInfo() {
   const config = getMailerConfig();
+  const resend = getResendConfig();
   const configError = getMailerConfigurationError(config);
   return {
+    provider: resend.apiKey ? "resend" : "smtp",
+    resendConfigured: Boolean(resend.apiKey),
     configured: !configError,
     configError: configError || "",
     host: config.host,
@@ -112,6 +125,54 @@ export function getMailerRuntimeInfo() {
     userPreview: maskEmail(config.user),
     from: config.from
   };
+}
+
+async function sendWithResend({ config, toEmail, subject, text, html }) {
+  const resend = getResendConfig();
+  if (!resend.apiKey) {
+    throw Object.assign(new Error("RESEND_API_KEY is missing."), {
+      code: "RESEND_MISSING_KEY"
+    });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(`${resend.apiBaseUrl}/emails`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resend.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: config.from,
+        to: [toEmail],
+        subject,
+        text,
+        html
+      }),
+      signal: controller.signal
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = payload?.message || `Resend request failed (${response.status})`;
+      throw Object.assign(new Error(message), {
+        code: `RESEND_HTTP_${response.status}`,
+        responseCode: response.status,
+        response: JSON.stringify(payload || {})
+      });
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw Object.assign(new Error("Resend request timed out."), {
+        code: "RESEND_TIMEOUT"
+      });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function createTransportFromConfig(config) {
@@ -292,6 +353,7 @@ async function sendVerificationMessageWithRetry({ config, toEmail, subject, text
 }
 
 export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
+  const resend = getResendConfig();
   const { transport, config, configError } = getTransporter();
   const greetingName = String(fullName || "").trim() || "there";
 
@@ -316,9 +378,22 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
   `;
 
   if (!transport) {
-    // eslint-disable-next-line no-console
-    console.log("[email-verification] Mailer not configured.", configError || "");
-    return { delivered: false };
+    if (!resend.apiKey) {
+      // eslint-disable-next-line no-console
+      console.log("[email-verification] Mailer not configured.", configError || "");
+      return { delivered: false };
+    }
+  }
+
+  if (resend.apiKey) {
+    await sendWithResend({
+      config,
+      toEmail,
+      subject,
+      text,
+      html
+    });
+    return { delivered: true };
   }
 
   await sendVerificationMessageWithRetry({
