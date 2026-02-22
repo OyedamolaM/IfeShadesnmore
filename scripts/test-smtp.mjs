@@ -45,6 +45,13 @@ if ((user && !pass) || (!user && pass)) {
   process.exit(1);
 }
 
+if (!to || /your[_-]?other[_-]?email@/i.test(to)) {
+  console.error(
+    "Set a real recipient first. Example: set SMTP_TEST_TO=myrealmail@gmail.com"
+  );
+  process.exit(1);
+}
+
 const transport = nodemailer.createTransport({
   host,
   port,
@@ -92,6 +99,9 @@ async function main() {
   });
 
   console.log("Mail sent.");
+  console.log(
+    "Note: SMTP acceptance means Gmail accepted the message for delivery. Check Inbox/Spam of the real recipient."
+  );
   console.log(
     JSON.stringify(
       {

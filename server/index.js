@@ -34,7 +34,7 @@ import {
   verifyTransaction,
   verifyWebhookSignature
 } from "./paystack.js";
-import { sendEmailVerification } from "./mailer.js";
+import { getMailerRuntimeInfo, sendEmailVerification } from "./mailer.js";
 
 dotenv.config();
 
@@ -168,7 +168,14 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
     return await sendEmailVerification({ toEmail, fullName, verificationUrl });
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error("Could not send verification email:", error);
+    console.error("Could not send verification email:", {
+      message: error?.message || "",
+      code: error?.code || "",
+      command: error?.command || "",
+      responseCode: error?.responseCode || "",
+      response: error?.response || "",
+      mailer: getMailerRuntimeInfo()
+    });
     return { delivered: false };
   }
 }

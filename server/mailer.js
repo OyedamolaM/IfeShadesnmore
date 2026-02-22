@@ -82,6 +82,34 @@ export function isMailerConfigured() {
   return !getMailerConfigurationError(config);
 }
 
+function maskEmail(value) {
+  const text = String(value || "").trim();
+  if (!text.includes("@")) return "";
+  const [name, domain] = text.split("@");
+  if (!name || !domain) return "";
+  const safeName = name.length <= 2 ? `${name[0] || "*"}*` : `${name.slice(0, 2)}***`;
+  return `${safeName}@${domain}`;
+}
+
+export function getMailerRuntimeInfo() {
+  const config = getMailerConfig();
+  const configError = getMailerConfigurationError(config);
+  return {
+    configured: !configError,
+    configError: configError || "",
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: config.requireTLS,
+    ignoreTLS: config.ignoreTLS,
+    rejectUnauthorized: config.rejectUnauthorized,
+    hasUser: Boolean(config.user),
+    hasPass: Boolean(config.pass),
+    userPreview: maskEmail(config.user),
+    from: config.from
+  };
+}
+
 function getTransporter() {
   const config = getMailerConfig();
   const configError = getMailerConfigurationError(config);
