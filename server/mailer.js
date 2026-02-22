@@ -146,6 +146,64 @@ function getTransporter() {
   return { transport: transporter, config, configError: "" };
 }
 
+function isRetryableSmtpError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  const command = String(error?.command || "").toUpperCase();
+  const responseCode = Number(error?.responseCode || 0);
+
+  if (["ETIMEDOUT", "ECONNECTION", "ESOCKET", "ECONNRESET", "EPIPE"].includes(code)) {
+    return true;
+  }
+
+  if (responseCode >= 400 && responseCode < 500) {
+    return true;
+  }
+
+  if (command === "CONN" || command === "STARTTLS") {
+    return true;
+  }
+
+  return false;
+}
+
+async function sendVerificationMessageWithRetry({ config, toEmail, subject, text, html }) {
+  const first = getTransporter();
+  if (!first.transport) {
+    throw Object.assign(new Error("Mailer transport is unavailable."), { code: "MAILER_UNAVAILABLE" });
+  }
+
+  try {
+    await first.transport.sendMail({
+      from: config.from,
+      to: toEmail,
+      subject,
+      text,
+      html
+    });
+    return;
+  } catch (error) {
+    if (!isRetryableSmtpError(error)) {
+      throw error;
+    }
+
+    // Reset cached transport and retry once with a fresh connection.
+    transporter = null;
+    transporterConfigKey = "";
+    const retry = getTransporter();
+    if (!retry.transport) {
+      throw error;
+    }
+
+    await retry.transport.sendMail({
+      from: config.from,
+      to: toEmail,
+      subject,
+      text,
+      html
+    });
+  }
+}
+
 export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
   const { transport, config, configError } = getTransporter();
   const greetingName = String(fullName || "").trim() || "there";
@@ -176,9 +234,9 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
     return { delivered: false };
   }
 
-  await transport.sendMail({
-    from: config.from,
-    to: toEmail,
+  await sendVerificationMessageWithRetry({
+    config,
+    toEmail,
     subject,
     text,
     html

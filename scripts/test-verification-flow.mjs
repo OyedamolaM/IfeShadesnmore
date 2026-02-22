@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const baseUrl = process.env.TEST_BASE_URL || "http://localhost:4000";
+const baseUrl = String(process.env.TEST_BASE_URL || "http://localhost:4000").trim();
 const email = `qa-${Date.now()}@example.com`;
 const password = "Password123!";
 

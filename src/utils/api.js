@@ -1,5 +1,16 @@
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+
+function buildApiUrl(path) {
+  const route = String(path || "");
+  if (!API_BASE_URL) return route;
+  if (!route.startsWith("/")) return `${API_BASE_URL}/${route}`;
+  return `${API_BASE_URL}${route}`;
+}
+
 async function request(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(buildApiUrl(path), {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

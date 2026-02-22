@@ -18,6 +18,9 @@ React + Express storefront with:
    - `ADMIN_PASSWORD`
    - `PAYSTACK_SECRET_KEY`
 3. For real verification emails, also fill SMTP values.
+4. If frontend and backend are deployed on different Render services/domains,
+   set `VITE_API_BASE_URL` on the frontend service to your backend URL
+   (for example `https://ife-shadesnmore.onrender.com`).
 
 ## 2) Run Locally
 
