@@ -7,6 +7,7 @@ import ContactSection from "../components/sections/ContactSection";
 import ProductDetailsModal from "../components/product/ProductDetailsModal";
 import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
+import { CART_STORAGE_KEY } from "../constants/storefront";
 import { createSubscription, initializeCheckout } from "../utils/api";
 
 function splitFullName(value) {
@@ -32,6 +33,29 @@ function createCheckoutForm(user) {
   };
 }
 
+function parseStoredCart(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        productId: String(entry?.productId || "").trim(),
+        quantity: Math.max(0, Number(entry?.quantity) || 0)
+      }))
+      .filter((entry) => entry.productId && entry.quantity > 0);
+  } catch {
+    return [];
+  }
+}
+
+function buildCheckoutLoginRedirect() {
+  const params = new URLSearchParams({
+    openCart: "1",
+    openCheckout: "1"
+  });
+  return `/account/login?redirect=${encodeURIComponent(`/?${params.toString()}`)}`;
+}
+
 function StorefrontPage({
   products,
   settings,
@@ -44,7 +68,10 @@ function StorefrontPage({
 }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showCart, setShowCart] = useState(false);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    if (typeof window === "undefined") return [];
+    return parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
+  });
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkoutForm, setCheckoutForm] = useState(createCheckoutForm(currentUser));
   const [checkoutError, setCheckoutError] = useState("");
@@ -111,6 +138,36 @@ function StorefrontPage({
       return current.filter((item) => validIds.has(item.productId) && item.quantity > 0);
     });
   }, [products]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+
+    const params = new URLSearchParams(location.search || "");
+    const shouldOpenCart = params.get("openCart") === "1";
+    const shouldOpenCheckout = params.get("openCheckout") === "1";
+    if (!shouldOpenCart && !shouldOpenCheckout) return;
+
+    if (shouldOpenCart) {
+      setShowCart(true);
+    }
+
+    if (shouldOpenCheckout && currentUser && cartItems.length > 0) {
+      setCheckoutError("");
+      setCheckoutNotice("");
+      setShowCheckout(true);
+    }
+
+    const cleaned = new URLSearchParams(location.search || "");
+    cleaned.delete("openCart");
+    cleaned.delete("openCheckout");
+    const nextQuery = cleaned.toString();
+    onNavigate(nextQuery ? `/?${nextQuery}` : "/", { replace: true });
+  }, [location.pathname, location.search, currentUser, cartItems.length, onNavigate]);
 
   useEffect(() => {
     if (location.pathname !== "/" || !pendingSearchFocus) return;
@@ -187,7 +244,7 @@ function StorefrontPage({
     if (cartItems.length === 0) return;
     if (!currentUser) {
       setCheckoutError("Please login first to complete checkout.");
-      onNavigate("/account/login?redirect=/account");
+      onNavigate(buildCheckoutLoginRedirect());
       return;
     }
 
@@ -210,7 +267,7 @@ function StorefrontPage({
     event.preventDefault();
     if (!currentUser) {
       setCheckoutError("Please login first.");
-      onNavigate("/account/login?redirect=/account");
+      onNavigate(buildCheckoutLoginRedirect());
       return;
     }
 

@@ -20,7 +20,8 @@ function AuthContainer({ title, subtitle, children, shellClassName = "" }) {
 function AccountLoginPage({ currentUser, onAuthenticated }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/account";
+  const redirectParam = String(searchParams.get("redirect") || "").trim();
+  const redirect = redirectParam.startsWith("/") ? redirectParam : "/";
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     firstName: "",
@@ -58,7 +59,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           password: form.password
         });
         onAuthenticated(payload.user);
-        setNotice("Login successful. Redirecting to your account...");
+        setNotice("Login successful. Redirecting...");
         navigate(payload.user?.role === "admin" ? "/admin" : redirect, { replace: true });
       } else {
         if (!form.firstName.trim() || !form.lastName.trim()) {
