@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FeatureIcon from "../icons/FeatureIcon";
 
 const ROTATION_INTERVAL_MS = 5000;
@@ -43,7 +43,6 @@ function normalizeFocus(value) {
 function HeroSection({ settings, heroSlides }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const [failedSlides, setFailedSlides] = useState({});
-  const preloadedRef = useRef({});
 
   const slides = useMemo(() => {
     if (!Array.isArray(heroSlides) || heroSlides.length === 0) return [];
@@ -59,28 +58,15 @@ function HeroSection({ settings, heroSlides }) {
   useEffect(() => {
     setHeroIndex(0);
     setFailedSlides({});
-    preloadedRef.current = {};
   }, [slides.length]);
-
-  useEffect(() => {
-    slides.forEach((slide) => {
-      const src = slide.src || "";
-      if (!src || preloadedRef.current[src] || failedSlides[src]) return;
-
-      preloadedRef.current[src] = true;
-      const preload = new Image();
-      preload.decoding = "async";
-      preload.onerror = () => {
-        setFailedSlides((current) => ({ ...current, [src]: true }));
-      };
-      preload.src = src;
-    });
-  }, [slides, failedSlides]);
 
   const usableSlides = useMemo(
     () => slides.filter((slide) => Boolean(slide.src) && !failedSlides[slide.src]),
     [slides, failedSlides]
   );
+
+  const nextSlideIndex =
+    usableSlides.length > 1 ? (heroIndex + 1) % usableSlides.length : heroIndex;
 
   useEffect(() => {
     if (!usableSlides.length) {
@@ -136,7 +122,10 @@ function HeroSection({ settings, heroSlides }) {
                       className={`hero-rotating-image hero-transition-${slide.effect} hero-position-${slide.position} ${
                         index === heroIndex ? "is-active" : ""
                       }`}
-                      src={slide.src}
+                      src={index === heroIndex || index === nextSlideIndex ? slide.src : undefined}
+                      loading={index === heroIndex ? "eager" : "lazy"}
+                      fetchPriority={index === heroIndex ? "high" : "low"}
+                      decoding="async"
                       alt={slide.alt || "Model wearing eyeglasses"}
                       style={{
                         objectPosition: slide.focus || DEFAULT_FOCUS,

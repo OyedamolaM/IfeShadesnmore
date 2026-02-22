@@ -322,7 +322,9 @@ function ArrivalsSection({
 
         {!isSearching ? (
           <div className="category-grid">
-            {categoryCards.map((card) => {
+            {categoryCards.map((card, index) => {
+              const aboveTheFoldCount = isMobileView ? 3 : 4;
+              const isHighPriority = index < aboveTheFoldCount;
               return (
                 <article className="category-card" key={card.id}>
                   <h3>
@@ -342,7 +344,9 @@ function ArrivalsSection({
                     <img
                       src={card.image}
                       alt={card.alt}
-                      loading="lazy"
+                      loading={isHighPriority ? "eager" : "lazy"}
+                      fetchPriority={isHighPriority ? "high" : "low"}
+                      decoding="async"
                       onError={(event) => {
                         if (event.currentTarget.src.endsWith(CATEGORY_PLACEHOLDER_IMAGE)) return;
                         event.currentTarget.src = CATEGORY_PLACEHOLDER_IMAGE;
