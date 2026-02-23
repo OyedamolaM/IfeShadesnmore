@@ -626,6 +626,22 @@ select {
   word-break: break-word;
 }
 
+.category-card .product-name-button {
+  display: inline;
+  width: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-card .product-name-button {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .product-name-button:hover {
   text-decoration: underline;
   text-underline-offset: 0.14em;
@@ -2667,9 +2683,22 @@ select {
     font-size: 12px;
     font-weight: 700;
     line-height: 1.2;
+    min-height: calc(1.2em * 2);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .collection-card .product-name-button {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .collection-card p {
