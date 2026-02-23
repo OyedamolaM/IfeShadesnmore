@@ -14,7 +14,7 @@ import {
 } from "./utils/api";
 import {
   buildHeroSlides,
-  normalizeAudience,
+  normalizeAudienceList,
   normalizeProduct,
   normalizeSection
 } from "./utils/storefrontModel";
@@ -106,10 +106,12 @@ function App() {
 
   const startEdit = (product) => {
     setIsEditingProduct(true);
+    const audiences = normalizeAudienceList(product.audiences || product.audience);
     setProductDraft({
       ...product,
       section: normalizeSection(product.section),
-      audience: normalizeAudience(product.audience),
+      audience: audiences[0],
+      audiences,
       ctaLabel: product.ctaLabel || "",
       description: product.description || "",
       price: String(product.price)
@@ -126,12 +128,14 @@ function App() {
     event.preventDefault();
     setAdminMessage("");
     try {
+      const audiences = normalizeAudienceList(productDraft.audiences || productDraft.audience);
       const payload = {
         id: isEditingProduct ? productDraft.id : undefined,
         name: productDraft.name.trim(),
         price: Number(productDraft.price) || 0,
         section: normalizeSection(productDraft.section),
-        audience: normalizeAudience(productDraft.audience),
+        audience: audiences[0],
+        audiences,
         ctaLabel: String(productDraft.ctaLabel || "").trim(),
         description: String(productDraft.description || "").trim(),
         variant: String(productDraft.variant || "round").trim() || "round",
@@ -174,7 +178,13 @@ function App() {
         heroTitle: settingsDraft.heroTitle.trim() || DEFAULT_SETTINGS.heroTitle,
         heroSubtitle: settingsDraft.heroSubtitle.trim() || DEFAULT_SETTINGS.heroSubtitle,
         heroButtonLabel: settingsDraft.heroButtonLabel.trim() || DEFAULT_SETTINGS.heroButtonLabel,
-        heroImage: settingsDraft.heroImage.trim()
+        heroImage: settingsDraft.heroImage.trim(),
+        heroPromiseItems: Array.isArray(settingsDraft.heroPromiseItems)
+          ? settingsDraft.heroPromiseItems
+          : DEFAULT_SETTINGS.heroPromiseItems,
+        featureItems: Array.isArray(settingsDraft.featureItems)
+          ? settingsDraft.featureItems
+          : DEFAULT_SETTINGS.featureItems
       });
       setSettings(payload.settings);
       setSettingsDraft(payload.settings);

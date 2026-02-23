@@ -150,17 +150,23 @@ function inferAudienceFromName(name) {
   return "unisex";
 }
 
-function resolveAudience(product) {
-  const explicitRaw = String(product?.audience || "").trim();
-  if (!explicitRaw) return inferAudienceFromName(product?.name);
-  return normalizeAudienceKey(explicitRaw);
+function resolveAudiences(product) {
+  const explicitList = Array.isArray(product?.audiences) ? product.audiences : [];
+  const fallback = String(product?.audience || "").trim();
+  const merged = explicitList.length > 0 ? explicitList : fallback ? [fallback] : [];
+  const normalized = [...new Set(merged.map((entry) => normalizeAudienceKey(entry)).filter(Boolean))];
+  if (normalized.length > 0) return normalized;
+  return [inferAudienceFromName(product?.name)];
 }
 
 function matchesQuery(product, query) {
   if (!query) return true;
+  const audienceText = Array.isArray(product?.audiences)
+    ? product.audiences.join(" ")
+    : product?.audience || "";
   const haystack =
     `${product.id || ""} ${product.name || ""} ${product.description || ""} ${product.ctaLabel || ""} ${
-      product.audience || ""
+      audienceText
     } ${product.variant || ""} ${product.section || ""} ${product.price || ""}`.toLowerCase();
   return haystack.includes(query);
 }
@@ -176,12 +182,20 @@ function groupProductsByAudience(items) {
   }, {});
 
   (items || []).forEach((product) => {
-    const audience = resolveAudience(product);
-    if (!grouped[audience]) {
+    const audiences = resolveAudiences(product);
+    let pushed = false;
+
+    audiences.forEach((audience) => {
+      if (!grouped[audience]) return;
+      if (!grouped[audience].some((entry) => entry.id === product.id)) {
+        grouped[audience].push(product);
+      }
+      pushed = true;
+    });
+
+    if (!pushed && !grouped.unisex.some((entry) => entry.id === product.id)) {
       grouped.unisex.push(product);
-      return;
     }
-    grouped[audience].push(product);
   });
 
   return grouped;

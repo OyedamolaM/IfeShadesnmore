@@ -1,6 +1,7 @@
 const BLOCKED_HERO_IMAGE_BASE_URLS = new Set([
   "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f"
 ]);
+const KNOWN_AUDIENCES = new Set(["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"]);
 
 export function isBlockedHeroImageSource(source) {
   const value = String(source || "").trim();
@@ -17,6 +18,8 @@ export function normalizeSection(section) {
 
 export function normalizeAudience(value) {
   const source = String(value || "").trim().toLowerCase();
+  if (!source) return "unisex";
+  if (KNOWN_AUDIENCES.has(source)) return source;
   const compact = source.replace(/[^a-z]/g, "");
 
   if (
@@ -52,11 +55,27 @@ export function normalizeAudience(value) {
   return "unisex";
 }
 
+export function normalizeAudienceList(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+  const normalized = source
+    .map((entry) => normalizeAudience(entry))
+    .filter((entry) => KNOWN_AUDIENCES.has(entry));
+  const unique = [...new Set(normalized)];
+  return unique.length > 0 ? unique : ["unisex"];
+}
+
 export function normalizeProduct(product) {
+  const audiences = normalizeAudienceList(product.audiences || product.audience);
   return {
     ...product,
     section: normalizeSection(product.section),
-    audience: normalizeAudience(product.audience),
+    audience: audiences[0],
+    audiences,
     ctaLabel: product.ctaLabel || "",
     description: product.description || "",
     variant: product.variant || "round",

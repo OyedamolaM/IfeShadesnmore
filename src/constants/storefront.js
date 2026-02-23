@@ -4,6 +4,58 @@ export const CART_STORAGE_KEY = "ife_shadesnmore_cart_v1";
 export const ORDER_STORAGE_KEY = "ife_shadesnmore_orders_v1";
 export const PROFILE_STORAGE_KEY = "ife_shadesnmore_profile_v1";
 
+export const AUDIENCE_OPTIONS = [
+  { value: "women", label: "Women" },
+  { value: "men", label: "Men" },
+  { value: "sunglasses", label: "Sunglasses" },
+  { value: "unisex", label: "Unisex" },
+  { value: "antiblue", label: "Anti-Blue / Anti-Glare" },
+  { value: "prescrip", label: "Prescription" }
+];
+
+export const BULLET_ICON_TYPES = [
+  { value: "shipping", label: "Shipping Icon" },
+  { value: "arrivals", label: "Arrivals Icon" },
+  { value: "quality", label: "Quality Icon" },
+  { value: "returns", label: "Returns Icon" }
+];
+
+export const DEFAULT_HERO_PROMISE_ITEMS = [
+  {
+    type: "shipping",
+    title: "Nation-wide Shipping",
+    description: "Fast delivery on every order"
+  },
+  {
+    type: "arrivals",
+    title: "New Arrivals",
+    description: "Fresh frame drops every week"
+  },
+  {
+    type: "quality",
+    title: "Quality Guarantee",
+    description: "Premium lenses, premium finish"
+  }
+];
+
+export const DEFAULT_FEATURE_ITEMS = [
+  {
+    type: "quality",
+    title: "Quality Lenses",
+    description: "Premium Materials"
+  },
+  {
+    type: "shipping",
+    title: "Nationwide Delivery",
+    description: "On All Orders"
+  },
+  {
+    type: "returns",
+    title: "7-Day Money-Back Guarantee",
+    description: "Satisfaction Guaranteed"
+  }
+];
+
 export const DEFAULT_PRODUCTS = [
   {
     id: "women-category",
@@ -93,7 +145,9 @@ export const DEFAULT_SETTINGS = {
   heroTitle: "Confidence Perfectly Framed",
   heroSubtitle: "Look the class, style with pride, pay with less.",
   heroButtonLabel: "Shop Now",
-  heroImage: "/hero/hero-candidate2.jpg"
+  heroImage: "/hero/hero-candidate2.jpg",
+  heroPromiseItems: DEFAULT_HERO_PROMISE_ITEMS,
+  featureItems: DEFAULT_FEATURE_ITEMS
 };
 
 export const EMPTY_PRODUCT = {
@@ -101,30 +155,13 @@ export const EMPTY_PRODUCT = {
   name: "",
   price: "",
   section: "category",
+  audiences: ["unisex"],
   audience: "unisex",
   ctaLabel: "",
   description: "",
   variant: "round",
   image: ""
 };
-
-export const FEATURE_ITEMS = [
-  {
-    type: "quality",
-    title: "Quality Lenses",
-    description: "Premium Materials"
-  },
-  {
-    type: "shipping",
-    title: "Nationwide Delivery",
-    description: "On All Orders"
-  },
-  {
-    type: "returns",
-    title: "7-Day Money-Back Guarantee",
-    description: "Satisfaction Guaranteed"
-  }
-];
 
 export const DEFAULT_HERO_ROTATION_IMAGES = [
   {

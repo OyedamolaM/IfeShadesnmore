@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import pg from "pg";
-import { DEFAULT_PRODUCTS, DEFAULT_SETTINGS } from "./defaults.js";
+import {
+  DEFAULT_FEATURE_ITEMS,
+  DEFAULT_HERO_PROMISE_ITEMS,
+  DEFAULT_PRODUCTS,
+  DEFAULT_SETTINGS
+} from "./defaults.js";
 
 const { Pool } = pg;
 
@@ -34,6 +39,16 @@ if (USE_POSTGRES) {
 }
 
 export const databaseDriver = USE_POSTGRES ? "postgres" : "sqlite";
+
+const PRODUCT_AUDIENCE_VALUES = new Set([
+  "women",
+  "men",
+  "sunglasses",
+  "unisex",
+  "antiblue",
+  "prescrip"
+]);
+const BULLET_ICON_TYPES = new Set(["shipping", "arrivals", "quality", "returns"]);
 
 function normalizeSqlForPostgres(sql) {
   let normalized = String(sql || "");
@@ -127,6 +142,77 @@ export async function withTransaction(work) {
   }
 }
 
+function normalizeProductAudience(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (!source) return "unisex";
+  if (PRODUCT_AUDIENCE_VALUES.has(source)) return source;
+
+  const compact = source.replace(/[^a-z]/g, "");
+  if (
+    compact.includes("women") ||
+    compact.includes("woman") ||
+    compact.includes("female") ||
+    compact.includes("lady")
+  ) {
+    return "women";
+  }
+  if (compact === "men" || compact === "man" || compact.includes("male") || compact.includes("gent")) {
+    return "men";
+  }
+  if (compact.includes("sunglass") || compact.includes("shades")) return "sunglasses";
+  if (compact.includes("antiblue") || compact.includes("bluelight") || compact.includes("antiglare")) {
+    return "antiblue";
+  }
+  if (compact.includes("prescrip") || compact.includes("prescription") || compact === "rx") {
+    return "prescrip";
+  }
+  if (compact.includes("unisex")) return "unisex";
+  return "unisex";
+}
+
+function parseAudienceList(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+  const normalized = source.map(normalizeProductAudience);
+  const unique = [...new Set(normalized.filter(Boolean))];
+  return unique.length > 0 ? unique : ["unisex"];
+}
+
+function serializeAudienceList(value) {
+  return parseAudienceList(value).join(",");
+}
+
+function parseSettingsItems(value, fallback) {
+  const fallbackArray = Array.isArray(fallback) ? fallback : [];
+  if (!value) return fallbackArray;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(String(value));
+  } catch {
+    return fallbackArray;
+  }
+  if (!Array.isArray(parsed)) return fallbackArray;
+
+  const normalized = parsed
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const type = String(item.type || "").trim().toLowerCase();
+      const title = String(item.title || "").trim();
+      const description = String(item.description || "").trim();
+      if (!BULLET_ICON_TYPES.has(type)) return null;
+      if (!title) return null;
+      return { type, title, description };
+    })
+    .filter(Boolean);
+
+  return normalized.length > 0 ? normalized : fallbackArray;
+}
+
 async function runMigrationsSqlite() {
   sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -151,6 +237,8 @@ async function runMigrationsSqlite() {
       hero_subtitle TEXT NOT NULL,
       hero_button_label TEXT NOT NULL,
       hero_image TEXT NOT NULL,
+      hero_promise_items TEXT DEFAULT '[]',
+      feature_items TEXT DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -181,6 +269,8 @@ async function runMigrationsSqlite() {
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL CHECK(payment_status IN ('pending','paid','failed','cancelled')) DEFAULT 'pending',
       order_status TEXT NOT NULL DEFAULT 'pending',
+      admin_notified_at TEXT DEFAULT NULL,
+      customer_notified_at TEXT DEFAULT NULL,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -221,10 +311,24 @@ async function runMigrationsSqlite() {
   if (!orderColumns.some((column) => column.name === "order_status")) {
     sqliteDb.exec(`ALTER TABLE orders ADD COLUMN order_status TEXT NOT NULL DEFAULT 'pending'`);
   }
+  if (!orderColumns.some((column) => column.name === "admin_notified_at")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN admin_notified_at TEXT DEFAULT NULL`);
+  }
+  if (!orderColumns.some((column) => column.name === "customer_notified_at")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN customer_notified_at TEXT DEFAULT NULL`);
+  }
 
   const userColumns = sqliteDb.prepare("PRAGMA table_info(users)").all();
   if (!userColumns.some((column) => column.name === "is_email_verified")) {
     sqliteDb.exec(`ALTER TABLE users ADD COLUMN is_email_verified INTEGER NOT NULL DEFAULT 1`);
+  }
+
+  const settingsColumns = sqliteDb.prepare("PRAGMA table_info(settings)").all();
+  if (!settingsColumns.some((column) => column.name === "hero_promise_items")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN hero_promise_items TEXT DEFAULT '[]'`);
+  }
+  if (!settingsColumns.some((column) => column.name === "feature_items")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN feature_items TEXT DEFAULT '[]'`);
   }
 }
 
@@ -252,6 +356,8 @@ async function runMigrationsPostgres() {
       hero_subtitle TEXT NOT NULL,
       hero_button_label TEXT NOT NULL,
       hero_image TEXT NOT NULL,
+      hero_promise_items TEXT DEFAULT '[]',
+      feature_items TEXT DEFAULT '[]',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -282,6 +388,8 @@ async function runMigrationsPostgres() {
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','cancelled')),
       order_status TEXT NOT NULL DEFAULT 'pending',
+      admin_notified_at TIMESTAMPTZ DEFAULT NULL,
+      customer_notified_at TIMESTAMPTZ DEFAULT NULL,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -317,6 +425,10 @@ async function runMigrationsPostgres() {
 
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
 }
 
 async function seedSettingsIfEmpty() {
@@ -326,9 +438,10 @@ async function seedSettingsIfEmpty() {
   await execute(
     `
       INSERT INTO settings (
-        id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image
+        id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image,
+        hero_promise_items, feature_items
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       1,
@@ -337,7 +450,9 @@ async function seedSettingsIfEmpty() {
       DEFAULT_SETTINGS.heroTitle,
       DEFAULT_SETTINGS.heroSubtitle,
       DEFAULT_SETTINGS.heroButtonLabel,
-      DEFAULT_SETTINGS.heroImage
+      DEFAULT_SETTINGS.heroImage,
+      JSON.stringify(DEFAULT_SETTINGS.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
+      JSON.stringify(DEFAULT_SETTINGS.featureItems || DEFAULT_FEATURE_ITEMS)
     ]
   );
 }
@@ -365,7 +480,7 @@ async function seedProductsIfEmpty() {
         item.name,
         item.price,
         item.section,
-        item.audience,
+        serializeAudienceList(item.audiences || item.audience),
         item.ctaLabel || "",
         item.description || "",
         item.variant || "round",
@@ -418,12 +533,14 @@ export async function closeDatabase() {
 }
 
 export function mapProductRow(row) {
+  const audiences = parseAudienceList(row.audience);
   return {
     id: row.id,
     name: row.name,
     price: Number(row.price) || 0,
     section: row.section,
-    audience: row.audience,
+    audience: audiences[0],
+    audiences,
     ctaLabel: row.cta_label || "",
     description: row.description || "",
     variant: row.variant || "round",
@@ -438,7 +555,9 @@ export function mapSettingsRow(row) {
     heroTitle: row.hero_title,
     heroSubtitle: row.hero_subtitle,
     heroButtonLabel: row.hero_button_label,
-    heroImage: row.hero_image
+    heroImage: row.hero_image,
+    heroPromiseItems: parseSettingsItems(row.hero_promise_items, DEFAULT_HERO_PROMISE_ITEMS),
+    featureItems: parseSettingsItems(row.feature_items, DEFAULT_FEATURE_ITEMS)
   };
 }
 
@@ -454,4 +573,3 @@ export function mapUserRow(row) {
     city: row.city || ""
   };
 }
-

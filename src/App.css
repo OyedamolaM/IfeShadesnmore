@@ -1731,6 +1731,56 @@ select {
   flex-wrap: wrap;
 }
 
+.admin-audience-multi {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.55rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid #d9d0c3;
+  border-radius: 10px;
+  background: #fbfaf8;
+}
+
+.admin-audience-option {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #2a303b;
+}
+
+.admin-audience-option input {
+  width: 15px;
+  height: 15px;
+  accent-color: #2f3d4f;
+}
+
+.admin-bullet-editor {
+  border: 1px solid #e5dbcd;
+  border-radius: 12px;
+  padding: 0.72rem;
+  margin-bottom: 0.64rem;
+  background: #fcfbf9;
+}
+
+.admin-bullet-editor h3 {
+  margin: 0 0 0.62rem;
+  font-size: 0.96rem;
+}
+
+.admin-bullet-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.65fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.55rem;
+  margin-bottom: 0.58rem;
+}
+
+.admin-bullet-row:last-child {
+  margin-bottom: 0;
+}
+
 .admin-product-list {
   list-style: none;
   margin: 0;
@@ -2000,6 +2050,14 @@ select {
   }
 
   .admin-section-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-audience-multi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-bullet-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

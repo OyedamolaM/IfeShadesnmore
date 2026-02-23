@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
+import { AUDIENCE_OPTIONS, BULLET_ICON_TYPES, DEFAULT_SETTINGS } from "../../constants/storefront";
 import {
   deleteAdminCustomer,
   fetchAdminCustomers,
@@ -18,6 +19,20 @@ const ADMIN_TABS = [
 ];
 
 const ORDER_STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+
+function normalizeAudienceSelections(value) {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = source
+    .map((entry) => String(entry || "").trim().toLowerCase())
+    .filter(Boolean);
+  const unique = [...new Set(normalized.filter((entry) => AUDIENCE_OPTIONS.some((opt) => opt.value === entry)))];
+  return unique.length > 0 ? unique : ["unisex"];
+}
+
+function formatAudienceLabel(value) {
+  const option = AUDIENCE_OPTIONS.find((entry) => entry.value === value);
+  return option ? option.label : String(value || "Unisex");
+}
 
 function AdminOverlay({
   currentUser,
@@ -49,6 +64,11 @@ function AdminOverlay({
   const [orderStatusError, setOrderStatusError] = useState("");
   const [customerActionNotice, setCustomerActionNotice] = useState("");
   const [customerActionError, setCustomerActionError] = useState("");
+
+  const selectedAudiences = useMemo(
+    () => normalizeAudienceSelections(productDraft.audiences),
+    [productDraft.audiences]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -156,6 +176,36 @@ function AdminOverlay({
     } catch (requestError) {
       setCustomerActionError(requestError.message || "Could not delete customer.");
     }
+  };
+
+  const toggleAudienceSelection = (audience, checked) => {
+    const current = normalizeAudienceSelections(productDraft.audiences);
+    let next;
+
+    if (checked) {
+      next = [...new Set([...current, audience])];
+    } else {
+      next = current.filter((entry) => entry !== audience);
+      if (next.length === 0) next = ["unisex"];
+    }
+
+    onProductDraftChange("audiences", next);
+    onProductDraftChange("audience", next[0]);
+  };
+
+  const updateSettingsBullet = (group, index, field, value) => {
+    const fallback =
+      group === "heroPromiseItems"
+        ? DEFAULT_SETTINGS.heroPromiseItems
+        : DEFAULT_SETTINGS.featureItems;
+    const currentItems = Array.isArray(settingsDraft[group]) && settingsDraft[group].length > 0
+      ? settingsDraft[group]
+      : fallback;
+
+    const nextItems = currentItems.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item
+    );
+    onSettingsDraftChange(group, nextItems);
   };
 
   return (
@@ -430,18 +480,19 @@ function AdminOverlay({
                   </select>
                 </label>
                 <label>
-                  Audience section
-                  <select
-                    value={productDraft.audience}
-                    onChange={(event) => onProductDraftChange("audience", event.target.value)}
-                  >
-                    <option value="women">Women</option>
-                    <option value="men">Men</option>
-                    <option value="sunglasses">Sunglasses</option>
-                    <option value="unisex">Unisex</option>
-                    <option value="antiblue">Anti-Blue / Anti-Glare</option>
-                    <option value="prescrip">Prescription</option>
-                  </select>
+                  Audience sections (multi-select)
+                  <div className="admin-audience-multi">
+                    {AUDIENCE_OPTIONS.map((option) => (
+                      <label key={option.value} className="admin-audience-option">
+                        <input
+                          type="checkbox"
+                          checked={selectedAudiences.includes(option.value)}
+                          onChange={(event) => toggleAudienceSelection(option.value, event.target.checked)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </label>
                 <label>
                   Product description
@@ -506,7 +557,9 @@ function AdminOverlay({
                         <strong>{product.name}</strong>
                         <span>
                           {toPrice(product.price)} | {product.section} |{" "}
-                          {(product.audience || "unisex").toUpperCase()}
+                          {normalizeAudienceSelections(product.audiences || [product.audience])
+                            .map((entry) => formatAudienceLabel(entry))
+                            .join(", ")}
                         </span>
                       </div>
                       <div className="admin-list-actions">
@@ -584,6 +637,94 @@ function AdminOverlay({
                     onChange={(event) => onSettingsDraftChange("heroImage", event.target.value)}
                   />
                 </label>
+                <div className="admin-bullet-editor">
+                  <h3>Hero benefit bullets</h3>
+                  {(Array.isArray(settingsDraft.heroPromiseItems) && settingsDraft.heroPromiseItems.length > 0
+                    ? settingsDraft.heroPromiseItems
+                    : DEFAULT_SETTINGS.heroPromiseItems
+                  ).map((item, index) => (
+                    <div className="admin-bullet-row" key={`hero-bullet-${index}`}>
+                      <label>
+                        Icon
+                        <select
+                          value={item.type}
+                          onChange={(event) =>
+                            updateSettingsBullet("heroPromiseItems", index, "type", event.target.value)
+                          }
+                        >
+                          {BULLET_ICON_TYPES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Title
+                        <input
+                          value={item.title}
+                          onChange={(event) =>
+                            updateSettingsBullet("heroPromiseItems", index, "title", event.target.value)
+                          }
+                          required
+                        />
+                      </label>
+                      <label>
+                        Subtitle
+                        <input
+                          value={item.description}
+                          onChange={(event) =>
+                            updateSettingsBullet("heroPromiseItems", index, "description", event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="admin-bullet-editor">
+                  <h3>Why choose us bullets</h3>
+                  {(Array.isArray(settingsDraft.featureItems) && settingsDraft.featureItems.length > 0
+                    ? settingsDraft.featureItems
+                    : DEFAULT_SETTINGS.featureItems
+                  ).map((item, index) => (
+                    <div className="admin-bullet-row" key={`feature-bullet-${index}`}>
+                      <label>
+                        Icon
+                        <select
+                          value={item.type}
+                          onChange={(event) =>
+                            updateSettingsBullet("featureItems", index, "type", event.target.value)
+                          }
+                        >
+                          {BULLET_ICON_TYPES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Title
+                        <input
+                          value={item.title}
+                          onChange={(event) =>
+                            updateSettingsBullet("featureItems", index, "title", event.target.value)
+                          }
+                          required
+                        />
+                      </label>
+                      <label>
+                        Subtitle
+                        <input
+                          value={item.description}
+                          onChange={(event) =>
+                            updateSettingsBullet("featureItems", index, "description", event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
                 <label>
                   Or upload hero image
                   <input type="file" accept="image/*" onChange={onHeroUpload} />

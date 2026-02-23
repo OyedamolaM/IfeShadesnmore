@@ -386,7 +386,7 @@ function StorefrontPage({
             onAddToCart={addToCart}
             allowOrdering={orderingEnabled}
           />
-          <FeatureStrip />
+          <FeatureStrip items={settings.featureItems} />
           <ContactSection
             email={email}
             emailStatus={emailStatus}

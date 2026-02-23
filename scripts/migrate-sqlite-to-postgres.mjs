@@ -68,6 +68,8 @@ async function ensurePostgresSchema(client) {
       hero_subtitle TEXT NOT NULL,
       hero_button_label TEXT NOT NULL,
       hero_image TEXT NOT NULL,
+      hero_promise_items TEXT DEFAULT '[]',
+      feature_items TEXT DEFAULT '[]',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -98,6 +100,8 @@ async function ensurePostgresSchema(client) {
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','cancelled')),
       order_status TEXT NOT NULL DEFAULT 'pending',
+      admin_notified_at TIMESTAMPTZ DEFAULT NULL,
+      customer_notified_at TIMESTAMPTZ DEFAULT NULL,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -133,6 +137,10 @@ async function ensurePostgresSchema(client) {
 
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
+  await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
+  await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
 }
 
 async function main() {
@@ -205,9 +213,10 @@ async function main() {
       await client.query(
         `
           INSERT INTO settings (
-            id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image, updated_at
+            id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image,
+            hero_promise_items, feature_items, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             brand_name = EXCLUDED.brand_name,
             brand_tagline = EXCLUDED.brand_tagline,
@@ -215,6 +224,8 @@ async function main() {
             hero_subtitle = EXCLUDED.hero_subtitle,
             hero_button_label = EXCLUDED.hero_button_label,
             hero_image = EXCLUDED.hero_image,
+            hero_promise_items = EXCLUDED.hero_promise_items,
+            feature_items = EXCLUDED.feature_items,
             updated_at = EXCLUDED.updated_at
         `,
         [
@@ -225,6 +236,8 @@ async function main() {
           row.hero_subtitle,
           row.hero_button_label,
           row.hero_image,
+          row.hero_promise_items || "[]",
+          row.feature_items || "[]",
           toIsoOrNull(row.updated_at)
         ]
       );
@@ -268,9 +281,9 @@ async function main() {
       await client.query(
         `
           INSERT INTO orders (
-            id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_channel, payment_status, order_status, subtotal, currency, created_at, updated_at
+            id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_channel, payment_status, order_status, admin_notified_at, customer_notified_at, subtotal, currency, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15::timestamptz, CURRENT_TIMESTAMP), COALESCE($16::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14::timestamptz, $15, $16, COALESCE($17::timestamptz, CURRENT_TIMESTAMP), COALESCE($18::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
             email = EXCLUDED.email,
@@ -283,6 +296,8 @@ async function main() {
             payment_channel = EXCLUDED.payment_channel,
             payment_status = EXCLUDED.payment_status,
             order_status = EXCLUDED.order_status,
+            admin_notified_at = EXCLUDED.admin_notified_at,
+            customer_notified_at = EXCLUDED.customer_notified_at,
             subtotal = EXCLUDED.subtotal,
             currency = EXCLUDED.currency,
             updated_at = EXCLUDED.updated_at
@@ -300,6 +315,8 @@ async function main() {
           row.payment_channel || "",
           row.payment_status || "pending",
           row.order_status || "pending",
+          toIsoOrNull(row.admin_notified_at),
+          toIsoOrNull(row.customer_notified_at),
           Number(row.subtotal) || 0,
           row.currency || "NGN",
           toIsoOrNull(row.created_at),

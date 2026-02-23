@@ -5,6 +5,7 @@ React + Express storefront with:
 - Customer auth/profile/orders (`/account`)
 - Paystack checkout + webhook verification
 - Email verification for customer signup
+- Multi-collection products (one product can belong to multiple audiences)
 - Dual DB support:
   - SQLite for local development
   - Postgres (`DATABASE_URL`) for production (Render free tier friendly)
@@ -21,6 +22,9 @@ React + Express storefront with:
    - SMTP (`MAIL_PROVIDER=smtp`) or
    - Resend (`MAIL_PROVIDER=resend`) or
    - SendGrid (`MAIL_PROVIDER=sendgrid`)
+4. For admin order-alert emails on every paid order, set:
+   - `ORDER_ALERT_EMAIL` (single email or comma-separated list)
+   - If empty, it falls back to `ADMIN_EMAIL`
 4. If frontend and backend are deployed on different Render services/domains,
    set `VITE_API_BASE_URL` on the frontend service to your backend URL
    (for example `https://ife-shadesnmore.onrender.com`).
@@ -41,6 +45,11 @@ Local DB defaults to `server/data/ife-store.db` unless `DATABASE_URL` is set.
 
 - Visit `http://localhost:5173/admin/login`
 - Login with `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+- In Products tab:
+  - Select multiple audience sections for one product
+- In Settings tab:
+  - Edit hero benefit bullets
+  - Edit "Why Choose Us" bullets
 
 ## 4) Render Deployment (Free Tier)
 
@@ -55,6 +64,18 @@ Required env vars in Render:
 - `ADMIN_PASSWORD`
 - `PAYSTACK_SECRET_KEY`
 - Mail provider vars if you want real email delivery
+- `ORDER_ALERT_EMAIL` (optional, defaults to `ADMIN_EMAIL`)
+
+## Order Notification Emails
+
+When an order is marked as `paid` (via Paystack webhook or verify endpoint), the server sends
+an email notification with customer details, delivery address, and items to:
+- `ORDER_ALERT_EMAIL` (if set)
+- otherwise `ADMIN_EMAIL`
+
+Customer confirmation:
+- By default, a confirmation/receipt email is also sent to the customer email on that order.
+- Control with `CUSTOMER_ORDER_EMAIL_ENABLED=true|false`.
 
 ## 5) Migrate Existing SQLite Data to Postgres
 

@@ -1,26 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import FeatureIcon from "../icons/FeatureIcon";
+import { DEFAULT_HERO_PROMISE_ITEMS } from "../../constants/storefront";
 
 const ROTATION_INTERVAL_MS = 5000;
 const EFFECT_SEQUENCE = ["fade", "zoom", "slide", "pan", "lift"];
-
-const HERO_PROMISE_ITEMS = [
-  {
-    type: "shipping",
-    title: "Nation-wide Shipping",
-    description: "Fast delivery on every order"
-  },
-  {
-    type: "arrivals",
-    title: "New Arrivals",
-    description: "Fresh frame drops every week"
-  },
-  {
-    type: "quality",
-    title: "Quality Guarantee",
-    description: "Premium lenses, premium finish"
-  }
-];
 
 const VALID_EFFECTS = new Set(["fade", "zoom", "slide", "pan", "lift"]);
 const VALID_POSITIONS = new Set(["left", "center", "right"]);
@@ -85,6 +68,12 @@ function HeroSection({ settings, heroSlides }) {
   }, [usableSlides.length]);
 
   const isImageUsable = usableSlides.length > 0;
+  const heroPromiseItems = useMemo(() => {
+    if (Array.isArray(settings?.heroPromiseItems) && settings.heroPromiseItems.length > 0) {
+      return settings.heroPromiseItems;
+    }
+    return DEFAULT_HERO_PROMISE_ITEMS;
+  }, [settings?.heroPromiseItems]);
 
   const goToPreviousSlide = () => {
     if (usableSlides.length <= 1) return;
@@ -165,9 +154,11 @@ function HeroSection({ settings, heroSlides }) {
 
       <div className="container">
         <div className="hero-benefits" role="list" aria-label="Store benefits">
-          {HERO_PROMISE_ITEMS.map((item) => (
-            <article key={item.type} role="listitem">
-              <FeatureIcon type={item.type} />
+          {heroPromiseItems.map((item, index) => (
+            <article key={`${item.type || "benefit"}-${index}`} role="listitem">
+              <FeatureIcon
+                type={item.type || DEFAULT_HERO_PROMISE_ITEMS[index % DEFAULT_HERO_PROMISE_ITEMS.length].type}
+              />
               <div>
                 <h3>{item.title}</h3>
                 <p>{item.description}</p>

@@ -91,6 +91,29 @@ function parseFromAddress(from) {
   return { name: rawName, email };
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatCurrency(amount, currency = "NGN") {
+  const safeAmount = Number(amount) || 0;
+  const safeCurrency = String(currency || "NGN").trim().toUpperCase() || "NGN";
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: safeCurrency,
+      maximumFractionDigits: 0
+    }).format(safeAmount);
+  } catch {
+    return `${safeCurrency} ${safeAmount.toLocaleString("en-NG")}`;
+  }
+}
+
 function getMailerConfigKey(config) {
   return JSON.stringify([
     config.host,
@@ -434,7 +457,7 @@ async function sendWithTransport(transport, config, { toEmail, subject, text, ht
   });
 }
 
-async function sendVerificationMessageWithRetry({ config, toEmail, subject, text, html }) {
+async function sendSmtpMessageWithRetry({ config, toEmail, subject, text, html }) {
   const first = getTransporter();
   if (!first.transport) {
     throw Object.assign(new Error("Mailer transport is unavailable."), { code: "MAILER_UNAVAILABLE" });
@@ -504,11 +527,65 @@ async function sendVerificationMessageWithRetry({ config, toEmail, subject, text
   }
 }
 
-export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
+async function sendTransactionalEmail({ toEmail, subject, text, html, logPrefix }) {
   const config = getMailerConfig();
   const resend = getResendConfig();
   const sendgrid = getSendGridConfig();
   const provider = resolveMailProvider({ resend, sendgrid });
+
+  if (provider === "resend") {
+    const configError = getResendConfigurationError(resend, config);
+    if (configError) {
+      // eslint-disable-next-line no-console
+      console.log(`${logPrefix} Mailer not configured.`, configError);
+      return { delivered: false };
+    }
+    await sendWithResend({
+      config,
+      toEmail,
+      subject,
+      text,
+      html
+    });
+    return { delivered: true };
+  }
+
+  if (provider === "sendgrid") {
+    const configError = getSendGridConfigurationError(sendgrid, config);
+    if (configError) {
+      // eslint-disable-next-line no-console
+      console.log(`${logPrefix} Mailer not configured.`, configError);
+      return { delivered: false };
+    }
+    await sendWithSendGrid({
+      config,
+      toEmail,
+      subject,
+      text,
+      html
+    });
+    return { delivered: true };
+  }
+
+  const { transport, configError } = getTransporter();
+  if (!transport) {
+    // eslint-disable-next-line no-console
+    console.log(`${logPrefix} Mailer not configured.`, configError || "");
+    return { delivered: false };
+  }
+
+  await sendSmtpMessageWithRetry({
+    config,
+    toEmail,
+    subject,
+    text,
+    html
+  });
+
+  return { delivered: true };
+}
+
+export async function sendEmailVerification({ toEmail, fullName, verificationUrl }) {
   const greetingName = String(fullName || "").trim() || "there";
 
   const subject = "Verify your IfeShadesnMore account";
@@ -531,54 +608,223 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
     <p>If you did not create this account, you can ignore this email.</p>
   `;
 
-  if (provider === "resend") {
-    const configError = getResendConfigurationError(resend, config);
-    if (configError) {
-      // eslint-disable-next-line no-console
-      console.log("[email-verification] Mailer not configured.", configError);
-      return { delivered: false };
-    }
-    await sendWithResend({
-      config,
-      toEmail,
-      subject,
-      text,
-      html
-    });
-    return { delivered: true };
-  }
-
-  if (provider === "sendgrid") {
-    const configError = getSendGridConfigurationError(sendgrid, config);
-    if (configError) {
-      // eslint-disable-next-line no-console
-      console.log("[email-verification] Mailer not configured.", configError);
-      return { delivered: false };
-    }
-    await sendWithSendGrid({
-      config,
-      toEmail,
-      subject,
-      text,
-      html
-    });
-    return { delivered: true };
-  }
-
-  const { transport, configError } = getTransporter();
-  if (!transport) {
-    // eslint-disable-next-line no-console
-    console.log("[email-verification] Mailer not configured.", configError || "");
-    return { delivered: false };
-  }
-
-  await sendVerificationMessageWithRetry({
-    config,
+  return sendTransactionalEmail({
     toEmail,
     subject,
     text,
-    html
+    html,
+    logPrefix: "[email-verification]"
   });
+}
 
-  return { delivered: true };
+export async function sendOrderNotification({ toEmail, order, items }) {
+  const safeOrder = {
+    id: String(order?.id || "").trim(),
+    fullName: String(order?.fullName || "").trim(),
+    email: String(order?.email || "").trim(),
+    phone: String(order?.phone || "").trim(),
+    address: String(order?.address || "").trim(),
+    city: String(order?.city || "").trim(),
+    paymentMethod: String(order?.paymentMethod || "").trim(),
+    paymentStatus: String(order?.paymentStatus || "").trim(),
+    paymentChannel: String(order?.paymentChannel || "").trim(),
+    orderStatus: String(order?.orderStatus || "").trim(),
+    subtotal: Number(order?.subtotal) || 0,
+    currency: String(order?.currency || "NGN").trim() || "NGN",
+    createdAt: String(order?.createdAt || "").trim()
+  };
+
+  const orderTotal = formatCurrency(safeOrder.subtotal, safeOrder.currency);
+  const itemList = Array.isArray(items) ? items : [];
+  const textItems = itemList.length
+    ? itemList
+        .map(
+          (item, index) =>
+            `${index + 1}. ${String(item.name || "Product")} x${Number(item.quantity) || 0} - ${formatCurrency(
+              Number(item.lineTotal) || 0,
+              safeOrder.currency
+            )}`
+        )
+        .join("\n")
+    : "No item breakdown available.";
+
+  const htmlRows = itemList.length
+    ? itemList
+        .map(
+          (item) => `
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(item.name || "Product")}</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${Number(item.quantity) || 0}</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(
+                formatCurrency(Number(item.lineTotal) || 0, safeOrder.currency)
+              )}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="3" style="padding:8px;border:1px solid #e5e7eb;">No item breakdown available.</td></tr>`;
+
+  const subject = `New paid order: ${safeOrder.id || "IfeShadesnMore"}`;
+  const text = [
+    "A new paid order was received.",
+    "",
+    `Order ID: ${safeOrder.id || "N/A"}`,
+    `Customer: ${safeOrder.fullName || "N/A"}`,
+    `Email: ${safeOrder.email || "N/A"}`,
+    `Phone: ${safeOrder.phone || "N/A"}`,
+    `Address: ${safeOrder.address || "N/A"}`,
+    `City: ${safeOrder.city || "N/A"}`,
+    `Payment Method: ${safeOrder.paymentMethod || "N/A"}`,
+    `Payment Status: ${safeOrder.paymentStatus || "N/A"}`,
+    `Payment Channel: ${safeOrder.paymentChannel || "N/A"}`,
+    `Order Status: ${safeOrder.orderStatus || "N/A"}`,
+    `Order Total: ${orderTotal}`,
+    safeOrder.createdAt ? `Created At: ${safeOrder.createdAt}` : "",
+    "",
+    "Items:",
+    textItems
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;">
+      <h2 style="margin:0 0 12px;">A new paid order was received</h2>
+      <p style="margin:0 0 6px;"><strong>Order ID:</strong> ${escapeHtml(safeOrder.id || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Customer:</strong> ${escapeHtml(safeOrder.fullName || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Email:</strong> ${escapeHtml(safeOrder.email || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Phone:</strong> ${escapeHtml(safeOrder.phone || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Address:</strong> ${escapeHtml(safeOrder.address || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>City:</strong> ${escapeHtml(safeOrder.city || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Payment Method:</strong> ${escapeHtml(safeOrder.paymentMethod || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Payment Status:</strong> ${escapeHtml(safeOrder.paymentStatus || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Payment Channel:</strong> ${escapeHtml(safeOrder.paymentChannel || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Order Status:</strong> ${escapeHtml(safeOrder.orderStatus || "N/A")}</p>
+      <p style="margin:0 0 12px;"><strong>Order Total:</strong> ${escapeHtml(orderTotal)}</p>
+      <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+        <thead>
+          <tr>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Item</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:center;">Qty</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>${htmlRows}</tbody>
+      </table>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[order-notification]"
+  });
+}
+
+export async function sendCustomerOrderConfirmation({ toEmail, order, items }) {
+  const safeOrder = {
+    id: String(order?.id || "").trim(),
+    fullName: String(order?.fullName || "").trim(),
+    email: String(order?.email || "").trim(),
+    phone: String(order?.phone || "").trim(),
+    address: String(order?.address || "").trim(),
+    city: String(order?.city || "").trim(),
+    paymentMethod: String(order?.paymentMethod || "").trim(),
+    paymentStatus: String(order?.paymentStatus || "").trim(),
+    paymentChannel: String(order?.paymentChannel || "").trim(),
+    orderStatus: String(order?.orderStatus || "").trim(),
+    subtotal: Number(order?.subtotal) || 0,
+    currency: String(order?.currency || "NGN").trim() || "NGN",
+    createdAt: String(order?.createdAt || "").trim()
+  };
+
+  const greetingName = safeOrder.fullName || "there";
+  const orderTotal = formatCurrency(safeOrder.subtotal, safeOrder.currency);
+  const itemList = Array.isArray(items) ? items : [];
+  const textItems = itemList.length
+    ? itemList
+        .map(
+          (item, index) =>
+            `${index + 1}. ${String(item.name || "Product")} x${Number(item.quantity) || 0} - ${formatCurrency(
+              Number(item.lineTotal) || 0,
+              safeOrder.currency
+            )}`
+        )
+        .join("\n")
+    : "No item breakdown available.";
+
+  const htmlRows = itemList.length
+    ? itemList
+        .map(
+          (item) => `
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(item.name || "Product")}</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${Number(item.quantity) || 0}</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(
+                formatCurrency(Number(item.lineTotal) || 0, safeOrder.currency)
+              )}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="3" style="padding:8px;border:1px solid #e5e7eb;">No item breakdown available.</td></tr>`;
+
+  const subject = `Order Confirmation: ${safeOrder.id || "IfeShadesnMore"}`;
+  const text = [
+    `Hi ${greetingName},`,
+    "",
+    "Thank you for your order with IfeShadesnMore.",
+    "Your payment was confirmed and your order is now being processed.",
+    "",
+    `Order ID: ${safeOrder.id || "N/A"}`,
+    `Order Total: ${orderTotal}`,
+    `Payment Method: ${safeOrder.paymentMethod || "N/A"}`,
+    `Payment Channel: ${safeOrder.paymentChannel || "N/A"}`,
+    `Delivery Address: ${safeOrder.address || "N/A"}, ${safeOrder.city || ""}`.trim(),
+    safeOrder.createdAt ? `Order Date: ${safeOrder.createdAt}` : "",
+    "",
+    "Items:",
+    textItems,
+    "",
+    "If you need support, reply to this email or contact us on WhatsApp."
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;">
+      <h2 style="margin:0 0 12px;">Order Confirmation</h2>
+      <p>Hi ${escapeHtml(greetingName)},</p>
+      <p>Thank you for your order with IfeShadesnMore.</p>
+      <p>Your payment was confirmed and your order is now being processed.</p>
+      <p style="margin:0 0 6px;"><strong>Order ID:</strong> ${escapeHtml(safeOrder.id || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Order Total:</strong> ${escapeHtml(orderTotal)}</p>
+      <p style="margin:0 0 6px;"><strong>Payment Method:</strong> ${escapeHtml(safeOrder.paymentMethod || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Payment Channel:</strong> ${escapeHtml(safeOrder.paymentChannel || "N/A")}</p>
+      <p style="margin:0 0 6px;"><strong>Delivery Address:</strong> ${escapeHtml(
+        `${safeOrder.address || "N/A"}${safeOrder.city ? `, ${safeOrder.city}` : ""}`
+      )}</p>
+      <table style="border-collapse:collapse;width:100%;margin-top:12px;">
+        <thead>
+          <tr>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Item</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:center;">Qty</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>${htmlRows}</tbody>
+      </table>
+      <p style="margin-top:12px;">If you need support, contact us on WhatsApp.</p>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[customer-order-confirmation]"
+  });
 }

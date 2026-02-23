@@ -1,7 +1,8 @@
 import FeatureIcon from "../icons/FeatureIcon";
-import { FEATURE_ITEMS } from "../../constants/storefront";
+import { DEFAULT_FEATURE_ITEMS } from "../../constants/storefront";
 
-function FeatureStrip() {
+function FeatureStrip({ items }) {
+  const featureItems = Array.isArray(items) && items.length > 0 ? items : DEFAULT_FEATURE_ITEMS;
   return (
     <section className="why-choose-section" id="about">
       <div className="container">
@@ -12,9 +13,9 @@ function FeatureStrip() {
         </div>
 
         <div className="why-grid">
-          {FEATURE_ITEMS.map((item) => (
-            <article key={item.type}>
-              <FeatureIcon type={item.type} />
+          {featureItems.map((item, index) => (
+            <article key={`${item.type || "feature"}-${index}`}>
+              <FeatureIcon type={item.type || DEFAULT_FEATURE_ITEMS[index % DEFAULT_FEATURE_ITEMS.length].type} />
               <h3>{item.title}</h3>
               <p>{item.description}</p>
             </article>

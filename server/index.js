@@ -34,7 +34,13 @@ import {
   verifyTransaction,
   verifyWebhookSignature
 } from "./paystack.js";
-import { getMailerRuntimeInfo, sendEmailVerification } from "./mailer.js";
+import {
+  getMailerRuntimeInfo,
+  sendCustomerOrderConfirmation,
+  sendEmailVerification,
+  sendOrderNotification
+} from "./mailer.js";
+import { DEFAULT_FEATURE_ITEMS, DEFAULT_HERO_PROMISE_ITEMS } from "./defaults.js";
 
 dotenv.config();
 
@@ -124,6 +130,8 @@ app.post("/api/paystack/webhook", express.raw({ type: "*/*" }), async (req, res)
           `,
           [channel, order.id]
         );
+        await sendOrderAlertSafe({ orderId: order.id });
+        await sendCustomerOrderAlertSafe({ orderId: order.id });
       }
     }
   }
@@ -195,6 +203,125 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
   }
 }
 
+function getOrderAlertRecipients() {
+  const configured = String(process.env.ORDER_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
+  return [...new Set(configured.split(",").map((entry) => normalizeEmail(entry)).filter(Boolean))];
+}
+
+function parseBooleanEnv(value, fallback = false) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+const CUSTOMER_ORDER_EMAIL_ENABLED = parseBooleanEnv(
+  process.env.CUSTOMER_ORDER_EMAIL_ENABLED,
+  true
+);
+
+async function sendOrderAlertSafe({ orderId }) {
+  const recipients = getOrderAlertRecipients();
+  if (recipients.length === 0) return { delivered: false, skipped: "missing_recipient" };
+
+  const row = await queryOne("SELECT * FROM orders WHERE id = ?", [orderId]);
+  if (!row) return { delivered: false, skipped: "order_missing" };
+  if (row.admin_notified_at) return { delivered: true, skipped: "already_sent" };
+
+  const order = mapOrderRow(row);
+  const items = await getOrderItems(orderId);
+  let deliveredCount = 0;
+
+  for (const toEmail of recipients) {
+    try {
+      const result = await sendOrderNotification({ toEmail, order, items });
+      if (result?.delivered) {
+        deliveredCount += 1;
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Could not send order notification email:", {
+        message: error?.message || "",
+        code: error?.code || "",
+        command: error?.command || "",
+        responseCode: error?.responseCode || "",
+        response: error?.response || "",
+        mailerTarget: error?.mailerTarget || null,
+        mailerAttempted: error?.mailerAttempted || null,
+        stack: error?.stack || "",
+        mailer: getMailerRuntimeInfo()
+      });
+    }
+  }
+
+  if (deliveredCount > 0) {
+    await execute(
+      `
+        UPDATE orders
+        SET admin_notified_at = COALESCE(admin_notified_at, datetime('now')),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+      [orderId]
+    );
+    return { delivered: true, deliveredCount };
+  }
+
+  return { delivered: false, deliveredCount: 0 };
+}
+
+async function sendCustomerOrderAlertSafe({ orderId }) {
+  if (!CUSTOMER_ORDER_EMAIL_ENABLED) {
+    return { delivered: false, skipped: "disabled" };
+  }
+
+  const row = await queryOne("SELECT * FROM orders WHERE id = ?", [orderId]);
+  if (!row) return { delivered: false, skipped: "order_missing" };
+  if (row.customer_notified_at) return { delivered: true, skipped: "already_sent" };
+
+  const toEmail = normalizeEmail(row.email || "");
+  if (!toEmail) return { delivered: false, skipped: "missing_customer_email" };
+
+  const order = mapOrderRow(row);
+  const items = await getOrderItems(orderId);
+
+  try {
+    const result = await sendCustomerOrderConfirmation({
+      toEmail,
+      order,
+      items
+    });
+    if (!result?.delivered) return { delivered: false };
+
+    await execute(
+      `
+        UPDATE orders
+        SET customer_notified_at = COALESCE(customer_notified_at, datetime('now')),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+      [orderId]
+    );
+    return { delivered: true };
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Could not send customer order confirmation email:", {
+      message: error?.message || "",
+      code: error?.code || "",
+      command: error?.command || "",
+      responseCode: error?.responseCode || "",
+      response: error?.response || "",
+      mailerTarget: error?.mailerTarget || null,
+      mailerAttempted: error?.mailerAttempted || null,
+      stack: error?.stack || "",
+      mailer: getMailerRuntimeInfo()
+    });
+    return { delivered: false };
+  }
+}
+
 async function getStorefrontPayload() {
   const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
   const productsRows = await queryAll("SELECT * FROM products ORDER BY created_at DESC");
@@ -240,6 +367,8 @@ function mapOrderRow(row) {
     paymentChannel: row.payment_channel || "",
     paymentStatus: row.payment_status,
     orderStatus: row.order_status || "pending",
+    adminNotifiedAt: row.admin_notified_at || null,
+    customerNotifiedAt: row.customer_notified_at || null,
     subtotal: Number(row.subtotal) || 0,
     currency: row.currency || "NGN",
     createdAt: row.created_at,
@@ -258,6 +387,49 @@ async function withOrderItems(rows) {
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+const PRODUCT_AUDIENCE_VALUES = ["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"];
+const PRODUCT_AUDIENCE_SET = new Set(PRODUCT_AUDIENCE_VALUES);
+
+function normalizeAudienceValue(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (!source) return "unisex";
+  if (PRODUCT_AUDIENCE_SET.has(source)) return source;
+
+  const compact = source.replace(/[^a-z]/g, "");
+  if (
+    compact.includes("women") ||
+    compact.includes("woman") ||
+    compact.includes("female") ||
+    compact.includes("lady")
+  ) {
+    return "women";
+  }
+  if (compact === "men" || compact === "man" || compact.includes("male") || compact.includes("gent")) {
+    return "men";
+  }
+  if (compact.includes("sunglass") || compact.includes("shades")) return "sunglasses";
+  if (compact.includes("antiblue") || compact.includes("bluelight") || compact.includes("antiglare")) {
+    return "antiblue";
+  }
+  if (compact.includes("prescrip") || compact.includes("prescription") || compact === "rx") {
+    return "prescrip";
+  }
+  if (compact.includes("unisex")) return "unisex";
+  return "unisex";
+}
+
+function normalizeAudienceList(rawValue) {
+  const source = Array.isArray(rawValue)
+    ? rawValue
+    : String(rawValue || "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+  const normalized = source.map(normalizeAudienceValue).filter((value) => PRODUCT_AUDIENCE_SET.has(value));
+  const unique = [...new Set(normalized)];
+  return unique.length > 0 ? unique : ["unisex"];
 }
 
 async function bootstrapAdminIfConfigured() {
@@ -335,13 +507,21 @@ const passwordChangeSchema = z.object({
   newPassword: z.string().min(8).max(128)
 });
 
+const bulletItemSchema = z.object({
+  type: z.enum(["shipping", "arrivals", "quality", "returns"]),
+  title: z.string().min(1).max(80),
+  description: z.string().max(120).optional().default("")
+});
+
 const settingsSchema = z.object({
   brandName: z.string().min(1).max(120),
   brandTagline: z.string().min(1).max(80),
   heroTitle: z.string().min(1).max(180),
   heroSubtitle: z.string().min(1).max(240),
   heroButtonLabel: z.string().min(1).max(80),
-  heroImage: z.string().min(1).max(5_000_000)
+  heroImage: z.string().min(1).max(5_000_000),
+  heroPromiseItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_HERO_PROMISE_ITEMS),
+  featureItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_FEATURE_ITEMS)
 });
 
 const productSchema = z.object({
@@ -349,7 +529,8 @@ const productSchema = z.object({
   name: z.string().min(1).max(180),
   price: z.coerce.number().int().nonnegative(),
   section: z.enum(["category", "bestseller"]),
-  audience: z.enum(["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"]),
+  audience: z.string().max(120).optional().default(""),
+  audiences: z.array(z.string().max(40)).optional().default([]),
   ctaLabel: z.string().max(80).optional().default(""),
   description: z.string().max(400).optional().default(""),
   variant: z.string().max(40).optional().default("round"),
@@ -907,6 +1088,11 @@ app.get("/api/checkout/verify", requireAuth, async (req, res) => {
       [isPaid ? "paid" : "failed", payment.channel || "", orderRow.id]
     );
 
+    if (isPaid) {
+      await sendOrderAlertSafe({ orderId: orderRow.id });
+      await sendCustomerOrderAlertSafe({ orderId: orderRow.id });
+    }
+
     const refreshed = await queryOne("SELECT * FROM orders WHERE id = ?", [orderRow.id]);
     res.json({
       order: { ...mapOrderRow(refreshed), items: await getOrderItems(refreshed.id) },
@@ -935,7 +1121,8 @@ app.patch("/api/settings", requireAdmin, async (req, res, next) => {
       `
         UPDATE settings
         SET brand_name = ?, brand_tagline = ?, hero_title = ?, hero_subtitle = ?,
-            hero_button_label = ?, hero_image = ?, updated_at = datetime('now')
+            hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?,
+            updated_at = datetime('now')
         WHERE id = 1
       `,
       [
@@ -944,7 +1131,9 @@ app.patch("/api/settings", requireAdmin, async (req, res, next) => {
         payload.heroTitle.trim(),
         payload.heroSubtitle.trim(),
         payload.heroButtonLabel.trim(),
-        payload.heroImage.trim()
+        payload.heroImage.trim(),
+        JSON.stringify(payload.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
+        JSON.stringify(payload.featureItems || DEFAULT_FEATURE_ITEMS)
       ]
     );
 
@@ -965,6 +1154,9 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
   try {
     const payload = parsed.data;
     const id = payload.id || crypto.randomUUID();
+    const audienceList = normalizeAudienceList(
+      Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
+    );
 
     await execute(
       `
@@ -978,7 +1170,7 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
         payload.name.trim(),
         payload.price,
         payload.section,
-        payload.audience,
+        audienceList.join(","),
         payload.ctaLabel.trim(),
         payload.description.trim(),
         payload.variant.trim() || "round",
@@ -1007,6 +1199,9 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
       res.status(404).json({ error: "Product not found." });
       return;
     }
+    const audienceList = normalizeAudienceList(
+      Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
+    );
 
     await execute(
       `
@@ -1019,7 +1214,7 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
         payload.name.trim(),
         payload.price,
         payload.section,
-        payload.audience,
+        audienceList.join(","),
         payload.ctaLabel.trim(),
         payload.description.trim(),
         payload.variant.trim() || "round",

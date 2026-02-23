@@ -28,6 +28,10 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      - key: ORDER_ALERT_EMAIL
+        sync: false
+      - key: CUSTOMER_ORDER_EMAIL_ENABLED
+        value: true
       - key: PAYSTACK_SECRET_KEY
         sync: false
       - key: PAYSTACK_BASE_URL
