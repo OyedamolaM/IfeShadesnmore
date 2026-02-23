@@ -1,3 +1,5 @@
+import { DEFAULT_PRODUCT_DETAIL_BULLETS } from "../constants/storefront";
+
 const BLOCKED_HERO_IMAGE_BASE_URLS = new Set([
   "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f"
 ]);
@@ -69,6 +71,15 @@ export function normalizeAudienceList(value) {
   return unique.length > 0 ? unique : ["unisex"];
 }
 
+function normalizeDetailBullets(value) {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = source
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS;
+}
+
 export function normalizeProduct(product) {
   const audiences = normalizeAudienceList(product.audiences || product.audience);
   return {
@@ -78,6 +89,7 @@ export function normalizeProduct(product) {
     audiences,
     ctaLabel: product.ctaLabel || "",
     description: product.description || "",
+    detailBullets: normalizeDetailBullets(product.detailBullets),
     variant: product.variant || "round",
     image: product.image || ""
   };

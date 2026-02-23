@@ -40,7 +40,11 @@ import {
   sendEmailVerification,
   sendOrderNotification
 } from "./mailer.js";
-import { DEFAULT_FEATURE_ITEMS, DEFAULT_HERO_PROMISE_ITEMS } from "./defaults.js";
+import {
+  DEFAULT_FEATURE_ITEMS,
+  DEFAULT_HERO_PROMISE_ITEMS,
+  DEFAULT_PRODUCT_DETAIL_BULLETS
+} from "./defaults.js";
 
 dotenv.config();
 
@@ -432,6 +436,15 @@ function normalizeAudienceList(rawValue) {
   return unique.length > 0 ? unique : ["unisex"];
 }
 
+function normalizeDetailBullets(rawValue) {
+  const source = Array.isArray(rawValue) ? rawValue : [];
+  const normalized = source
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS;
+}
+
 async function bootstrapAdminIfConfigured() {
   const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
   const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
@@ -533,6 +546,7 @@ const productSchema = z.object({
   audiences: z.array(z.string().max(40)).optional().default([]),
   ctaLabel: z.string().max(80).optional().default(""),
   description: z.string().max(400).optional().default(""),
+  detailBullets: z.array(z.string().max(120)).max(8).optional().default([]),
   variant: z.string().max(40).optional().default("round"),
   image: z.string().max(5_000_000).optional().default("")
 });
@@ -1157,13 +1171,14 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
     const audienceList = normalizeAudienceList(
       Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
     );
+    const detailBullets = normalizeDetailBullets(payload.detailBullets);
 
     await execute(
       `
         INSERT INTO products (
-          id, name, price, section, audience, cta_label, description, variant, image
+          id, name, price, section, audience, cta_label, description, detail_bullets, variant, image
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         id,
@@ -1173,6 +1188,7 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
         audienceList.join(","),
         payload.ctaLabel.trim(),
         payload.description.trim(),
+        JSON.stringify(detailBullets),
         payload.variant.trim() || "round",
         payload.image.trim()
       ]
@@ -1202,12 +1218,13 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
     const audienceList = normalizeAudienceList(
       Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
     );
+    const detailBullets = normalizeDetailBullets(payload.detailBullets);
 
     await execute(
       `
         UPDATE products
         SET name = ?, price = ?, section = ?, audience = ?, cta_label = ?, description = ?,
-            variant = ?, image = ?, updated_at = datetime('now')
+            detail_bullets = ?, variant = ?, image = ?, updated_at = datetime('now')
         WHERE id = ?
       `,
       [
@@ -1217,6 +1234,7 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
         audienceList.join(","),
         payload.ctaLabel.trim(),
         payload.description.trim(),
+        JSON.stringify(detailBullets),
         payload.variant.trim() || "round",
         payload.image.trim(),
         req.params.id

@@ -306,7 +306,7 @@ function ArrivalsSection({
     if (card.comingSoon) {
       setCategoryInfoNotice({
         id: card.id,
-        message: "Product not yet arrived, but your lens can be converted for a service fee."
+        message: "Products not yet arrived, but your fashion lense can be converted for a service fee."
       });
       return;
     }

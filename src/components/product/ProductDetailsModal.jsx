@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ProductMedia from "./ProductMedia";
 import { toPrice } from "../../utils/format";
+import { DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
 
 function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrdering = true }) {
   const [quantityInput, setQuantityInput] = useState("1");
@@ -18,6 +19,12 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrd
   const nextQuantity = resolveQuantity();
   const description =
     (product.description || "").trim() || "Premium frame with modern finish and lasting comfort.";
+  const detailBullets = (Array.isArray(product.detailBullets) ? product.detailBullets : [])
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const resolvedDetailBullets =
+    detailBullets.length > 0 ? detailBullets : DEFAULT_PRODUCT_DETAIL_BULLETS;
 
   return (
     <div
@@ -41,9 +48,9 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrd
           <p className="product-modal-price">{toPrice(product.price)}</p>
           <p className="product-modal-description">{description}</p>
           <ul className="product-meta-list">
-            <li>Blue light filter compatible</li>
-            <li>Unisex fit</li>
-            <li>Free cleaning cloth included</li>
+            {resolvedDetailBullets.map((item, index) => (
+              <li key={`${product.id || "product"}-detail-bullet-${index}`}>{item}</li>
+            ))}
           </ul>
 
           {allowOrdering ? (

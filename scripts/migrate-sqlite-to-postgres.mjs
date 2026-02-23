@@ -81,6 +81,7 @@ async function ensurePostgresSchema(client) {
       audience TEXT NOT NULL DEFAULT 'unisex',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -141,6 +142,7 @@ async function ensurePostgresSchema(client) {
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
 }
 
 async function main() {
@@ -247,9 +249,9 @@ async function main() {
       await client.query(
         `
           INSERT INTO products (
-            id, name, price, section, audience, cta_label, description, variant, image, created_at, updated_at
+            id, name, price, section, audience, cta_label, description, detail_bullets, variant, image, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::timestamptz, CURRENT_TIMESTAMP), COALESCE($11::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, CURRENT_TIMESTAMP), COALESCE($12::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             price = EXCLUDED.price,
@@ -257,6 +259,7 @@ async function main() {
             audience = EXCLUDED.audience,
             cta_label = EXCLUDED.cta_label,
             description = EXCLUDED.description,
+            detail_bullets = EXCLUDED.detail_bullets,
             variant = EXCLUDED.variant,
             image = EXCLUDED.image,
             updated_at = EXCLUDED.updated_at
@@ -269,6 +272,7 @@ async function main() {
           row.audience || "unisex",
           row.cta_label || "",
           row.description || "",
+          row.detail_bullets || "[]",
           row.variant || "round",
           row.image || "",
           toIsoOrNull(row.created_at),

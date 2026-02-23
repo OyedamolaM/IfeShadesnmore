@@ -56,6 +56,12 @@ export const DEFAULT_FEATURE_ITEMS = [
   }
 ];
 
+export const DEFAULT_PRODUCT_DETAIL_BULLETS = [
+  "Blue light filter compatible",
+  "Unisex fit",
+  "Free cleaning cloth included"
+];
+
 export const DEFAULT_PRODUCTS = [
   {
     id: "women-category",
@@ -66,6 +72,7 @@ export const DEFAULT_PRODUCTS = [
     ctaLabel: "Shop Women's",
     variant: "tortoise",
     description: "Elegant everyday frames for women with lightweight comfort.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "/hero/Female-glasses.jpg"
   },
@@ -78,6 +85,7 @@ export const DEFAULT_PRODUCTS = [
     ctaLabel: "Shop Men's",
     variant: "square",
     description: "Classic masculine silhouettes built for daily wear.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "/hero/male-glasses.jpg"
   },
@@ -90,6 +98,7 @@ export const DEFAULT_PRODUCTS = [
     ctaLabel: "Shop Sunglasses",
     variant: "aviator",
     description: "UV-protected shades with polished fashion-forward finish.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "/hero/Sunglasses.jpg"
   },
@@ -101,6 +110,7 @@ export const DEFAULT_PRODUCTS = [
     audience: "unisex",
     variant: "round",
     description: "A timeless round frame that complements any face shape.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "https://images.pexels.com/photos/14482342/pexels-photo-14482342.jpeg?cs=srgb&dl=pexels-studioautenticamx-14482342.jpg&fm=jpg"
   },
@@ -112,6 +122,7 @@ export const DEFAULT_PRODUCTS = [
     audience: "women",
     variant: "cat",
     description: "Bold cat-eye style with sharp edges and premium finish.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "https://images.pexels.com/photos/26682029/pexels-photo-26682029.jpeg?cs=srgb&dl=pexels-glassesshop-gs-1317359316-26682029.jpg&fm=jpg"
   },
@@ -123,6 +134,7 @@ export const DEFAULT_PRODUCTS = [
     audience: "men",
     variant: "square",
     description: "Structured square frame inspired by vintage aesthetics.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "https://images.pexels.com/photos/5752395/pexels-photo-5752395.jpeg?cs=srgb&dl=pexels-kseniachernaya-5752395.jpg&fm=jpg"
   },
@@ -134,6 +146,7 @@ export const DEFAULT_PRODUCTS = [
     audience: "sunglasses",
     variant: "aviator",
     description: "Modern aviator shape with dark lens for full sun coverage.",
+    detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
     image:
       "https://images.pexels.com/photos/46710/pexels-photo-46710.jpeg?cs=srgb&dl=pexels-pixabay-46710.jpg&fm=jpg"
   }
@@ -159,6 +172,8 @@ export const EMPTY_PRODUCT = {
   audience: "unisex",
   ctaLabel: "",
   description: "",
+  detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
+  detailBulletsText: DEFAULT_PRODUCT_DETAIL_BULLETS.join("\n"),
   variant: "round",
   image: ""
 };

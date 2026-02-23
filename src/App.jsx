@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AdminOverlay from "./components/admin/AdminOverlay";
-import { DEFAULT_HERO_ROTATION_IMAGES, DEFAULT_SETTINGS, EMPTY_PRODUCT } from "./constants/storefront";
+import {
+  DEFAULT_HERO_ROTATION_IMAGES,
+  DEFAULT_PRODUCT_DETAIL_BULLETS,
+  DEFAULT_SETTINGS,
+  EMPTY_PRODUCT
+} from "./constants/storefront";
 import { fileToDataUrl } from "./utils/files";
 import {
   createProduct,
@@ -46,6 +51,26 @@ function ErrorView({ message, onRetry }) {
       </div>
     </div>
   );
+}
+
+function normalizeDetailBulletLines(value) {
+  const source = String(value || "");
+  const normalized = source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS;
+}
+
+function formatDetailBulletLines(value) {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = source
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const resolved = normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS;
+  return resolved.join("\n");
 }
 
 function App() {
@@ -107,6 +132,9 @@ function App() {
   const startEdit = (product) => {
     setIsEditingProduct(true);
     const audiences = normalizeAudienceList(product.audiences || product.audience);
+    const detailBullets = Array.isArray(product.detailBullets)
+      ? product.detailBullets
+      : DEFAULT_PRODUCT_DETAIL_BULLETS;
     setProductDraft({
       ...product,
       section: normalizeSection(product.section),
@@ -114,6 +142,8 @@ function App() {
       audiences,
       ctaLabel: product.ctaLabel || "",
       description: product.description || "",
+      detailBullets,
+      detailBulletsText: formatDetailBulletLines(detailBullets),
       price: String(product.price)
     });
     setAdminMessage("");
@@ -129,6 +159,7 @@ function App() {
     setAdminMessage("");
     try {
       const audiences = normalizeAudienceList(productDraft.audiences || productDraft.audience);
+      const detailBullets = normalizeDetailBulletLines(productDraft.detailBulletsText);
       const payload = {
         id: isEditingProduct ? productDraft.id : undefined,
         name: productDraft.name.trim(),
@@ -138,6 +169,7 @@ function App() {
         audiences,
         ctaLabel: String(productDraft.ctaLabel || "").trim(),
         description: String(productDraft.description || "").trim(),
+        detailBullets,
         variant: String(productDraft.variant || "round").trim() || "round",
         image: String(productDraft.image || "").trim()
       };

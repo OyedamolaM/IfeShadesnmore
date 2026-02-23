@@ -5,6 +5,7 @@ import pg from "pg";
 import {
   DEFAULT_FEATURE_ITEMS,
   DEFAULT_HERO_PROMISE_ITEMS,
+  DEFAULT_PRODUCT_DETAIL_BULLETS,
   DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS
 } from "./defaults.js";
@@ -186,6 +187,36 @@ function serializeAudienceList(value) {
   return parseAudienceList(value).join(",");
 }
 
+function parseProductDetailBullets(value, fallback = DEFAULT_PRODUCT_DETAIL_BULLETS) {
+  const fallbackArray = Array.isArray(fallback) ? fallback : DEFAULT_PRODUCT_DETAIL_BULLETS;
+  if (!value) return fallbackArray;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(String(value));
+  } catch {
+    return fallbackArray;
+  }
+
+  if (!Array.isArray(parsed)) return fallbackArray;
+
+  const normalized = parsed
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  return normalized.length > 0 ? normalized : fallbackArray;
+}
+
+function serializeProductDetailBullets(value) {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = source
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return JSON.stringify(normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS);
+}
+
 function parseSettingsItems(value, fallback) {
   const fallbackArray = Array.isArray(fallback) ? fallback : [];
   if (!value) return fallbackArray;
@@ -250,6 +281,7 @@ async function runMigrationsSqlite() {
       audience TEXT NOT NULL DEFAULT 'unisex',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -330,6 +362,11 @@ async function runMigrationsSqlite() {
   if (!settingsColumns.some((column) => column.name === "feature_items")) {
     sqliteDb.exec(`ALTER TABLE settings ADD COLUMN feature_items TEXT DEFAULT '[]'`);
   }
+
+  const productColumns = sqliteDb.prepare("PRAGMA table_info(products)").all();
+  if (!productColumns.some((column) => column.name === "detail_bullets")) {
+    sqliteDb.exec(`ALTER TABLE products ADD COLUMN detail_bullets TEXT DEFAULT '[]'`);
+  }
 }
 
 async function runMigrationsPostgres() {
@@ -369,6 +406,7 @@ async function runMigrationsPostgres() {
       audience TEXT NOT NULL DEFAULT 'unisex',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -429,6 +467,7 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
 }
 
 async function seedSettingsIfEmpty() {
@@ -471,9 +510,9 @@ async function seedProductsIfEmpty() {
     await execute(
       `
         INSERT INTO products (
-          id, name, price, section, audience, cta_label, description, variant, image
+          id, name, price, section, audience, cta_label, description, detail_bullets, variant, image
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         item.id,
@@ -483,6 +522,7 @@ async function seedProductsIfEmpty() {
         serializeAudienceList(item.audiences || item.audience),
         item.ctaLabel || "",
         item.description || "",
+        serializeProductDetailBullets(item.detailBullets),
         item.variant || "round",
         item.image || ""
       ]
@@ -543,6 +583,7 @@ export function mapProductRow(row) {
     audiences,
     ctaLabel: row.cta_label || "",
     description: row.description || "",
+    detailBullets: parseProductDetailBullets(row.detail_bullets),
     variant: row.variant || "round",
     image: row.image || ""
   };

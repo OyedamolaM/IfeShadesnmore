@@ -503,6 +503,15 @@ function AdminOverlay({
                   />
                 </label>
                 <label>
+                  Product detail bullets (one per line)
+                  <textarea
+                    rows={4}
+                    placeholder={"Blue light filter compatible\nUnisex fit\nFree cleaning cloth included"}
+                    value={productDraft.detailBulletsText || ""}
+                    onChange={(event) => onProductDraftChange("detailBulletsText", event.target.value)}
+                  />
+                </label>
+                <label>
                   Fallback frame style
                   <select
                     value={productDraft.variant}
@@ -511,6 +520,7 @@ function AdminOverlay({
                     <option value="round">Round</option>
                     <option value="tortoise">Tortoise</option>
                     <option value="cat">Cat-Eye</option>
+                    <option value="butterfly">Butterfly</option>
                     <option value="clear">Clear</option>
                     <option value="square">Square</option>
                     <option value="aviator">Aviator</option>
