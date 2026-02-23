@@ -618,6 +618,12 @@ select {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  display: block;
+  width: 100%;
+  text-align: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .product-name-button:hover {
@@ -2659,11 +2665,11 @@ select {
 
   .collection-card h3 {
     font-size: 12px;
-    white-space: nowrap;
     font-weight: 700;
-    text-wrap: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .collection-card p {
