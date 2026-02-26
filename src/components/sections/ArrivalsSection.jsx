@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
+import { trackEvent } from "../../utils/analytics";
 
 const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
 const MIN_SEARCH_LENGTH = 3;
@@ -235,6 +236,12 @@ function ArrivalsSection({
 
     mediaQuery.addListener(handleChange);
     return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    trackEvent("view_shop_collection_section", {
+      section_name: "shop_collection"
+    });
   }, []);
 
   const visibleProducts = useMemo(() => {

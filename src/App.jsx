@@ -23,6 +23,7 @@ import {
   normalizeProduct,
   normalizeSection
 } from "./utils/storefrontModel";
+import { initAnalytics, trackPageView } from "./utils/analytics";
 import StorefrontPage from "./pages/StorefrontPage";
 import AccountLoginPage from "./pages/AccountLoginPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
@@ -92,6 +93,15 @@ function App() {
     () => buildHeroSlides(settings.heroImage, DEFAULT_HERO_ROTATION_IMAGES),
     [settings.heroImage]
   );
+
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
+  useEffect(() => {
+    const path = `${location.pathname || "/"}${location.search || ""}${location.hash || ""}`;
+    trackPageView(path);
+  }, [location.pathname, location.search, location.hash]);
 
   const loadStore = async () => {
     setIsLoading(true);

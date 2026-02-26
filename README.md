@@ -28,6 +28,9 @@ React + Express storefront with:
 4. If frontend and backend are deployed on different Render services/domains,
    set `VITE_API_BASE_URL` on the frontend service to your backend URL
    (for example `https://ife-shadesnmore.onrender.com`).
+5. Google Analytics 4:
+   - Set `VITE_GA_MEASUREMENT_ID` (example: `G-T3SYCHH988`)
+   - Redeploy so Vite can bake it into the frontend build.
 
 ## 2) Run Locally
 
