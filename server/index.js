@@ -79,7 +79,19 @@ const authLimiter = rateLimit({
 
 app.use(
   helmet({
-    crossOriginResourcePolicy: false
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        scriptSrc: ["'self'", "https://www.googletagmanager.com"],
+        connectSrc: [
+          "'self'",
+          "https://www.googletagmanager.com",
+          "https://www.google-analytics.com",
+          "https://region1.google-analytics.com"
+        ]
+      }
+    }
   })
 );
 app.use(
