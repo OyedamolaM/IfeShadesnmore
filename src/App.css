@@ -865,6 +865,57 @@ select {
   font-weight: 700;
 }
 
+.availability-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.availability-in_stock {
+  background: #e7f8ec;
+  border-color: #c9ebd4;
+  color: #1f6f42;
+}
+
+.availability-out_of_stock {
+  background: #fdecec;
+  border-color: #f2c5c8;
+  color: #9a2431;
+}
+
+.availability-preorder {
+  background: #fff5df;
+  border-color: #f0deaf;
+  color: #876100;
+}
+
+.collection-card .availability-pill {
+  margin: 0.28rem auto 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.collection-card .preorder-note,
+.product-modal-content .preorder-note,
+.cart-item-meta .preorder-note {
+  margin: 0.26rem 0 0;
+  color: #6b5a2d;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+}
+
 .collection-card .product-actions {
   margin-top: 0.45rem;
 }
@@ -1281,6 +1332,63 @@ select {
   font-weight: 700;
 }
 
+.product-availability-row {
+  margin-top: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 0.38rem;
+  max-width: 100%;
+  width: max-content;
+  white-space: nowrap;
+}
+
+.product-modal-content .availability-pill {
+  margin: 0;
+}
+
+.preorder-info-trigger {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  border-radius: 999px;
+  border: 1px solid #d8cba8;
+  background: #fff7e2;
+  color: #6f5200;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  line-height: 0;
+  font-family: inherit;
+}
+
+.preorder-info-trigger::before {
+  content: "i";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.preorder-info-trigger:hover {
+  background: #f5e5bb;
+}
+
+.preorder-info-panel {
+  margin: 0.45rem 0 0;
+  border-left: 3px solid #d6b86f;
+  padding: 0.42rem 0.6rem;
+  background: #fff9ec;
+  color: #634b10;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
 .product-modal-description {
   margin: 0.8rem 0 0;
   color: #4b515a;
@@ -1410,6 +1518,13 @@ select {
   color: #525965;
 }
 
+.cart-item-meta .preorder-note {
+  margin-top: -0.2rem;
+  margin-bottom: 0.4rem;
+  color: #7a6021;
+  font-size: 0.78rem;
+}
+
 .quantity-stepper {
   display: inline-flex;
   align-items: center;
@@ -1454,6 +1569,14 @@ select {
   display: flex;
   justify-content: space-between;
   font-size: 1rem;
+}
+
+.cart-footer .cart-shipping-note {
+  margin: -0.15rem 0 0.8rem;
+  display: block;
+  color: #585f69;
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .cart-footer .primary-action {
@@ -1551,6 +1674,19 @@ select {
   font-size: 0.94rem;
 }
 
+.checkout-item-meta {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.checkout-item-meta .preorder-note {
+  margin: 0;
+  color: #70551a;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .checkout-summary p {
   margin: 1rem 0 0;
   padding-top: 0.8rem;
@@ -1558,6 +1694,16 @@ select {
   display: flex;
   justify-content: space-between;
   font-size: 1rem;
+}
+
+.checkout-summary .checkout-shipping-note {
+  margin: 0.65rem 0 0;
+  padding-top: 0;
+  border-top: 0;
+  display: block;
+  color: #5d646e;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .profile-modal {
@@ -3175,6 +3321,18 @@ select {
   margin-bottom: 12px;
 }
 
+.order-item ul li {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.order-preorder-note {
+  color: #6d5318;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .order-item header {
   display: flex;
   justify-content: space-between;
@@ -3232,4 +3390,46 @@ select {
 .status-order-cancelled {
   background: #ffe5e5;
   color: #9a2020;
+}
+
+@media (max-width: 768px) {
+  .collection-card .availability-pill {
+    font-size: 0.62rem;
+    padding: 0.16rem 0.4rem;
+  }
+
+  .collection-card .preorder-note {
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+    line-height: 1.25;
+  }
+
+  .product-modal-content .availability-pill {
+    margin-top: 0;
+    font-size: 0.62rem;
+  }
+
+  .product-availability-row {
+    margin-top: 0.32rem;
+    gap: 0.26rem;
+  }
+
+  .preorder-info-trigger {
+    width: 21px;
+    height: 21px;
+    font-size: 0.72rem;
+  }
+
+  .preorder-info-panel {
+    margin-top: 0.28rem;
+    font-size: 0.74rem;
+    line-height: 1.32;
+  }
+}
+
+@media (max-width: 430px) {
+  .collection-card .preorder-note {
+    white-space: normal;
+    font-size: 0.58rem;
+  }
 }

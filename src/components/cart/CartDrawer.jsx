@@ -1,6 +1,21 @@
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
+function resolvePreorderNote(item) {
+  const raw = String(item?.product?.preorderNote || "").trim();
+  if (raw) return raw;
+  return "Preorder item. Shipping timeline will be confirmed before dispatch.";
+}
+
 function CartDrawer({
   open,
   onClose,
@@ -42,6 +57,9 @@ function CartDrawer({
                   <div className="cart-item-meta">
                     <h3>{item.product.name}</h3>
                     <p>{toPrice(item.product.price)}</p>
+                    {normalizeAvailability(item.product.availability) === "preorder" ? (
+                      <p className="preorder-note">{resolvePreorderNote(item)}</p>
+                    ) : null}
                     <div className="quantity-stepper">
                       <button type="button" onClick={() => onDecrement(item.product.id)}>
                         -
@@ -66,6 +84,7 @@ function CartDrawer({
           <p>
             Subtotal <strong>{toPrice(subtotal)}</strong>
           </p>
+          <p className="cart-shipping-note">Prices exclude shipping fee. Delivery fee is calculated at processing.</p>
           <button type="button" className="primary-action" disabled={items.length === 0} onClick={onOpenCheckout}>
             Proceed to Checkout
           </button>

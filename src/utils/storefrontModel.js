@@ -4,6 +4,7 @@ const BLOCKED_HERO_IMAGE_BASE_URLS = new Set([
   "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f"
 ]);
 const KNOWN_AUDIENCES = new Set(["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"]);
+const KNOWN_AVAILABILITY_VALUES = new Set(["in_stock", "out_of_stock", "preorder"]);
 
 export function isBlockedHeroImageSource(source) {
   const value = String(source || "").trim();
@@ -80,13 +81,30 @@ function normalizeDetailBullets(value) {
   return normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS;
 }
 
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (!source) return "in_stock";
+  if (KNOWN_AVAILABILITY_VALUES.has(source)) return source;
+
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "instock" || compact === "available") return "in_stock";
+  if (compact === "outofstock" || compact === "soldout" || compact === "unavailable") {
+    return "out_of_stock";
+  }
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
 export function normalizeProduct(product) {
   const audiences = normalizeAudienceList(product.audiences || product.audience);
+  const availability = normalizeAvailability(product.availability);
   return {
     ...product,
     section: normalizeSection(product.section),
     audience: audiences[0],
     audiences,
+    availability,
+    preorderNote: availability === "preorder" ? String(product.preorderNote || "").trim() : "",
     ctaLabel: product.ctaLabel || "",
     description: product.description || "",
     detailBullets: normalizeDetailBullets(product.detailBullets),

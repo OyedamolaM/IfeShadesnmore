@@ -20,6 +20,12 @@ export const BULLET_ICON_TYPES = [
   { value: "returns", label: "Returns Icon" }
 ];
 
+export const PRODUCT_AVAILABILITY_OPTIONS = [
+  { value: "in_stock", label: "In Stock" },
+  { value: "out_of_stock", label: "Out of Stock" },
+  { value: "preorder", label: "Preorder" }
+];
+
 export const DEFAULT_HERO_PROMISE_ITEMS = [
   {
     type: "shipping",
@@ -174,6 +180,8 @@ export const EMPTY_PRODUCT = {
   description: "",
   detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,
   detailBulletsText: DEFAULT_PRODUCT_DETAIL_BULLETS.join("\n"),
+  availability: "in_stock",
+  preorderNote: "",
   variant: "round",
   image: ""
 };

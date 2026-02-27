@@ -351,7 +351,7 @@ async function getStorefrontPayload() {
 async function getOrderItems(orderId) {
   const rows = await queryAll(
       `
-        SELECT id, product_id, name, unit_price, quantity, line_total
+        SELECT id, product_id, name, availability, preorder_note, unit_price, quantity, line_total
         FROM order_items
         WHERE order_id = ?
         ORDER BY id ASC
@@ -363,6 +363,11 @@ async function getOrderItems(orderId) {
       id: item.id,
       productId: item.product_id,
       name: item.name,
+      availability: normalizeProductAvailability(item.availability),
+      preorderNote:
+        normalizeProductAvailability(item.availability) === "preorder"
+          ? normalizePreorderNote(item.preorder_note)
+          : "",
       unitPrice: Number(item.unit_price) || 0,
       quantity: Number(item.quantity) || 0,
       lineTotal: Number(item.line_total) || 0
@@ -407,6 +412,8 @@ function normalizeEmail(value) {
 
 const PRODUCT_AUDIENCE_VALUES = ["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"];
 const PRODUCT_AUDIENCE_SET = new Set(PRODUCT_AUDIENCE_VALUES);
+const PRODUCT_AVAILABILITY_VALUES = ["in_stock", "out_of_stock", "preorder"];
+const PRODUCT_AVAILABILITY_SET = new Set(PRODUCT_AVAILABILITY_VALUES);
 
 function normalizeAudienceValue(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -446,6 +453,24 @@ function normalizeAudienceList(rawValue) {
   const normalized = source.map(normalizeAudienceValue).filter((value) => PRODUCT_AUDIENCE_SET.has(value));
   const unique = [...new Set(normalized)];
   return unique.length > 0 ? unique : ["unisex"];
+}
+
+function normalizeProductAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (!source) return "in_stock";
+  if (PRODUCT_AVAILABILITY_SET.has(source)) return source;
+
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "instock" || compact === "available") return "in_stock";
+  if (compact === "outofstock" || compact === "soldout" || compact === "unavailable") {
+    return "out_of_stock";
+  }
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
+function normalizePreorderNote(value) {
+  return String(value || "").trim().slice(0, 180);
 }
 
 function normalizeDetailBullets(rawValue) {
@@ -559,6 +584,8 @@ const productSchema = z.object({
   ctaLabel: z.string().max(80).optional().default(""),
   description: z.string().max(400).optional().default(""),
   detailBullets: z.array(z.string().max(120)).max(8).optional().default([]),
+  availability: z.enum(PRODUCT_AVAILABILITY_VALUES).optional().default("in_stock"),
+  preorderNote: z.string().max(180).optional().default(""),
   variant: z.string().max(40).optional().default("round"),
   image: z.string().max(5_000_000).optional().default("")
 });
@@ -969,14 +996,29 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
   const products = productsRows.map(mapProductRow);
 
   const productMap = new Map(products.map((product) => [product.id, product]));
+  const unavailableProducts = payload.items
+    .map((item) => productMap.get(item.productId))
+    .filter((product) => product && product.availability === "out_of_stock")
+    .map((product) => product.name);
+
+  if (unavailableProducts.length > 0) {
+    res.status(409).json({
+      error: `Out-of-stock item(s) detected: ${[...new Set(unavailableProducts)].join(", ")}. Please update your cart.`
+    });
+    return;
+  }
 
   const computedItems = payload.items.map((item) => {
     const product = productMap.get(item.productId);
     if (!product) return null;
+    const availability = normalizeProductAvailability(product.availability);
+    const preorderNote = availability === "preorder" ? normalizePreorderNote(product.preorderNote) : "";
     const lineTotal = product.price * item.quantity;
     return {
       productId: product.id,
       name: product.name,
+      availability,
+      preorderNote,
       unitPrice: product.price,
       quantity: item.quantity,
       lineTotal
@@ -1030,11 +1072,20 @@ app.post("/api/checkout/initialize", requireAuth, async (req, res) => {
       await tx.execute(
         `
           INSERT INTO order_items (
-            order_id, product_id, name, unit_price, quantity, line_total
+            order_id, product_id, name, availability, preorder_note, unit_price, quantity, line_total
           )
-          VALUES (?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [orderId, item.productId, item.name, item.unitPrice, item.quantity, item.lineTotal]
+        [
+          orderId,
+          item.productId,
+          item.name,
+          item.availability,
+          item.preorderNote,
+          item.unitPrice,
+          item.quantity,
+          item.lineTotal
+        ]
       );
     }
   });
@@ -1184,13 +1235,15 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
       Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
     );
     const detailBullets = normalizeDetailBullets(payload.detailBullets);
+    const availability = normalizeProductAvailability(payload.availability);
+    const preorderNote = availability === "preorder" ? normalizePreorderNote(payload.preorderNote) : "";
 
     await execute(
       `
         INSERT INTO products (
-          id, name, price, section, audience, cta_label, description, detail_bullets, variant, image
+          id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         id,
@@ -1198,6 +1251,8 @@ app.post("/api/products", requireAdmin, async (req, res, next) => {
         payload.price,
         payload.section,
         audienceList.join(","),
+        availability,
+        preorderNote,
         payload.ctaLabel.trim(),
         payload.description.trim(),
         JSON.stringify(detailBullets),
@@ -1231,12 +1286,14 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
       Array.isArray(payload.audiences) && payload.audiences.length > 0 ? payload.audiences : payload.audience
     );
     const detailBullets = normalizeDetailBullets(payload.detailBullets);
+    const availability = normalizeProductAvailability(payload.availability);
+    const preorderNote = availability === "preorder" ? normalizePreorderNote(payload.preorderNote) : "";
 
     await execute(
       `
         UPDATE products
-        SET name = ?, price = ?, section = ?, audience = ?, cta_label = ?, description = ?,
-            detail_bullets = ?, variant = ?, image = ?, updated_at = datetime('now')
+        SET name = ?, price = ?, section = ?, audience = ?, availability = ?, preorder_note = ?,
+            cta_label = ?, description = ?, detail_bullets = ?, variant = ?, image = ?, updated_at = datetime('now')
         WHERE id = ?
       `,
       [
@@ -1244,6 +1301,8 @@ app.put("/api/products/:id", requireAdmin, async (req, res, next) => {
         payload.price,
         payload.section,
         audienceList.join(","),
+        availability,
+        preorderNote,
         payload.ctaLabel.trim(),
         payload.description.trim(),
         JSON.stringify(detailBullets),

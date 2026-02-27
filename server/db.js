@@ -49,6 +49,7 @@ const PRODUCT_AUDIENCE_VALUES = new Set([
   "antiblue",
   "prescrip"
 ]);
+const PRODUCT_AVAILABILITY_VALUES = new Set(["in_stock", "out_of_stock", "preorder"]);
 const BULLET_ICON_TYPES = new Set(["shipping", "arrivals", "quality", "returns"]);
 
 function normalizeSqlForPostgres(sql) {
@@ -171,6 +172,22 @@ function normalizeProductAudience(value) {
   return "unisex";
 }
 
+function normalizeProductAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (!source) return "in_stock";
+  if (PRODUCT_AVAILABILITY_VALUES.has(source)) return source;
+
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "instock" || compact === "available") return "in_stock";
+  if (compact === "outofstock" || compact === "soldout" || compact === "unavailable") {
+    return "out_of_stock";
+  }
+  if (compact === "preorder" || compact === "preorderonly" || compact === "comingsoon") {
+    return "preorder";
+  }
+  return "in_stock";
+}
+
 function parseAudienceList(value) {
   const source = Array.isArray(value)
     ? value
@@ -215,6 +232,10 @@ function serializeProductDetailBullets(value) {
     .filter(Boolean)
     .slice(0, 8);
   return JSON.stringify(normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS);
+}
+
+function normalizePreorderNote(value) {
+  return String(value || "").trim().slice(0, 180);
 }
 
 function parseSettingsItems(value, fallback) {
@@ -279,6 +300,8 @@ async function runMigrationsSqlite() {
       price INTEGER NOT NULL DEFAULT 0,
       section TEXT NOT NULL DEFAULT 'category',
       audience TEXT NOT NULL DEFAULT 'unisex',
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
       detail_bullets TEXT DEFAULT '[]',
@@ -315,6 +338,8 @@ async function runMigrationsSqlite() {
       order_id TEXT NOT NULL,
       product_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       unit_price INTEGER NOT NULL,
       quantity INTEGER NOT NULL,
       line_total INTEGER NOT NULL,
@@ -364,8 +389,22 @@ async function runMigrationsSqlite() {
   }
 
   const productColumns = sqliteDb.prepare("PRAGMA table_info(products)").all();
+  if (!productColumns.some((column) => column.name === "availability")) {
+    sqliteDb.exec(`ALTER TABLE products ADD COLUMN availability TEXT NOT NULL DEFAULT 'in_stock'`);
+  }
+  if (!productColumns.some((column) => column.name === "preorder_note")) {
+    sqliteDb.exec(`ALTER TABLE products ADD COLUMN preorder_note TEXT DEFAULT ''`);
+  }
   if (!productColumns.some((column) => column.name === "detail_bullets")) {
     sqliteDb.exec(`ALTER TABLE products ADD COLUMN detail_bullets TEXT DEFAULT '[]'`);
+  }
+
+  const orderItemColumns = sqliteDb.prepare("PRAGMA table_info(order_items)").all();
+  if (!orderItemColumns.some((column) => column.name === "availability")) {
+    sqliteDb.exec(`ALTER TABLE order_items ADD COLUMN availability TEXT NOT NULL DEFAULT 'in_stock'`);
+  }
+  if (!orderItemColumns.some((column) => column.name === "preorder_note")) {
+    sqliteDb.exec(`ALTER TABLE order_items ADD COLUMN preorder_note TEXT DEFAULT ''`);
   }
 }
 
@@ -404,6 +443,8 @@ async function runMigrationsPostgres() {
       price INTEGER NOT NULL DEFAULT 0,
       section TEXT NOT NULL DEFAULT 'category',
       audience TEXT NOT NULL DEFAULT 'unisex',
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
       detail_bullets TEXT DEFAULT '[]',
@@ -439,6 +480,8 @@ async function runMigrationsPostgres() {
       order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
       product_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       unit_price INTEGER NOT NULL,
       quantity INTEGER NOT NULL,
       line_total INTEGER NOT NULL
@@ -467,7 +510,11 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
+  await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
+  await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
 }
 
 async function seedSettingsIfEmpty() {
@@ -510,9 +557,9 @@ async function seedProductsIfEmpty() {
     await execute(
       `
         INSERT INTO products (
-          id, name, price, section, audience, cta_label, description, detail_bullets, variant, image
+          id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         item.id,
@@ -520,6 +567,8 @@ async function seedProductsIfEmpty() {
         item.price,
         item.section,
         serializeAudienceList(item.audiences || item.audience),
+        normalizeProductAvailability(item.availability),
+        normalizePreorderNote(item.preorderNote),
         item.ctaLabel || "",
         item.description || "",
         serializeProductDetailBullets(item.detailBullets),
@@ -574,6 +623,7 @@ export async function closeDatabase() {
 
 export function mapProductRow(row) {
   const audiences = parseAudienceList(row.audience);
+  const availability = normalizeProductAvailability(row.availability);
   return {
     id: row.id,
     name: row.name,
@@ -581,6 +631,8 @@ export function mapProductRow(row) {
     section: row.section,
     audience: audiences[0],
     audiences,
+    availability,
+    preorderNote: availability === "preorder" ? normalizePreorderNote(row.preorder_note) : "",
     ctaLabel: row.cta_label || "",
     description: row.description || "",
     detailBullets: parseProductDetailBullets(row.detail_bullets),

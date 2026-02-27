@@ -79,6 +79,8 @@ async function ensurePostgresSchema(client) {
       price INTEGER NOT NULL DEFAULT 0,
       section TEXT NOT NULL DEFAULT 'category',
       audience TEXT NOT NULL DEFAULT 'unisex',
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       cta_label TEXT DEFAULT '',
       description TEXT DEFAULT '',
       detail_bullets TEXT DEFAULT '[]',
@@ -114,6 +116,8 @@ async function ensurePostgresSchema(client) {
       order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
       product_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      availability TEXT NOT NULL DEFAULT 'in_stock',
+      preorder_note TEXT DEFAULT '',
       unit_price INTEGER NOT NULL,
       quantity INTEGER NOT NULL,
       line_total INTEGER NOT NULL
@@ -142,7 +146,11 @@ async function ensurePostgresSchema(client) {
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
+  await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
+  await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
+  await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
 }
 
 async function main() {
@@ -249,14 +257,16 @@ async function main() {
       await client.query(
         `
           INSERT INTO products (
-            id, name, price, section, audience, cta_label, description, detail_bullets, variant, image, created_at, updated_at
+            id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, CURRENT_TIMESTAMP), COALESCE($12::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, CURRENT_TIMESTAMP), COALESCE($14::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             price = EXCLUDED.price,
             section = EXCLUDED.section,
             audience = EXCLUDED.audience,
+            availability = EXCLUDED.availability,
+            preorder_note = EXCLUDED.preorder_note,
             cta_label = EXCLUDED.cta_label,
             description = EXCLUDED.description,
             detail_bullets = EXCLUDED.detail_bullets,
@@ -270,6 +280,8 @@ async function main() {
           Number(row.price) || 0,
           row.section || "category",
           row.audience || "unisex",
+          row.availability || "in_stock",
+          row.preorder_note || "",
           row.cta_label || "",
           row.description || "",
           row.detail_bullets || "[]",
@@ -333,13 +345,15 @@ async function main() {
       await client.query(
         `
           INSERT INTO order_items (
-            id, order_id, product_id, name, unit_price, quantity, line_total
+            id, order_id, product_id, name, availability, preorder_note, unit_price, quantity, line_total
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (id) DO UPDATE SET
             order_id = EXCLUDED.order_id,
             product_id = EXCLUDED.product_id,
             name = EXCLUDED.name,
+            availability = EXCLUDED.availability,
+            preorder_note = EXCLUDED.preorder_note,
             unit_price = EXCLUDED.unit_price,
             quantity = EXCLUDED.quantity,
             line_total = EXCLUDED.line_total
@@ -349,6 +363,8 @@ async function main() {
           row.order_id,
           row.product_id,
           row.name,
+          row.availability || "in_stock",
+          row.preorder_note || "",
           Number(row.unit_price) || 0,
           Number(row.quantity) || 0,
           Number(row.line_total) || 0

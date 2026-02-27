@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
-import { AUDIENCE_OPTIONS, BULLET_ICON_TYPES, DEFAULT_SETTINGS } from "../../constants/storefront";
+import {
+  AUDIENCE_OPTIONS,
+  BULLET_ICON_TYPES,
+  DEFAULT_SETTINGS,
+  PRODUCT_AVAILABILITY_OPTIONS
+} from "../../constants/storefront";
 import {
   deleteAdminCustomer,
   fetchAdminCustomers,
@@ -32,6 +37,11 @@ function normalizeAudienceSelections(value) {
 function formatAudienceLabel(value) {
   const option = AUDIENCE_OPTIONS.find((entry) => entry.value === value);
   return option ? option.label : String(value || "Unisex");
+}
+
+function formatAvailabilityLabel(value) {
+  const option = PRODUCT_AVAILABILITY_OPTIONS.find((entry) => entry.value === value);
+  return option ? option.label : "In Stock";
 }
 
 function AdminOverlay({
@@ -480,6 +490,29 @@ function AdminOverlay({
                   </select>
                 </label>
                 <label>
+                  Availability
+                  <select
+                    value={productDraft.availability || "in_stock"}
+                    onChange={(event) => onProductDraftChange("availability", event.target.value)}
+                  >
+                    {PRODUCT_AVAILABILITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {String(productDraft.availability || "in_stock") === "preorder" ? (
+                  <label>
+                    Preorder note
+                    <input
+                      placeholder="Available on preorder. Ships in 3-7 working days."
+                      value={productDraft.preorderNote || ""}
+                      onChange={(event) => onProductDraftChange("preorderNote", event.target.value)}
+                    />
+                  </label>
+                ) : null}
+                <label>
                   Audience sections (multi-select)
                   <div className="admin-audience-multi">
                     {AUDIENCE_OPTIONS.map((option) => (
@@ -570,6 +603,12 @@ function AdminOverlay({
                           {normalizeAudienceSelections(product.audiences || [product.audience])
                             .map((entry) => formatAudienceLabel(entry))
                             .join(", ")}
+                        </span>
+                        <span>
+                          Availability: {formatAvailabilityLabel(product.availability || "in_stock")}
+                          {String(product.availability || "") === "preorder" && product.preorderNote
+                            ? ` | ${product.preorderNote}`
+                            : ""}
                         </span>
                       </div>
                       <div className="admin-list-actions">

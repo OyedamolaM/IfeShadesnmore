@@ -1,5 +1,20 @@
 import { toPrice } from "../../utils/format";
 
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
+function resolvePreorderNote(item) {
+  const raw = String(item?.product?.preorderNote || "").trim();
+  if (raw) return raw;
+  return "Preorder item. Shipping timeline will be confirmed before dispatch.";
+}
+
 function CheckoutModal({
   open,
   onClose,
@@ -126,8 +141,13 @@ function CheckoutModal({
             <ul>
               {items.map((item) => (
                 <li key={item.product.id}>
-                  <span>
-                    {item.product.name} x {item.quantity}
+                  <span className="checkout-item-meta">
+                    <span>
+                      {item.product.name} x {item.quantity}
+                    </span>
+                    {normalizeAvailability(item.product.availability) === "preorder" ? (
+                      <small className="preorder-note">{resolvePreorderNote(item)}</small>
+                    ) : null}
                   </span>
                   <strong>{toPrice(item.lineTotal)}</strong>
                 </li>
@@ -135,6 +155,9 @@ function CheckoutModal({
             </ul>
             <p>
               Total <strong>{toPrice(subtotal)}</strong>
+            </p>
+            <p className="checkout-shipping-note">
+              Product prices exclude shipping fee. Delivery fee is confirmed after checkout.
             </p>
           </div>
         </div>

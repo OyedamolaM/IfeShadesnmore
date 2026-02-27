@@ -8,7 +8,24 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
-      - name: Ping Render health endpoint
+      - name: Ping Render health endpoint (retry for cold start)
+        env:
+          HEALTH_URL: https://ife-shadesnmore.onrender.com/api/health
         run: |
-          curl -fsS --max-time 20 "https://ife-shadesnmore.onrender.com/api/health" > /dev/null
+          attempts=4
+          delay_seconds=20
+          for i in $(seq 1 $attempts); do
+            echo "Ping attempt ${i}/${attempts}: ${HEALTH_URL}"
+            if curl -fsS --connect-timeout 15 --max-time 75 "${HEALTH_URL}" > /dev/null; then
+              echo "Ping succeeded."
+              exit 0
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              echo "Attempt ${i} failed. Waiting ${delay_seconds}s before retry..."
+              sleep "$delay_seconds"
+            fi
+          done
+          echo "Ping failed after ${attempts} attempts."
+          exit 1

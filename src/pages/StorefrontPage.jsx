@@ -10,6 +10,15 @@ import CheckoutModal from "../components/cart/CheckoutModal";
 import { CART_STORAGE_KEY } from "../constants/storefront";
 import { createSubscription, initializeCheckout } from "../utils/api";
 
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
 function splitFullName(value) {
   const parts = String(value || "")
     .trim()
@@ -133,11 +142,18 @@ function StorefrontPage({
   );
 
   useEffect(() => {
-    setCart((current) => {
-      const validIds = new Set(products.map((item) => item.id));
-      return current.filter((item) => validIds.has(item.productId) && item.quantity > 0);
-    });
-  }, [products]);
+    const availableProductIds = new Set(
+      products
+        .filter((item) => normalizeAvailability(item.availability) !== "out_of_stock")
+        .map((item) => item.id)
+    );
+    const nextCart = cart.filter((item) => availableProductIds.has(item.productId) && item.quantity > 0);
+    if (nextCart.length !== cart.length) {
+      setCart(nextCart);
+      setCartToast("Some out-of-stock items were removed from your cart.");
+      setCheckoutError("Your cart was updated because some items are out of stock.");
+    }
+  }, [cart, products]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -206,6 +222,12 @@ function StorefrontPage({
       return;
     }
 
+    const availability = normalizeAvailability(product?.availability);
+    if (availability === "out_of_stock") {
+      setCartToast(`${product.name} is currently out of stock.`);
+      return;
+    }
+
     const qty = Math.max(1, Number(quantity) || 1);
     setCart((current) => {
       const index = current.findIndex((entry) => entry.productId === product.id);
@@ -214,7 +236,9 @@ function StorefrontPage({
         idx === index ? { ...entry, quantity: entry.quantity + qty } : entry
       );
     });
-    setCartToast(`${product.name} added to cart.`);
+    setCartToast(
+      availability === "preorder" ? `${product.name} added as preorder.` : `${product.name} added to cart.`
+    );
     setCheckoutError("");
   };
 

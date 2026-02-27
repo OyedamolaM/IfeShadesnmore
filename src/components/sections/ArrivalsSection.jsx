@@ -5,6 +5,8 @@ import { trackEvent } from "../../utils/analytics";
 
 const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
 const MIN_SEARCH_LENGTH = 3;
+const SUNGLASSES_SWITCH_MS = 5000;
+const SUNGLASSES_VARIANT_IMAGES = ["/hero/Sunglasses.jpg", "/hero/sunglasses2.jpg"];
 
 const SHOP_CATEGORY_CARDS = [
   {
@@ -29,6 +31,7 @@ const SHOP_CATEGORY_CARDS = [
     ctaLabel: "Shop Sunglasses",
     sectionId: "sunglasses-section",
     image: "/hero/Sunglasses.jpg",
+    switchImages: SUNGLASSES_VARIANT_IMAGES,
     alt: "Sunglasses collection"
   },
   {
@@ -97,6 +100,21 @@ const COLLECTION_CARDS = [
     comingSoon: true
   }
 ];
+
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "out_of_stock" || source === "preorder" || source === "in_stock") return source;
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
+function getAvailabilityLabel(value) {
+  if (value === "out_of_stock") return "Out of Stock";
+  if (value === "preorder") return "Preorder";
+  return "In Stock";
+}
 
 function normalizeAudienceKey(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -172,6 +190,10 @@ function matchesQuery(product, query) {
   return haystack.includes(query);
 }
 
+function canDisplayOnStorefront(product) {
+  return normalizeAvailability(product?.availability) !== "out_of_stock";
+}
+
 function scrollToSection(sectionId) {
   document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -212,6 +234,7 @@ function ArrivalsSection({
 }) {
   const [expandedSections, setExpandedSections] = useState({});
   const [categoryInfoNotice, setCategoryInfoNotice] = useState({ id: "", message: "" });
+  const [sunglassesImageIndex, setSunglassesImageIndex] = useState(0);
   const [isMobileView, setIsMobileView] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 760px)").matches;
@@ -244,12 +267,33 @@ function ArrivalsSection({
     });
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const interval = window.setInterval(() => {
+      setSunglassesImageIndex((current) => (current + 1) % SUNGLASSES_VARIANT_IMAGES.length);
+    }, SUNGLASSES_SWITCH_MS);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    SUNGLASSES_VARIANT_IMAGES.forEach((src) => {
+      const image = new window.Image();
+      image.src = src;
+    });
+  }, []);
+
   const visibleProducts = useMemo(() => {
     if (!Array.isArray(products)) return [];
-    return products.filter((product) => matchesQuery(product, query));
+    return products
+      .filter((product) => canDisplayOnStorefront(product))
+      .filter((product) => matchesQuery(product, query));
   }, [products, query]);
 
-  const allProductsByAudience = useMemo(() => groupProductsByAudience(products), [products]);
+  const allProductsByAudience = useMemo(
+    () => groupProductsByAudience((products || []).filter((product) => canDisplayOnStorefront(product))),
+    [products]
+  );
   const visibleProductsByAudience = useMemo(
     () => groupProductsByAudience(visibleProducts),
     [visibleProducts]
@@ -346,6 +390,14 @@ function ArrivalsSection({
             {categoryCards.map((card, index) => {
               const aboveTheFoldCount = isMobileView ? 3 : 4;
               const isHighPriority = index < aboveTheFoldCount;
+              const switchImages =
+                Array.isArray(card.switchImages) && card.switchImages.length > 0
+                  ? card.switchImages
+                  : [card.image];
+              const imageSrc =
+                card.sectionId === "sunglasses-section"
+                  ? switchImages[sunglassesImageIndex % switchImages.length]
+                  : switchImages[0];
               return (
                 <article className="category-card" key={card.id}>
                   <h3>
@@ -363,7 +415,7 @@ function ArrivalsSection({
                     onClick={() => onCategoryCardAction(card)}
                   >
                     <img
-                      src={card.image}
+                      src={imageSrc}
                       alt={card.alt}
                       loading={isHighPriority ? "eager" : "lazy"}
                       fetchPriority={isHighPriority ? "high" : "low"}
@@ -418,6 +470,9 @@ function ArrivalsSection({
               {visibleItems.length > 0 ? (
                 <div className="collection-grid">
                   {visibleItems.map((product) => {
+                    const availability = normalizeAvailability(product.availability);
+                    const isOutOfStock = availability === "out_of_stock";
+                    const isPreorder = availability === "preorder";
                     return (
                       <article className="collection-card" key={product.id}>
                         <button
@@ -437,6 +492,9 @@ function ArrivalsSection({
                           </button>
                         </h3>
                         <p>{toPrice(product.price)}</p>
+                        <p className={`availability-pill availability-${availability}`}>
+                          {getAvailabilityLabel(availability)}
+                        </p>
                         <div className="product-actions">
                           <button
                             type="button"
@@ -449,9 +507,10 @@ function ArrivalsSection({
                             <button
                               type="button"
                               className="primary-action"
+                              disabled={isOutOfStock}
                               onClick={() => onAddToCart(product, 1)}
                             >
-                              Add to Cart
+                              {isOutOfStock ? "Out of Stock" : isPreorder ? "Preorder" : "Add to Cart"}
                             </button>
                           ) : null}
                         </div>

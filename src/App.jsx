@@ -150,6 +150,8 @@ function App() {
       section: normalizeSection(product.section),
       audience: audiences[0],
       audiences,
+      availability: String(product.availability || "in_stock"),
+      preorderNote: String(product.preorderNote || ""),
       ctaLabel: product.ctaLabel || "",
       description: product.description || "",
       detailBullets,
@@ -177,6 +179,11 @@ function App() {
         section: normalizeSection(productDraft.section),
         audience: audiences[0],
         audiences,
+        availability: String(productDraft.availability || "in_stock"),
+        preorderNote:
+          String(productDraft.availability || "in_stock") === "preorder"
+            ? String(productDraft.preorderNote || "").trim()
+            : "",
         ctaLabel: String(productDraft.ctaLabel || "").trim(),
         description: String(productDraft.description || "").trim(),
         detailBullets,

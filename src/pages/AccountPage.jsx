@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchMyOrders, logout, updatePassword, updateProfile } from "../utils/api";
 
+function normalizeAvailability(value) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
+  const compact = source.replace(/[^a-z]/g, "");
+  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
+  if (compact === "preorder" || compact === "preorderonly") return "preorder";
+  return "in_stock";
+}
+
 function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -204,7 +213,16 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
       <ul>
         {(order.items || []).map((item) => (
           <li key={`${order.id}-${item.id || item.productId}`}>
-            {item.name} x {item.quantity}
+            <span>
+              {item.name} x {item.quantity}
+            </span>
+            {normalizeAvailability(item.availability) === "preorder" ? (
+              <small className="order-preorder-note">
+                Preorder:{" "}
+                {String(item.preorderNote || "").trim() ||
+                  "Shipping timeline will be confirmed before dispatch."}
+              </small>
+            ) : null}
           </li>
         ))}
       </ul>
