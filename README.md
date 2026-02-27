@@ -69,6 +69,15 @@ Required env vars in Render:
 - Mail provider vars if you want real email delivery
 - `ORDER_ALERT_EMAIL` (optional, defaults to `ADMIN_EMAIL`)
 
+### Keep Free Render Service Warm (Optional)
+
+This repo includes `.github/workflows/keep-render-awake.yml` which pings:
+
+- `https://ife-shadesnmore.onrender.com/api/health`
+
+every 5 minutes.  
+If your domain/URL changes, update that URL in the workflow file.
+
 ## Order Notification Emails
 
 When an order is marked as `paid` (via Paystack webhook or verify endpoint), the server sends
