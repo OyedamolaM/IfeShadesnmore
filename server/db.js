@@ -553,6 +553,7 @@ async function seedSettingsIfEmpty() {
 
 async function seedProductsIfEmpty() {
   const shouldSeedDefaults =
+    IS_VERCEL ||
     String(process.env.SEED_DEFAULT_PRODUCTS || "")
       .trim()
       .toLowerCase() === "true";
