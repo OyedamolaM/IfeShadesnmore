@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import Header from "../components/layout/Header";
-import HeroSection from "../components/sections/HeroSection";
 import ArrivalsSection from "../components/sections/ArrivalsSection";
-import FeatureStrip from "../components/sections/FeatureStrip";
 import ContactSection from "../components/sections/ContactSection";
 import ProductDetailsModal from "../components/product/ProductDetailsModal";
 import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
+import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
 import { CART_STORAGE_KEY } from "../constants/storefront";
 import { createSubscription, initializeCheckout } from "../utils/api";
 
@@ -94,6 +92,7 @@ function StorefrontPage({
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [previewStyle, setPreviewStyle] = useState("v1");
 
   useEffect(() => {
     const nameParts = splitFullName(currentUser?.fullName || "");
@@ -387,21 +386,26 @@ function StorefrontPage({
             </div>
           </div>
         ) : null}
-        <Header
-          brandName={settings.brandName}
-          brandTagline={settings.brandTagline}
+        <PreviewStorefront
+          products={products}
+          settings={settings}
+          currentUser={currentUser}
+          styleVariant={previewStyle}
+          onStyleVariantChange={setPreviewStyle}
           onOpenAdmin={() => onNavigate(currentUser?.role === "admin" ? "/admin" : "/admin/login")}
           cartCount={cartCount}
           onOpenCart={orderingEnabled ? () => setShowCart(true) : undefined}
           onOpenProfile={() =>
             onNavigate(currentUser ? (currentUser.role === "admin" ? "/admin" : "/account") : "/account/login")
           }
-          onOpenSearch={openSearch}
           onOpenAbout={() => setShowAboutModal(true)}
-          showCart={orderingEnabled}
+          onViewProduct={setSelectedProduct}
+          onAddToCart={addToCart}
+          allowOrdering={orderingEnabled}
+          primaryShopTargetId="shop"
+          showSupportSections={false}
         />
-        <main>
-          <HeroSection settings={settings} heroSlides={heroSlides} />
+        <main className={`preview-flow-continuation preview-flow-${previewStyle}`}>
           <ArrivalsSection
             products={products}
             searchQuery={searchQuery}
@@ -409,8 +413,11 @@ function StorefrontPage({
             onViewProduct={setSelectedProduct}
             onAddToCart={addToCart}
             allowOrdering={orderingEnabled}
+            themeVariant={previewStyle}
           />
-          <FeatureStrip items={settings.featureItems} />
+          <PreviewSupportSections
+            onOpenAdmin={() => onNavigate(currentUser?.role === "admin" ? "/admin" : "/admin/login")}
+          />
           <ContactSection
             email={email}
             emailStatus={emailStatus}

@@ -14,9 +14,13 @@ import { Route as SitemapDotxmlRouteImport } from "./routes/sitemap[.]xml"
 import { Route as RobotsDottxtRouteImport } from "./routes/robots[.]txt"
 import { Route as PrivacyPolicyRouteImport } from "./routes/privacy-policy"
 import { Route as IndexRouteImport } from "./routes/index"
+import { Route as PreviewIndexRouteImport } from "./routes/preview/index"
 import { Route as AdminIndexRouteImport } from "./routes/admin/index"
 import { Route as AccountIndexRouteImport } from "./routes/account/index"
 import { Route as ProductsSlugIdRouteImport } from "./routes/products/$slugId"
+import { Route as PreviewV3RouteImport } from "./routes/preview/v3"
+import { Route as PreviewV2RouteImport } from "./routes/preview/v2"
+import { Route as PreviewV1RouteImport } from "./routes/preview/v1"
 import { Route as PaymentCallbackRouteImport } from "./routes/payment/callback"
 import { Route as ApiSplatRouteImport } from "./routes/api/$"
 import { Route as AdminStorefrontRouteImport } from "./routes/admin/storefront"
@@ -49,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
   path: "/",
   getParentRoute: () => rootRouteImport,
 } as any)
+const PreviewIndexRoute = PreviewIndexRouteImport.update({
+  id: "/preview/",
+  path: "/preview/",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: "/admin/",
   path: "/admin/",
@@ -62,6 +71,21 @@ const AccountIndexRoute = AccountIndexRouteImport.update({
 const ProductsSlugIdRoute = ProductsSlugIdRouteImport.update({
   id: "/products/$slugId",
   path: "/products/$slugId",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewV3Route = PreviewV3RouteImport.update({
+  id: "/preview/v3",
+  path: "/preview/v3",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewV2Route = PreviewV2RouteImport.update({
+  id: "/preview/v2",
+  path: "/preview/v2",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewV1Route = PreviewV1RouteImport.update({
+  id: "/preview/v1",
+  path: "/preview/v1",
   getParentRoute: () => rootRouteImport,
 } as any)
 const PaymentCallbackRoute = PaymentCallbackRouteImport.update({
@@ -107,9 +131,13 @@ export interface FileRoutesByFullPath {
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
   "/payment/callback": typeof PaymentCallbackRoute
+  "/preview/v1": typeof PreviewV1Route
+  "/preview/v2": typeof PreviewV2Route
+  "/preview/v3": typeof PreviewV3Route
   "/products/$slugId": typeof ProductsSlugIdRoute
   "/account/": typeof AccountIndexRoute
   "/admin/": typeof AdminIndexRoute
+  "/preview/": typeof PreviewIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
@@ -123,9 +151,13 @@ export interface FileRoutesByTo {
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
   "/payment/callback": typeof PaymentCallbackRoute
+  "/preview/v1": typeof PreviewV1Route
+  "/preview/v2": typeof PreviewV2Route
+  "/preview/v3": typeof PreviewV3Route
   "/products/$slugId": typeof ProductsSlugIdRoute
   "/account": typeof AccountIndexRoute
   "/admin": typeof AdminIndexRoute
+  "/preview": typeof PreviewIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -140,9 +172,13 @@ export interface FileRoutesById {
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
   "/payment/callback": typeof PaymentCallbackRoute
+  "/preview/v1": typeof PreviewV1Route
+  "/preview/v2": typeof PreviewV2Route
+  "/preview/v3": typeof PreviewV3Route
   "/products/$slugId": typeof ProductsSlugIdRoute
   "/account/": typeof AccountIndexRoute
   "/admin/": typeof AdminIndexRoute
+  "/preview/": typeof PreviewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -158,9 +194,13 @@ export interface FileRouteTypes {
     | "/admin/storefront"
     | "/api/$"
     | "/payment/callback"
+    | "/preview/v1"
+    | "/preview/v2"
+    | "/preview/v3"
     | "/products/$slugId"
     | "/account/"
     | "/admin/"
+    | "/preview/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -174,9 +214,13 @@ export interface FileRouteTypes {
     | "/admin/storefront"
     | "/api/$"
     | "/payment/callback"
+    | "/preview/v1"
+    | "/preview/v2"
+    | "/preview/v3"
     | "/products/$slugId"
     | "/account"
     | "/admin"
+    | "/preview"
   id:
     | "__root__"
     | "/"
@@ -190,9 +234,13 @@ export interface FileRouteTypes {
     | "/admin/storefront"
     | "/api/$"
     | "/payment/callback"
+    | "/preview/v1"
+    | "/preview/v2"
+    | "/preview/v3"
     | "/products/$slugId"
     | "/account/"
     | "/admin/"
+    | "/preview/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -207,9 +255,13 @@ export interface RootRouteChildren {
   AdminStorefrontRoute: typeof AdminStorefrontRoute
   ApiSplatRoute: typeof ApiSplatRoute
   PaymentCallbackRoute: typeof PaymentCallbackRoute
+  PreviewV1Route: typeof PreviewV1Route
+  PreviewV2Route: typeof PreviewV2Route
+  PreviewV3Route: typeof PreviewV3Route
   ProductsSlugIdRoute: typeof ProductsSlugIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  PreviewIndexRoute: typeof PreviewIndexRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -249,6 +301,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/preview/": {
+      id: "/preview/"
+      path: "/preview"
+      fullPath: "/preview/"
+      preLoaderRoute: typeof PreviewIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/admin/": {
       id: "/admin/"
       path: "/admin"
@@ -268,6 +327,27 @@ declare module "@tanstack/react-router" {
       path: "/products/$slugId"
       fullPath: "/products/$slugId"
       preLoaderRoute: typeof ProductsSlugIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/preview/v3": {
+      id: "/preview/v3"
+      path: "/preview/v3"
+      fullPath: "/preview/v3"
+      preLoaderRoute: typeof PreviewV3RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/preview/v2": {
+      id: "/preview/v2"
+      path: "/preview/v2"
+      fullPath: "/preview/v2"
+      preLoaderRoute: typeof PreviewV2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/preview/v1": {
+      id: "/preview/v1"
+      path: "/preview/v1"
+      fullPath: "/preview/v1"
+      preLoaderRoute: typeof PreviewV1RouteImport
       parentRoute: typeof rootRouteImport
     }
     "/payment/callback": {
@@ -327,9 +407,13 @@ const rootRouteChildren: RootRouteChildren = {
   AdminStorefrontRoute: AdminStorefrontRoute,
   ApiSplatRoute: ApiSplatRoute,
   PaymentCallbackRoute: PaymentCallbackRoute,
+  PreviewV1Route: PreviewV1Route,
+  PreviewV2Route: PreviewV2Route,
+  PreviewV3Route: PreviewV3Route,
   ProductsSlugIdRoute: ProductsSlugIdRoute,
   AccountIndexRoute: AccountIndexRoute,
   AdminIndexRoute: AdminIndexRoute,
+  PreviewIndexRoute: PreviewIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

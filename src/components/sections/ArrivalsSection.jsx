@@ -1,22 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 import { trackEvent } from "../../utils/analytics";
 
-const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
 const MIN_SEARCH_LENGTH = 3;
 
-function productSlugId(product) {
-  const slug =
-    String(product?.name || product?.id || "product")
-      .toLowerCase()
-      .replace(/&/g, " and ")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "product";
-  return `${slug}--${encodeURIComponent(product.id)}`;
-}
+const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
 const SUNGLASSES_SWITCH_MS = 5000;
 const SUNGLASSES_VARIANT_IMAGES = ["/hero/Sunglasses.jpg", "/hero/sunglasses2.jpg"];
 
@@ -242,7 +231,8 @@ function ArrivalsSection({
   onSearchChange,
   onViewProduct,
   onAddToCart,
-  allowOrdering = true
+  allowOrdering = true,
+  themeVariant = "v1"
 }) {
   const [expandedSections, setExpandedSections] = useState({});
   const [categoryInfoNotice, setCategoryInfoNotice] = useState({ id: "", message: "" });
@@ -342,6 +332,7 @@ function ArrivalsSection({
       const isAvailable = productCount > 0;
       return {
         ...card,
+        productCount,
         isAvailable,
         comingSoon
       };
@@ -380,8 +371,18 @@ function ArrivalsSection({
     });
   };
 
+  const onViewAllCategories = () => {
+    const firstAvailableCard = categoryCards.find((card) => card.isAvailable);
+    if (firstAvailableCard) {
+      scrollToSection(firstAvailableCard.sectionId);
+      return;
+    }
+
+    document.getElementById("shop")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <section className="shop-sections" id="shop">
+    <section className={`shop-sections themed-product-section themed-product-${themeVariant}`} id="shop">
       <div className="container">
         <div className="shop-toolbar">
           <h2>Shop Collection</h2>
@@ -398,66 +399,87 @@ function ArrivalsSection({
         ) : null}
 
         {!isSearching ? (
-          <div className="category-grid">
-            {categoryCards.map((card, index) => {
-              const aboveTheFoldCount = isMobileView ? 3 : 4;
-              const isHighPriority = index < aboveTheFoldCount;
-              const switchImages =
-                Array.isArray(card.switchImages) && card.switchImages.length > 0
-                  ? card.switchImages
-                  : [card.image];
-              const imageSrc =
-                card.sectionId === "sunglasses-section"
-                  ? switchImages[sunglassesImageIndex % switchImages.length]
-                  : switchImages[0];
-              return (
-                <article className="category-card" key={card.id}>
-                  <h3>
-                    <button
-                      type="button"
-                      className="product-name-button"
-                      onClick={() => onCategoryCardAction(card)}
-                    >
-                      {card.title}
-                    </button>
-                  </h3>
-                  <button
-                    type="button"
-                    className="category-media media-button"
-                    onClick={() => onCategoryCardAction(card)}
+          <section className="featured-category-showcase" aria-labelledby="featured-category-heading">
+            <div className="featured-category-heading">
+              <div>
+                <p>The Drop</p>
+                <h2 id="featured-category-heading">Featured categories</h2>
+              </div>
+              <button type="button" onClick={onViewAllCategories}>
+                View all
+              </button>
+            </div>
+            <div className="category-grid">
+              {categoryCards.map((card, index) => {
+                const aboveTheFoldCount = isMobileView ? 3 : 4;
+                const isHighPriority = index < aboveTheFoldCount;
+                const switchImages =
+                  Array.isArray(card.switchImages) && card.switchImages.length > 0
+                    ? card.switchImages
+                    : [card.image];
+                const imageSrc =
+                  card.sectionId === "sunglasses-section"
+                    ? switchImages[sunglassesImageIndex % switchImages.length]
+                    : switchImages[0];
+                return (
+                  <article
+                    className={index % 2 === 1 ? "category-card is-offset" : "category-card"}
+                    key={card.id}
                   >
-                    <img
-                      src={imageSrc}
-                      alt={card.alt}
-                      loading={isHighPriority ? "eager" : "lazy"}
-                      fetchpriority={isHighPriority ? "high" : "low"}
-                      decoding="async"
-                      onError={(event) => {
-                        if (event.currentTarget.src.endsWith(CATEGORY_PLACEHOLDER_IMAGE)) return;
-                        event.currentTarget.src = CATEGORY_PLACEHOLDER_IMAGE;
-                      }}
-                    />
-                  </button>
-                  <div className="product-actions">
                     <button
                       type="button"
-                      className="secondary-action"
+                      className="category-media media-button"
                       onClick={() => onCategoryCardAction(card)}
                     >
-                      {card.isAvailable
-                        ? card.ctaLabel
-                        : card.comingSoon
-                        ? "Coming Soon"
-                        : card.ctaLabel}
+                      <span>Category</span>
+                      <img
+                        src={imageSrc}
+                        alt={card.alt}
+                        loading={isHighPriority ? "eager" : "lazy"}
+                        fetchpriority={isHighPriority ? "high" : "low"}
+                        decoding="async"
+                        onError={(event) => {
+                          if (event.currentTarget.src.endsWith(CATEGORY_PLACEHOLDER_IMAGE)) return;
+                          event.currentTarget.src = CATEGORY_PLACEHOLDER_IMAGE;
+                        }}
+                      />
                     </button>
-                  </div>
-                  {categoryInfoNotice.id === card.id ? (
-                    <p className="category-info-note">{categoryInfoNotice.message}</p>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
+                    <div className="category-card-meta">
+                      <div>
+                        <h3>
+                          <button
+                            type="button"
+                            className="product-name-button"
+                            onClick={() => onCategoryCardAction(card)}
+                          >
+                            {card.title}
+                          </button>
+                        </h3>
+                        <p>
+                          {card.comingSoon
+                            ? "Coming soon"
+                            : card.isAvailable
+                            ? card.ctaLabel
+                            : "Restocking soon"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="category-add-button"
+                        aria-label={card.isAvailable ? `Open ${card.title}` : `${card.title} status`}
+                        onClick={() => onCategoryCardAction(card)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    {categoryInfoNotice.id === card.id ? (
+                      <p className="category-info-note">{categoryInfoNotice.message}</p>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         ) : null}
 
         {visibleCollectionCards.map((card) => {
@@ -481,48 +503,45 @@ function ArrivalsSection({
 
               {visibleItems.length > 0 ? (
                 <div className="collection-grid">
-                  {visibleItems.map((product) => {
+                  {visibleItems.map((product, index) => {
                     const availability = normalizeAvailability(product.availability);
                     const isOutOfStock = availability === "out_of_stock";
-                    const isPreorder = availability === "preorder";
                     return (
-                      <article className="collection-card" key={product.id}>
+                      <article className={index % 2 === 1 ? "collection-card is-offset" : "collection-card"} key={product.id}>
                         <button
                           type="button"
                           className="seller-media media-button"
                           onClick={() => onViewProduct(product)}
                         >
+                          <span className="themed-product-tag">
+                            {getAvailabilityLabel(availability)}
+                          </span>
                           <ProductMedia product={product} />
                         </button>
-                        <h3>
-                          <button
-                            type="button"
-                            className="product-name-button"
-                            onClick={() => onViewProduct(product)}
-                          >
-                            {product.name}
-                          </button>
-                        </h3>
-                        <p>{toPrice(product.price)}</p>
-                        <p className={`availability-pill availability-${availability}`}>
-                          {getAvailabilityLabel(availability)}
-                        </p>
-                        <div className="product-actions">
-                          <Link
-                            className="secondary-action"
-                            to="/products/$slugId"
-                            params={{ slugId: productSlugId(product) }}
-                          >
-                            Details
-                          </Link>
+                        <div className="collection-card-meta">
+                          <div>
+                            <h3>
+                              <button
+                                type="button"
+                                className="product-name-button"
+                                onClick={() => onViewProduct(product)}
+                              >
+                                {product.name}
+                              </button>
+                            </h3>
+                            <p>{toPrice(product.price)}</p>
+                          </div>
                           {allowOrdering ? (
                             <button
                               type="button"
-                              className="primary-action"
+                              className="collection-add-button"
                               disabled={isOutOfStock}
-                              onClick={() => onAddToCart(product, 1)}
+                              aria-label={isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`}
+                              onClick={() => {
+                                if (!isOutOfStock) onAddToCart(product, 1);
+                              }}
                             >
-                              {isOutOfStock ? "Out of Stock" : isPreorder ? "Preorder" : "Add to Cart"}
+                              +
                             </button>
                           ) : null}
                         </div>

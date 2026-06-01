@@ -40,8 +40,7 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
   const officeAddress = "1, Sunday Akinbo Str, command Ipaja, Lagos";
   const whatsappLink =
     "https://wa.me/2349063556765?text=Hello%20Ife_ShadesnMore%2C%20I%20would%20like%20to%20make%20an%20order.";
-  const savansWhatsAppLink =
-    "https://wa.me/2348165258326?text=Hello%20Savans%20Technologies%2C%20I%20need%20a%20website.";
+  const savansWebsiteLink = "https://www.savanstech.com";
 
   return (
     <>
@@ -93,7 +92,7 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
               Powered by{" "}
               <a
                 className="footer-credit-link"
-                href={savansWhatsAppLink}
+                href={savansWebsiteLink}
                 target="_blank"
                 rel="noopener noreferrer"
               >
