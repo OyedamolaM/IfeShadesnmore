@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { fetchMyOrders, logout, updatePassword, updateProfile } from "../utils/api";
 
 function normalizeAvailability(value) {
@@ -114,7 +114,7 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
   const signOut = async () => {
     await logout().catch(() => {});
     onLoggedOut();
-    navigate("/", { replace: true });
+    navigate({ to: "/", replace: true });
   };
 
   const openProfileModal = () => {
@@ -248,7 +248,7 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
             <button
               type="button"
               className="account-action-button account-action-shop"
-              onClick={() => navigate("/")}
+              onClick={() => navigate({ to: "/" })}
             >
               Back to Shop
             </button>

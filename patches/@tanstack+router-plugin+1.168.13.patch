@@ -1,0 +1,13 @@
+diff --git a/node_modules/@tanstack/router-plugin/dist/esm/core/code-splitter/compilers.js b/node_modules/@tanstack/router-plugin/dist/esm/core/code-splitter/compilers.js
+index f557751..ae30409 100644
+--- a/node_modules/@tanstack/router-plugin/dist/esm/core/code-splitter/compilers.js
++++ b/node_modules/@tanstack/router-plugin/dist/esm/core/code-splitter/compilers.js
+@@ -296,7 +296,7 @@ function compileCodeSplitReferenceRoute(opts) {
+ 									if (!shouldSplit) return;
+ 									modified = true;
+ 									if (!hasImportedOrDefinedIdentifier(LAZY_ROUTE_COMPONENT_IDENT)) programPath.unshiftContainer("body", [template.statement(`import { ${LAZY_ROUTE_COMPONENT_IDENT} } from '${PACKAGE}'`)()]);
+-									if (!hasImportedOrDefinedIdentifier(splitNodeMeta.localImporterIdent)) programPath.unshiftContainer("body", [template.statement(`const ${splitNodeMeta.localImporterIdent} = () => import('${splitUrl}')`)()]);
++									if (!hasImportedOrDefinedIdentifier(splitNodeMeta.localImporterIdent)) programPath.unshiftContainer("body", [template.statement(`const ${splitNodeMeta.localImporterIdent} = () => import(${JSON.stringify(splitUrl)})`)()]);
+ 									const insertionPath = path.getStatementParent() ?? path;
+ 									let splitPropValue;
+ 									for (const plugin of opts.compilerPlugins ?? []) {

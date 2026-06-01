@@ -113,7 +113,7 @@ function HeroSection({ settings, heroSlides }) {
                       }`}
                       src={index === heroIndex || index === nextSlideIndex ? slide.src : undefined}
                       loading={index === heroIndex ? "eager" : "lazy"}
-                      fetchPriority={index === heroIndex ? "high" : "low"}
+                      fetchpriority={index === heroIndex ? "high" : "low"}
                       decoding="async"
                       alt={slide.alt || "Model wearing eyeglasses"}
                       style={{

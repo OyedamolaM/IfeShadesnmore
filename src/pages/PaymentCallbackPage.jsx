@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { verifyCheckout } from "../utils/api";
 
 function AuthContainer({ title, subtitle, children }) {
@@ -18,7 +18,8 @@ function AuthContainer({ title, subtitle, children }) {
 
 function PaymentCallbackPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.searchStr || "");
   const reference = searchParams.get("reference") || searchParams.get("trxref") || "";
   const [state, setState] = useState({
     loading: true,
@@ -68,10 +69,10 @@ function PaymentCallbackPage() {
       {state.error ? <p className="form-error">{state.error}</p> : null}
       {!state.loading && !state.error ? <p className="form-success">{state.message}</p> : null}
       <div className="auth-inline-actions">
-        <button type="button" className="secondary-action" onClick={() => navigate("/account")}>
+        <button type="button" className="secondary-action" onClick={() => navigate({ to: "/account" })}>
           View Orders
         </button>
-        <button type="button" className="primary-action" onClick={() => navigate("/")}>
+        <button type="button" className="primary-action" onClick={() => navigate({ to: "/" })}>
           Back to Shop
         </button>
       </div>

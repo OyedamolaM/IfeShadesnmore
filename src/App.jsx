@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import AdminOverlay from "./components/admin/AdminOverlay";
 import {
   DEFAULT_HERO_ROTATION_IMAGES,
@@ -7,13 +7,13 @@ import {
   DEFAULT_SETTINGS,
   EMPTY_PRODUCT
 } from "./constants/storefront";
-import { fileToDataUrl } from "./utils/files";
 import {
   createProduct,
   deleteProduct,
   fetchMe,
   fetchStorefront,
   logout,
+  uploadImage,
   updateProduct,
   updateSettings
 } from "./utils/api";
@@ -74,15 +74,21 @@ function formatDetailBulletLines(value) {
   return resolved.join("\n");
 }
 
-function App() {
+function App({ screen = "home", initialStorefront = null, initialUser = null }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialStorefront);
   const [loadError, setLoadError] = useState("");
-  const [products, setProducts] = useState([]);
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [products, setProducts] = useState(() =>
+    Array.isArray(initialStorefront?.products)
+      ? initialStorefront.products.map(normalizeProduct)
+      : []
+  );
+  const [settings, setSettings] = useState(() =>
+    initialStorefront?.settings ? { ...DEFAULT_SETTINGS, ...initialStorefront.settings } : DEFAULT_SETTINGS
+  );
+  const [currentUser, setCurrentUser] = useState(initialUser || null);
 
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [productDraft, setProductDraft] = useState(EMPTY_PRODUCT);
@@ -99,9 +105,21 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const path = `${location.pathname || "/"}${location.search || ""}${location.hash || ""}`;
+    const path = `${location.pathname || "/"}${location.searchStr || ""}${location.hash || ""}`;
     trackPageView(path);
-  }, [location.pathname, location.search, location.hash]);
+  }, [location.pathname, location.searchStr, location.hash]);
+
+  const navigateTo = (target, options = {}) => {
+    const value = String(target || "/");
+    const [pathAndSearch, hashPart = ""] = value.split("#");
+    const [pathname, searchPart = ""] = pathAndSearch.split("?");
+    navigate({
+      to: pathname || "/",
+      search: searchPart ? Object.fromEntries(new URLSearchParams(searchPart)) : undefined,
+      hash: hashPart || undefined,
+      replace: Boolean(options.replace)
+    });
+  };
 
   const loadStore = async () => {
     setIsLoading(true);
@@ -126,18 +144,19 @@ function App() {
   };
 
   useEffect(() => {
+    if (initialStorefront) return;
     loadStore();
-  }, []);
+  }, [initialStorefront]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.altKey && event.key.toLowerCase() === "a") {
-        navigate(currentUser?.role === "admin" ? "/admin" : "/admin/login");
+        navigateTo(currentUser?.role === "admin" ? "/admin" : "/admin/login");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentUser, navigate]);
+  }, [currentUser]);
 
   const startEdit = (product) => {
     setIsEditingProduct(true);
@@ -247,11 +266,12 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
-      setProductDraft((current) => ({ ...current, image: dataUrl }));
+      setAdminMessage("Uploading product image...");
+      const uploaded = await uploadImage(file, "product");
+      setProductDraft((current) => ({ ...current, image: uploaded.secureUrl }));
       setAdminMessage("Product image uploaded.");
-    } catch {
-      setAdminMessage("Could not read selected product image.");
+    } catch (error) {
+      setAdminMessage(error.message || "Could not upload selected product image.");
     }
   };
 
@@ -259,121 +279,120 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
-      setSettingsDraft((current) => ({ ...current, heroImage: dataUrl }));
+      setAdminMessage("Uploading hero image...");
+      const uploaded = await uploadImage(file, "hero");
+      setSettingsDraft((current) => ({ ...current, heroImage: uploaded.secureUrl }));
       setAdminMessage("Hero image uploaded.");
-    } catch {
-      setAdminMessage("Could not read selected hero image.");
+    } catch (error) {
+      setAdminMessage(error.message || "Could not upload selected hero image.");
     }
   };
 
   const handleAdminLogout = async () => {
     await logout().catch(() => {});
     setCurrentUser(null);
-    navigate("/admin/login", { replace: true });
+    navigateTo("/admin/login", { replace: true });
   };
 
   if (isLoading) return <LoadingView />;
   if (loadError) return <ErrorView message={loadError} onRetry={loadStore} />;
 
-  return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <StorefrontPage
-            products={products}
-            settings={settings}
-            heroSlides={heroSlides}
-            currentUser={currentUser}
-            location={location}
-            onNavigate={navigate}
-            orderingEnabled={currentUser?.role !== "admin"}
-          />
+  const routeLocation = {
+    pathname: location.pathname || "/",
+    search: location.searchStr || "",
+    hash: location.hash || ""
+  };
+
+  if (screen === "admin-preview" && currentUser?.role !== "admin") {
+    navigateTo("/admin/login", { replace: true });
+    return <LoadingView />;
+  }
+
+  if (screen === "account" && !currentUser) {
+    navigateTo("/account/login", { replace: true });
+    return <LoadingView />;
+  }
+
+  if (screen === "account" && currentUser?.role === "admin") {
+    navigateTo("/admin", { replace: true });
+    return <LoadingView />;
+  }
+
+  if (screen === "admin" && currentUser?.role !== "admin") {
+    navigateTo("/admin/login", { replace: true });
+    return <LoadingView />;
+  }
+
+  if (screen === "home" || screen === "admin-preview") {
+    return (
+      <StorefrontPage
+        products={products}
+        settings={settings}
+        heroSlides={heroSlides}
+        currentUser={currentUser}
+        location={routeLocation}
+        onNavigate={navigateTo}
+        orderingEnabled={screen === "home" && currentUser?.role !== "admin"}
+        isAdminPreview={screen === "admin-preview"}
+      />
+    );
+  }
+
+  if (screen === "account-login") {
+    return <AccountLoginPage currentUser={currentUser} onAuthenticated={setCurrentUser} />;
+  }
+
+  if (screen === "verify-email") {
+    return <VerifyEmailPage onVerified={setCurrentUser} />;
+  }
+
+  if (screen === "account") {
+    return (
+      <AccountPage
+        currentUser={currentUser}
+        onLoggedOut={() => setCurrentUser(null)}
+        onUserUpdated={setCurrentUser}
+      />
+    );
+  }
+
+  if (screen === "admin-login") {
+    return <AdminLoginPage currentUser={currentUser} onAuthenticated={setCurrentUser} />;
+  }
+
+  if (screen === "admin") {
+    return (
+      <AdminOverlay
+        currentUser={currentUser}
+        settingsDraft={settingsDraft}
+        onSettingsDraftChange={(field, value) =>
+          setSettingsDraft((current) => ({ ...current, [field]: value }))
         }
-      />
-      <Route
-        path="/admin/storefront"
-        element={
-          currentUser?.role === "admin" ? (
-            <StorefrontPage
-              products={products}
-              settings={settings}
-              heroSlides={heroSlides}
-              currentUser={currentUser}
-              location={location}
-              onNavigate={navigate}
-              orderingEnabled={false}
-              isAdminPreview
-            />
-          ) : (
-            <Navigate to="/admin/login" replace />
-          )
+        onSaveSettings={handleSettingsSave}
+        onHeroUpload={handleHeroUpload}
+        productDraft={productDraft}
+        onProductDraftChange={(field, value) =>
+          setProductDraft((current) => ({ ...current, [field]: value }))
         }
+        onProductSubmit={handleProductSubmit}
+        onProductUpload={handleProductUpload}
+        isEditing={isEditingProduct}
+        onCancelEdit={resetProductDraft}
+        products={products}
+        onStartEdit={startEdit}
+        onRemoveProduct={handleProductRemove}
+        adminMessage={adminMessage}
+        onOpenStorefront={() => navigateTo("/admin/storefront")}
+        onLogout={handleAdminLogout}
       />
-      <Route
-        path="/account/login"
-        element={<AccountLoginPage currentUser={currentUser} onAuthenticated={setCurrentUser} />}
-      />
-      <Route path="/account/verify-email" element={<VerifyEmailPage onVerified={setCurrentUser} />} />
-      <Route
-        path="/account"
-        element={
-          currentUser ? (
-            currentUser.role === "admin" ? (
-              <Navigate to="/admin" replace />
-            ) : (
-            <AccountPage
-              currentUser={currentUser}
-              onLoggedOut={() => setCurrentUser(null)}
-              onUserUpdated={setCurrentUser}
-            />
-            )
-          ) : (
-            <Navigate to="/account/login" replace />
-          )
-        }
-      />
-      <Route
-        path="/admin/login"
-        element={<AdminLoginPage currentUser={currentUser} onAuthenticated={setCurrentUser} />}
-      />
-      <Route
-        path="/admin"
-        element={
-          currentUser?.role === "admin" ? (
-            <AdminOverlay
-              currentUser={currentUser}
-              settingsDraft={settingsDraft}
-              onSettingsDraftChange={(field, value) =>
-                setSettingsDraft((current) => ({ ...current, [field]: value }))
-              }
-              onSaveSettings={handleSettingsSave}
-              onHeroUpload={handleHeroUpload}
-              productDraft={productDraft}
-              onProductDraftChange={(field, value) =>
-                setProductDraft((current) => ({ ...current, [field]: value }))
-              }
-              onProductSubmit={handleProductSubmit}
-              onProductUpload={handleProductUpload}
-              isEditing={isEditingProduct}
-              onCancelEdit={resetProductDraft}
-              products={products}
-              onStartEdit={startEdit}
-              onRemoveProduct={handleProductRemove}
-              adminMessage={adminMessage}
-              onOpenStorefront={() => navigate("/admin/storefront")}
-              onLogout={handleAdminLogout}
-            />
-          ) : (
-            <Navigate to="/admin/login" replace />
-          )
-        }
-      />
-      <Route path="/payment/callback" element={<PaymentCallbackPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+    );
+  }
+
+  if (screen === "payment-callback") {
+    return <PaymentCallbackPage />;
+  }
+
+  return <StorefrontPage products={products} settings={settings} heroSlides={heroSlides} currentUser={currentUser} location={routeLocation} onNavigate={navigateTo} />;
 }
 
 export default App;

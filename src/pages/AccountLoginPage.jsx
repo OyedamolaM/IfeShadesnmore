@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { login, register, resendVerificationEmail } from "../utils/api";
 
 function AuthContainer({ title, subtitle, children, shellClassName = "" }) {
@@ -19,7 +19,8 @@ function AuthContainer({ title, subtitle, children, shellClassName = "" }) {
 
 function AccountLoginPage({ currentUser, onAuthenticated }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.searchStr || "");
   const redirectParam = String(searchParams.get("redirect") || "").trim();
   const redirect = redirectParam.startsWith("/") ? redirectParam : "/";
   const [mode, setMode] = useState("login");
@@ -41,7 +42,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
 
   useEffect(() => {
     if (currentUser) {
-      navigate(currentUser.role === "admin" ? "/admin" : redirect, { replace: true });
+      navigate({ to: currentUser.role === "admin" ? "/admin" : redirect, replace: true });
     }
   }, [currentUser, navigate, redirect]);
 
@@ -60,7 +61,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
         });
         onAuthenticated(payload.user);
         setNotice("Login successful. Redirecting...");
-        navigate(payload.user?.role === "admin" ? "/admin" : redirect, { replace: true });
+        navigate({ to: payload.user?.role === "admin" ? "/admin" : redirect, replace: true });
       } else {
         if (!form.firstName.trim() || !form.lastName.trim()) {
           setError("First name and last name are required.");

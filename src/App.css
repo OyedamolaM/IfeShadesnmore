@@ -1106,6 +1106,145 @@ select {
   cursor: pointer;
 }
 
+.legal-page {
+  background: #f5f2ee;
+}
+
+.legal-shell {
+  min-height: 100vh;
+  background: #f8f6f2;
+}
+
+.legal-page-inner {
+  max-width: 980px;
+  padding-top: 3rem;
+  padding-bottom: 4rem;
+}
+
+.legal-back-link {
+  display: inline-flex;
+  margin-bottom: 1.4rem;
+  color: #3d4652;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.legal-heading {
+  border-bottom: 1px solid #ddd6cc;
+  padding-bottom: 1.4rem;
+}
+
+.legal-heading h1 {
+  margin: 0.25rem 0 0.8rem;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(2.3rem, 5vw, 4rem);
+  line-height: 1;
+  font-weight: 500;
+}
+
+.legal-heading p {
+  margin: 0;
+  max-width: 760px;
+  color: #59616b;
+  line-height: 1.6;
+}
+
+.legal-content {
+  display: grid;
+  gap: 1.25rem;
+  padding-top: 1.6rem;
+}
+
+.legal-content section {
+  background: #ffffff;
+  border: 1px solid #e8e2d9;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.legal-content h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.15rem;
+  color: #20252d;
+}
+
+.legal-content p {
+  margin: 0.45rem 0 0;
+  color: #4f5660;
+  line-height: 1.65;
+}
+
+.legal-content a {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.product-seo-page {
+  background: #f5f2ee;
+}
+
+.product-seo-shell {
+  min-height: 100vh;
+  background: #f8f6f2;
+}
+
+.product-seo-inner {
+  max-width: 1120px;
+  padding-top: 3rem;
+  padding-bottom: 4rem;
+}
+
+.product-seo-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.product-seo-media {
+  background: #ffffff;
+  border: 1px solid #e8e2d9;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.product-seo-content {
+  background: #ffffff;
+  border: 1px solid #e8e2d9;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.product-seo-content h1 {
+  margin: 0.75rem 0 0.45rem;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(2.1rem, 4vw, 3.7rem);
+  line-height: 1;
+  font-weight: 500;
+}
+
+.product-seo-content > p {
+  color: #4f5660;
+  line-height: 1.65;
+}
+
+.product-seo-price {
+  margin: 0 0 0.8rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #1f2430 !important;
+}
+
+.product-seo-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  text-decoration: none;
+}
+
 .footer-contact-stack {
   display: grid;
   gap: 0.22rem;

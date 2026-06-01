@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { verifyEmailToken } from "../utils/api";
 
 function AuthContainer({ title, subtitle, children }) {
@@ -18,7 +18,8 @@ function AuthContainer({ title, subtitle, children }) {
 
 function VerifyEmailPage({ onVerified }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.searchStr || "");
   const token = String(searchParams.get("token") || "").trim();
   const [state, setState] = useState({
     loading: true,
@@ -60,10 +61,10 @@ function VerifyEmailPage({ onVerified }) {
       {state.error ? <p className="form-error">{state.error}</p> : null}
       {state.message ? <p className="form-success">{state.message}</p> : null}
       <div className="auth-inline-actions">
-        <button type="button" className="secondary-action" onClick={() => navigate("/account/login")}>
+        <button type="button" className="secondary-action" onClick={() => navigate({ to: "/account/login" })}>
           Go to Login
         </button>
-        <button type="button" className="primary-action" onClick={() => navigate("/account")}>
+        <button type="button" className="primary-action" onClick={() => navigate({ to: "/account" })}>
           Go to Account
         </button>
       </div>
@@ -72,4 +73,3 @@ function VerifyEmailPage({ onVerified }) {
 }
 
 export default VerifyEmailPage;
-

@@ -1,10 +1,12 @@
  #  Ife_ShadesnMore
 
-React + Express storefront with:
+TanStack Start + Vite storefront with:
 - Admin dashboard (`/admin`)
 - Customer auth/profile/orders (`/account`)
 - Paystack checkout + webhook verification
 - Email verification for customer signup
+- SSR product/legal pages with rich SEO, `robots.txt`, and `sitemap.xml`
+- Cloudinary signed admin uploads for product and hero images
 - Multi-collection products (one product can belong to multiple audiences)
 - Dual DB support:
   - SQLite for local development
@@ -31,6 +33,9 @@ React + Express storefront with:
 5. Google Analytics 4:
    - Set `VITE_GA_MEASUREMENT_ID` (example: `G-T3SYCHH988`)
    - Redeploy so Vite can bake it into the frontend build.
+6. Cloudinary uploads:
+   - Set `CLOUDINARY_URL` (`cloudinary://API_KEY:API_SECRET@CLOUD_NAME`)
+   - Optional: set `CLOUDINARY_FOLDER` (defaults to `ife-shadesnmore`)
 
 ## 2) Run Locally
 
@@ -39,8 +44,7 @@ npm install
 npm run dev
 ```
 
-- Frontend: `http://localhost:5173`
-- API: `http://localhost:4000`
+- App + API: `http://localhost:3000`
 
 Local DB defaults to `server/data/ife-store.db` unless `DATABASE_URL` is set.
 
@@ -60,12 +64,13 @@ The included `render.yaml` is now configured for free tier without a disk.
 
 Required env vars in Render:
 - `DATABASE_URL` (Neon/Postgres)
-- `FRONTEND_URL` (your Render app URL)
-- `CORS_ORIGIN` (same as frontend URL)
+- `FRONTEND_URL` and `SITE_URL` (your Render app URL)
+- `VITE_SITE_URL` (same public app URL, used for browser SEO fallbacks)
 - `JWT_SECRET`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `PAYSTACK_SECRET_KEY`
+- `CLOUDINARY_URL` (for admin image uploads)
 - Mail provider vars if you want real email delivery
 - `ORDER_ALERT_EMAIL` (optional, defaults to `ADMIN_EMAIL`)
 

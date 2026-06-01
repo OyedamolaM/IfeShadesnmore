@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { fetchAdminBootstrapState, login, logout } from "../utils/api";
 
 function AuthContainer({ title, subtitle, children }) {
@@ -26,7 +26,7 @@ function AdminLoginPage({ currentUser, onAuthenticated }) {
 
   useEffect(() => {
     if (currentUser?.role === "admin") {
-      navigate("/admin", { replace: true });
+      navigate({ to: "/admin", replace: true });
     }
   }, [currentUser, navigate]);
 
@@ -51,7 +51,7 @@ function AdminLoginPage({ currentUser, onAuthenticated }) {
         return;
       }
       onAuthenticated(payload.user);
-      navigate("/admin", { replace: true });
+      navigate({ to: "/admin", replace: true });
     } catch (requestError) {
       setError(requestError.message || "Admin login failed.");
     } finally {

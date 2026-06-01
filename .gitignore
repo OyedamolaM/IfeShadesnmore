@@ -1,10 +1,16 @@
 node_modules/
 .env
 dist/
+.output/
+.tanstack/
 server/data/
 cookies.txt
 tmp_checkpoint.mjs
 .env.example
+.output-smoke.log
+.output-smoke.err.log
+.dev-server.log
+.dev-server.err.log
 .agents/
 .claude/
 skills-lock.json

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 
 function SocialIcon({ type }) {
   if (type === "facebook") {
@@ -35,7 +35,6 @@ function SocialIcon({ type }) {
 }
 
 function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubscribing = false }) {
-  const [openLegalModal, setOpenLegalModal] = useState("");
   const emailAddress = "oluborodedeborah2000@gmail.com";
   const phoneNumber = "09063556765";
   const officeAddress = "1, Sunday Akinbo Str, command Ipaja, Lagos";
@@ -43,31 +42,6 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
     "https://wa.me/2349063556765?text=Hello%20Ife_ShadesnMore%2C%20I%20would%20like%20to%20make%20an%20order.";
   const savansWhatsAppLink =
     "https://wa.me/2348165258326?text=Hello%20Savans%20Technologies%2C%20I%20need%20a%20website.";
-  const isLegalOpen = openLegalModal === "privacy" || openLegalModal === "terms";
-
-  const legalContent = useMemo(() => {
-    if (openLegalModal === "privacy") {
-      return {
-        title: "Privacy Policy",
-        body: [
-          "We only collect details needed to process orders, deliver products, and send updates you subscribe for. We do not sell your personal information.",
-          "Payments are processed securely through Paystack. To request update or removal of your information, contact us via email or WhatsApp."
-        ]
-      };
-    }
-
-    if (openLegalModal === "terms") {
-      return {
-        title: "Terms of Service",
-        body: [
-          "By placing an order, you agree to provide accurate delivery details and make payment through approved channels.",
-          "Prices and stock may change. Orders are confirmed after successful payment. For support on delivery, returns, or order issues, contact us through email, phone, or WhatsApp."
-        ]
-      };
-    }
-
-    return null;
-  }, [openLegalModal]);
 
   return (
     <>
@@ -93,13 +67,13 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
       <footer className="site-footer">
         <div className="container footer-inner">
           <div className="footer-links">
-            <button type="button" className="footer-link-button" onClick={() => setOpenLegalModal("privacy")}>
+            <Link to="/privacy-policy" className="footer-link-button">
               Privacy Policy
-            </button>
+            </Link>
             <span>|</span>
-            <button type="button" className="footer-link-button" onClick={() => setOpenLegalModal("terms")}>
+            <Link to="/terms-of-service" className="footer-link-button">
               Terms of Service
-            </button>
+            </Link>
           </div>
 
           <div className="footer-contact-stack">
@@ -157,29 +131,6 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
         </div>
       </footer>
 
-      {isLegalOpen && legalContent ? (
-        <div className="commerce-overlay legal-modal-overlay" onClick={() => setOpenLegalModal("")}>
-          <div
-            className="legal-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={legalContent.title}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button type="button" className="close-x" onClick={() => setOpenLegalModal("")} aria-label="Close legal modal">
-              x
-            </button>
-            <h3>{legalContent.title}</h3>
-            {legalContent.body.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-            <p>
-              Contact: <a href={`mailto:${emailAddress}`}>{emailAddress}</a> |{" "}
-              <a href={`tel:${phoneNumber}`}>{phoneNumber}</a>
-            </p>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }

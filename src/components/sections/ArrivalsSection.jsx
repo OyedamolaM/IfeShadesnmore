@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 import { trackEvent } from "../../utils/analytics";
 
 const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
 const MIN_SEARCH_LENGTH = 3;
+
+function productSlugId(product) {
+  const slug =
+    String(product?.name || product?.id || "product")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "product";
+  return `${slug}--${encodeURIComponent(product.id)}`;
+}
 const SUNGLASSES_SWITCH_MS = 5000;
 const SUNGLASSES_VARIANT_IMAGES = ["/hero/Sunglasses.jpg", "/hero/sunglasses2.jpg"];
 
@@ -418,7 +430,7 @@ function ArrivalsSection({
                       src={imageSrc}
                       alt={card.alt}
                       loading={isHighPriority ? "eager" : "lazy"}
-                      fetchPriority={isHighPriority ? "high" : "low"}
+                      fetchpriority={isHighPriority ? "high" : "low"}
                       decoding="async"
                       onError={(event) => {
                         if (event.currentTarget.src.endsWith(CATEGORY_PLACEHOLDER_IMAGE)) return;
@@ -496,13 +508,13 @@ function ArrivalsSection({
                           {getAvailabilityLabel(availability)}
                         </p>
                         <div className="product-actions">
-                          <button
-                            type="button"
+                          <Link
                             className="secondary-action"
-                            onClick={() => onViewProduct(product)}
+                            to="/products/$slugId"
+                            params={{ slugId: productSlugId(product) }}
                           >
                             Details
-                          </button>
+                          </Link>
                           {allowOrdering ? (
                             <button
                               type="button"

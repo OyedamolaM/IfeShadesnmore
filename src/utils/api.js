@@ -126,6 +126,27 @@ export function updateSettings(payload) {
   });
 }
 
+export async function uploadImage(file, kind = "product") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("kind", kind);
+
+  const response = await fetch(buildApiUrl("/api/uploads/image"), {
+    method: "POST",
+    credentials: "include",
+    body: formData
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload?.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.details = payload;
+    throw error;
+  }
+  return payload;
+}
+
 export function createProduct(payload) {
   return request("/api/products", {
     method: "POST",
