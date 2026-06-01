@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import pg from "pg";
@@ -14,9 +15,16 @@ const { Pool } = pg;
 
 const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
 const USE_POSTGRES = Boolean(DATABASE_URL);
+const IS_VERCEL = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 
-const DATA_DIR = path.join(process.cwd(), "server", "data");
-const SQLITE_DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "ife-store.db");
+const DEFAULT_SQLITE_DATA_DIR = IS_VERCEL
+  ? path.join(os.tmpdir(), "ife-shadesnmore")
+  : path.join(process.cwd(), "server", "data");
+const configuredSqlitePath = String(process.env.DB_PATH || "").trim();
+const SQLITE_DB_PATH = configuredSqlitePath
+  ? path.resolve(configuredSqlitePath)
+  : path.join(DEFAULT_SQLITE_DATA_DIR, "ife-store.db");
+const SQLITE_DATA_DIR = path.dirname(SQLITE_DB_PATH);
 
 let sqliteDb = null;
 let pgPool = null;
@@ -31,8 +39,8 @@ if (USE_POSTGRES) {
     ssl: shouldDisableSsl ? false : { rejectUnauthorized: false }
   });
 } else {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(SQLITE_DATA_DIR)) {
+    fs.mkdirSync(SQLITE_DATA_DIR, { recursive: true });
   }
   sqliteDb = new Database(SQLITE_DB_PATH);
   sqliteDb.pragma("journal_mode = WAL");

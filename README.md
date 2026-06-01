@@ -10,7 +10,7 @@ TanStack Start + Vite storefront with:
 - Multi-collection products (one product can belong to multiple audiences)
 - Dual DB support:
   - SQLite for local development
-  - Postgres (`DATABASE_URL`) for production (Render free tier friendly)
+  - Postgres (`DATABASE_URL`) for production (Render/Vercel friendly)
 
 ## 1) Setup
 
@@ -58,9 +58,15 @@ Local DB defaults to `server/data/ife-store.db` unless `DATABASE_URL` is set.
   - Edit hero benefit bullets
   - Edit "Why Choose Us" bullets
 
-## 4) Render Deployment (Free Tier)
+## 4) Production Deployment
 
-The included `render.yaml` is now configured for free tier without a disk.
+Set `DATABASE_URL` to a Postgres database in production. Vercel and other serverless
+hosts do not provide a persistent writable filesystem, so SQLite can only be used as
+a temporary fallback there and should not store real orders, products, or accounts.
+
+### Render Deployment (Free Tier)
+
+The included `render.yaml` is configured for free tier without a disk.
 
 Required env vars in Render:
 - `DATABASE_URL` (Neon/Postgres)
