@@ -72,7 +72,11 @@ services:
         sync: false
       - key: SENDGRID_API_BASE_URL
         value: https://api.sendgrid.com
-      - key: CLOUDINARY_URL
+      - key: SUPABASE_URL
         sync: false
-      - key: CLOUDINARY_FOLDER
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
         value: ife-shadesnmore
+      - key: SUPABASE_STORAGE_FOLDER
+        value: uploads

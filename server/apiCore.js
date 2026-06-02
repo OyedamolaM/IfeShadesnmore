@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { v2 as cloudinary } from "cloudinary";
 import {
   execute,
   initDatabase,
@@ -1211,7 +1210,12 @@ async function getSubscriptions(request) {
 async function uploadImage(request) {
   const auth = await requireUser(request, "admin");
   if (auth.response) return auth.response;
-  if (!process.env.CLOUDINARY_URL) return json({ error: "CLOUDINARY_URL is not configured." }, 503);
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  const bucket = String(process.env.SUPABASE_STORAGE_BUCKET || "ife-shadesnmore").trim();
+  if (!supabaseUrl || !serviceRoleKey || !bucket) {
+    return json({ error: "Supabase Storage is not configured." }, 503);
+  }
   const form = await request.formData();
   const file = form.get("file");
   const requestedKind = String(form.get("kind") || "product").trim();
@@ -1220,24 +1224,50 @@ async function uploadImage(request) {
   if (!String(file.type || "").startsWith("image/")) return json({ error: "Only image uploads are allowed." }, 400);
   if (file.size > 10 * 1024 * 1024) return json({ error: "Image must be 10MB or smaller." }, 400);
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: `${process.env.CLOUDINARY_FOLDER || "ife-shadesnmore"}/${kind}`,
-        resource_type: "image",
-        overwrite: false
-      },
-      (error, uploadResult) => (error ? reject(error) : resolve(uploadResult))
-    );
-    stream.end(buffer);
+  const fileName = sanitizeUploadFileName(file.name || "image");
+  const folder = String(process.env.SUPABASE_STORAGE_FOLDER || "uploads").trim().replace(/^\/+|\/+$/g, "") || "uploads";
+  const objectPath = `${folder}/${kind}/${crypto.randomUUID()}-${fileName}`;
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/")}`;
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": String(file.type || "application/octet-stream"),
+      "x-upsert": "false"
+    },
+    body: buffer
   });
+  const uploadPayload = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok) {
+    return json({ error: uploadPayload?.message || "Could not upload image to Supabase Storage." }, uploadResponse.status);
+  }
+  const secureUrl = `${supabaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/")}`;
   return json({
-    secureUrl: result.secure_url,
-    publicId: result.public_id,
-    width: result.width,
-    height: result.height,
-    format: result.format
+    secureUrl,
+    publicId: objectPath,
+    width: null,
+    height: null,
+    format: String(file.type || "").split("/")[1] || ""
   }, 201);
+}
+
+function sanitizeUploadFileName(value) {
+  const fallbackExtension = "jpg";
+  const raw = String(value || "image").trim().toLowerCase();
+  const extension = raw.includes(".") ? raw.split(".").pop().replace(/[^a-z0-9]/g, "") : fallbackExtension;
+  const base = raw
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "image";
+  return `${base}.${extension || fallbackExtension}`;
 }
 
 function getOrderAlertRecipients() {

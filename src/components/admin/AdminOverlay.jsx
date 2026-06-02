@@ -20,9 +20,9 @@ import {
   fetchAllOrders,
   fetchSubscriptions,
   updateBlog,
-  updateOrderStatus
+  updateOrderStatus,
+  uploadImage
 } from "../../utils/api";
-import { readImageAsDataUrl } from "../../utils/localImage";
 
 const ADMIN_TABS = [
   { id: "orders", label: "Orders", icon: "orders" },
@@ -636,11 +636,11 @@ function AdminOverlay({
     setBlogMessage("");
     setIsBlogImageUploading(true);
     try {
-      const image = await readImageAsDataUrl(file);
-      setBlogDraft((current) => ({ ...current, image }));
-      setBlogMessage("Blog picture saved.");
+      const result = await uploadImage(file, "blog");
+      setBlogDraft((current) => ({ ...current, image: result.secureUrl || "" }));
+      setBlogMessage("Blog picture uploaded.");
     } catch (requestError) {
-      setBlogMessage(requestError.message || "Could not save blog picture.");
+      setBlogMessage(requestError.message || "Could not upload blog picture.");
     } finally {
       setIsBlogImageUploading(false);
       event.target.value = "";

@@ -6,11 +6,11 @@ TanStack Start + Vite storefront with:
 - Paystack checkout + webhook verification
 - Email verification for customer signup
 - SSR product/legal pages with rich SEO, `robots.txt`, and `sitemap.xml`
-- Cloudinary signed admin uploads for product and hero images
+- Supabase Storage admin uploads for product, blog, and hero images
 - Multi-collection products (one product can belong to multiple audiences)
 - Dual DB support:
   - SQLite for local development
-  - Postgres (`DATABASE_URL`) for production (Render/Vercel friendly)
+  - Supabase Postgres (`DATABASE_URL`) for production (Render/Vercel friendly)
 
 ## 1) Setup
 
@@ -33,9 +33,11 @@ TanStack Start + Vite storefront with:
 5. Google Analytics 4:
    - Set `VITE_GA_MEASUREMENT_ID` (example: `G-T3SYCHH988`)
    - Redeploy so Vite can bake it into the frontend build.
-6. Cloudinary uploads:
-   - Set `CLOUDINARY_URL` (`cloudinary://API_KEY:API_SECRET@CLOUD_NAME`)
-   - Optional: set `CLOUDINARY_FOLDER` (defaults to `ife-shadesnmore`)
+6. Supabase uploads:
+   - Set `SUPABASE_URL`
+   - Set `SUPABASE_SERVICE_ROLE_KEY`
+   - Set `SUPABASE_STORAGE_BUCKET` (defaults to `ife-shadesnmore`)
+   - Make that bucket public so storefront images can load in the browser.
 
 ## 2) Run Locally
 
@@ -69,14 +71,16 @@ a temporary fallback there and should not store real orders, products, or accoun
 The included `render.yaml` is configured for free tier without a disk.
 
 Required env vars in Render:
-- `DATABASE_URL` (Neon/Postgres)
+- `DATABASE_URL` (Supabase Postgres)
 - `FRONTEND_URL` and `SITE_URL` (your Render app URL)
 - `VITE_SITE_URL` (same public app URL, used for browser SEO fallbacks)
 - `JWT_SECRET`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `PAYSTACK_SECRET_KEY`
-- `CLOUDINARY_URL` (for admin image uploads)
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_STORAGE_BUCKET` (for admin image uploads)
 - Mail provider vars if you want real email delivery
 - `ORDER_ALERT_EMAIL` (optional, defaults to `ADMIN_EMAIL`)
 
