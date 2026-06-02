@@ -115,7 +115,7 @@ const PLACEHOLDER_BLOGS = [
   {
     id: "style-guide-placeholder",
     title: "How to choose frames that match your mood",
-    excerpt: "A quick styling note on shape, color, and presence while the first journal posts are being prepared.",
+    excerpt: "A simple guide to choosing frame shapes, colors, and finishes that feel natural on your face.",
     image: "/preview/hero-v1-gallery.jpg",
     author: "IfeShadesnMore",
     createdAt: ""
@@ -186,9 +186,17 @@ export function PreviewSupportSections({ blogs = [], onOpenAdmin, includeFooter 
           <h2>
             Read the <em>latest</em>.
           </h2>
-          <span>
-            Styling stories, care notes, and frame guides from the IfeShadesnMore blog.
-          </span>
+          <div className="preview-editorial-copy">
+            <span>
+              Styling stories, care notes, and frame guides written for customers who want their eyewear to feel intentional, not random.
+            </span>
+            <span>
+              Learn how to choose shapes that soften or sharpen your look, pick lens colors for different moods, and care for your frames between wears.
+            </span>
+            <span>
+              New posts will cover drops, bestsellers, prescriptions, anti-blue lenses, and everyday styling ideas from the IfeShadesnMore edit.
+            </span>
+          </div>
         </div>
         <article className="preview-blog-card" aria-live="polite">
           {activeBlog.image ? <img src={activeBlog.image} alt="" /> : null}
@@ -312,7 +320,7 @@ function PreviewStorefront({
     <div className={`preview-storefront ${variant.className}`}>
       <header className="preview-nav">
         <button type="button" className="preview-brand" onDoubleClick={onOpenAdmin} aria-label="Open admin">
-          <span>I</span>
+          <img src="/brand/ife-logo-circle.png" alt="" />
           <strong>{brandName}</strong>
         </button>
         <nav aria-label="Primary navigation">

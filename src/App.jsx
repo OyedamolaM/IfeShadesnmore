@@ -23,6 +23,7 @@ import {
   normalizeProduct,
   normalizeSection
 } from "./utils/storefrontModel";
+import { readImageAsDataUrl } from "./utils/localImage";
 import { initAnalytics, trackPageView } from "./utils/analytics";
 import StorefrontPage from "./pages/StorefrontPage";
 import AccountLoginPage from "./pages/AccountLoginPage";
@@ -272,12 +273,14 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      setAdminMessage("Uploading product image...");
-      const uploaded = await uploadImage(file, "product");
-      setProductDraft((current) => ({ ...current, image: uploaded.secureUrl }));
-      setAdminMessage("Product image uploaded.");
+      setAdminMessage("Saving product image...");
+      const image = await readImageAsDataUrl(file);
+      setProductDraft((current) => ({ ...current, image }));
+      setAdminMessage("Product image saved.");
     } catch (error) {
-      setAdminMessage(error.message || "Could not upload selected product image.");
+      setAdminMessage(error.message || "Could not save selected product image.");
+    } finally {
+      event.target.value = "";
     }
   };
 

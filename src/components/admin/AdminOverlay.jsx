@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
+import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
 import {
   AUDIENCE_OPTIONS,
   BULLET_ICON_TYPES,
@@ -8,8 +9,11 @@ import {
   PRODUCT_AVAILABILITY_OPTIONS
 } from "../../constants/storefront";
 import {
+  createAdminCustomer,
+  createAdminOrder,
   deleteAdminCustomer,
   createBlog,
+  createSubscription,
   deleteBlog,
   fetchAdminBlogs,
   fetchAdminCustomers,
@@ -18,17 +22,29 @@ import {
   updateBlog,
   updateOrderStatus
 } from "../../utils/api";
+import { readImageAsDataUrl } from "../../utils/localImage";
 
 const ADMIN_TABS = [
-  { id: "orders", label: "Orders" },
-  { id: "customers", label: "Customers" },
-  { id: "subscribers", label: "Subscribers" },
-  { id: "blogs", label: "Blogs" },
-  { id: "products", label: "Products" },
-  { id: "settings", label: "Settings" }
+  { id: "orders", label: "Orders", icon: "orders" },
+  { id: "customers", label: "Customers", icon: "customers" },
+  { id: "subscribers", label: "Subscribers", icon: "subscribers" },
+  { id: "blogs", label: "Blogs", icon: "blogs" },
+  { id: "products", label: "Products", icon: "products" },
+  { id: "settings", label: "Settings", icon: "settings" }
+];
+
+const ADMIN_THEME_OPTIONS = [
+  { id: "v1", label: "Gallery" },
+  { id: "v2", label: "Terra" },
+  { id: "v3", label: "Solar" }
 ];
 
 const ORDER_STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+const ORDER_FILTERS = [
+  { id: "orders", label: "Orders" },
+  { id: "pending", label: "Pending" },
+  { id: "failed", label: "Failed" }
+];
 const EMPTY_BLOG_DRAFT = {
   id: "",
   title: "",
@@ -38,6 +54,171 @@ const EMPTY_BLOG_DRAFT = {
   author: "IfeShadesnMore",
   isPublished: true
 };
+const EMPTY_CUSTOMER_DRAFT = {
+  fullName: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: ""
+};
+const EMPTY_SUBSCRIBER_DRAFT = {
+  email: "",
+  source: "admin"
+};
+const EMPTY_ORDER_DRAFT = {
+  customerId: "",
+  fullName: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: "",
+  paymentMethod: "transfer",
+  paymentStatus: "pending",
+  orderStatus: "pending",
+  items: [{ productId: "", quantity: 1 }]
+};
+
+function AdminIcon({ name }) {
+  const sharedProps = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+    focusable: "false"
+  };
+
+  if (name === "orders") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M7 3h10l2 3v15H5V6l2-3Z" />
+        <path d="M8 9h8" />
+        <path d="M8 13h8" />
+        <path d="M8 17h5" />
+      </svg>
+    );
+  }
+
+  if (name === "customers") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+        <path d="M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+        <path d="M20.5 21v-2a3.5 3.5 0 0 0-2.6-3.4" />
+        <path d="M17 3.4a4 4 0 0 1 0 7.2" />
+      </svg>
+    );
+  }
+
+  if (name === "subscribers") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M4 6h16v12H4V6Z" />
+        <path d="m4 8 8 5 8-5" />
+      </svg>
+    );
+  }
+
+  if (name === "blogs") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M6 4h12v16H6V4Z" />
+        <path d="M9 8h6" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </svg>
+    );
+  }
+
+  if (name === "products") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M6 8h12l-1 12H7L6 8Z" />
+        <path d="M9 8a3 3 0 0 1 6 0" />
+      </svg>
+    );
+  }
+
+  if (name === "settings") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+        <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06-1.8 3.12-.08-.02a1.8 1.8 0 0 0-2.1.76l-.04.08h-3.6l-.04-.08a1.8 1.8 0 0 0-2.1-.76l-.08.02-1.8-3.12.06-.06A1.8 1.8 0 0 0 4.6 15l-.08-.02v-3.6l.08-.02a1.8 1.8 0 0 0 1.64-1.98l-.06-.06 1.8-3.12.08.02a1.8 1.8 0 0 0 2.1-.76l.04-.08h3.6l.04.08a1.8 1.8 0 0 0 2.1.76l.08-.02 1.8 3.12-.06.06a1.8 1.8 0 0 0 1.64 1.98l.08.02v3.6l-.08.02Z" />
+      </svg>
+    );
+  }
+
+  if (name === "search") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+        <path d="m20 20-4.2-4.2" />
+      </svg>
+    );
+  }
+
+  if (name === "theme") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M12 3a9 9 0 1 0 9 9c0-.6-.49-1-1.09-1h-1.56a2.1 2.1 0 0 1-2.1-2.1V7.34A4.34 4.34 0 0 0 11.91 3H12Z" />
+        <path d="M7.5 11.5h.01" />
+        <path d="M9.5 7.8h.01" />
+        <path d="M13.8 6.8h.01" />
+      </svg>
+    );
+  }
+
+  if (name === "menu") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M4 7h16" />
+        <path d="M4 12h16" />
+        <path d="M4 17h16" />
+      </svg>
+    );
+  }
+
+  if (name === "bell") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+        <path d="M10 20a2 2 0 0 0 4 0" />
+      </svg>
+    );
+  }
+
+  if (name === "profile") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    );
+  }
+
+  if (name === "chevron") {
+    return (
+      <svg {...sharedProps}>
+        <path d="m7 10 5 5 5-5" />
+      </svg>
+    );
+  }
+
+  if (name === "storefront") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M4 10h16l-1-5H5l-1 5Z" />
+        <path d="M5 10v10h14V10" />
+        <path d="M9 20v-6h6v6" />
+        <path d="M4 10a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0" />
+      </svg>
+    );
+  }
+
+  return null;
+}
 
 function normalizeAudienceSelections(value) {
   const source = Array.isArray(value) ? value : [];
@@ -86,18 +267,37 @@ function AdminOverlay({
   const [subscriptions, setSubscriptions] = useState([]);
   const [blogs, setBlogs] = useState([]);
   const [blogDraft, setBlogDraft] = useState(EMPTY_BLOG_DRAFT);
+  const [customerDraft, setCustomerDraft] = useState(EMPTY_CUSTOMER_DRAFT);
+  const [subscriberDraft, setSubscriberDraft] = useState(EMPTY_SUBSCRIBER_DRAFT);
+  const [orderDraft, setOrderDraft] = useState(EMPTY_ORDER_DRAFT);
   const [isEditingBlog, setIsEditingBlog] = useState(false);
   const [blogMessage, setBlogMessage] = useState("");
+  const [isBlogImageUploading, setIsBlogImageUploading] = useState(false);
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalError, setModalError] = useState("");
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
+  const [orderFilter, setOrderFilter] = useState("orders");
   const [orderStatusNotice, setOrderStatusNotice] = useState("");
   const [orderStatusError, setOrderStatusError] = useState("");
   const [customerActionNotice, setCustomerActionNotice] = useState("");
   const [customerActionError, setCustomerActionError] = useState("");
+  const [adminTheme, setAdminTheme] = useState(() => getStoredThemeVariant());
+  const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState(null);
 
   const selectedAudiences = useMemo(
     () => normalizeAudienceSelections(productDraft.audiences),
     [productDraft.audiences]
   );
+  const activeTabMeta = ADMIN_TABS.find((tab) => tab.id === activeTab) || ADMIN_TABS[0];
+  const activeThemeMeta = ADMIN_THEME_OPTIONS.find((themeOption) => themeOption.id === adminTheme) || ADMIN_THEME_OPTIONS[0];
+  const adminName = currentUser?.fullName || currentUser?.email || "Owner";
+  const adminInitial = String(adminName || "I").trim().charAt(0).toUpperCase() || "I";
+
+  useEffect(() => {
+    persistThemeVariant(adminTheme);
+  }, [adminTheme]);
 
   useEffect(() => {
     let isMounted = true;
@@ -155,13 +355,26 @@ function AdminOverlay({
     [orders]
   );
 
+  const paidOrders = useMemo(
+    () => orders.filter((order) => order.paymentStatus === "paid"),
+    [orders]
+  );
+
   const pendingOrders = useMemo(
     () =>
       orders.filter((order) =>
-        ["pending", "processing"].includes(String(order.orderStatus || "pending"))
+        order.paymentStatus === "pending" || String(order.orderStatus || "pending") === "pending"
       ).length,
     [orders]
   );
+
+  const filteredOrders = useMemo(() => {
+    if (orderFilter === "orders") return orders.filter((order) => order.paymentStatus === "paid");
+    if (orderFilter === "failed") return orders.filter((order) => order.paymentStatus === "failed");
+    return orders.filter(
+      (order) => order.paymentStatus === "pending" || String(order.orderStatus || "pending") === "pending"
+    );
+  }, [orderFilter, orders]);
 
   const handleOrderStatusSave = async (orderId) => {
     const nextStatus = orderStatusDrafts[orderId] || "pending";
@@ -221,6 +434,150 @@ function AdminOverlay({
     setIsEditingBlog(false);
   };
 
+  const resetModalFeedback = () => {
+    setModalMessage("");
+    setModalError("");
+  };
+
+  const getPageAction = () => {
+    if (activeTab === "orders") return { label: "Create Order", modal: "order" };
+    if (activeTab === "customers") return { label: "Create Customer", modal: "customer" };
+    if (activeTab === "subscribers") return { label: "Add Subscriber", modal: "subscriber" };
+    if (activeTab === "blogs") return { label: "Write Blog", modal: "blog" };
+    if (activeTab === "products") return { label: "Add Product", modal: "product" };
+    if (activeTab === "settings") return { label: "Edit Settings", modal: "settings" };
+    return null;
+  };
+
+  const openModal = (modalName) => {
+    resetModalFeedback();
+    setActiveModal(modalName);
+  };
+
+  const handlePageAction = () => {
+    const action = getPageAction();
+    if (!action) return;
+    if (action.modal === "product") {
+      openAddProductModal();
+      return;
+    }
+    if (action.modal === "blog") {
+      openAddBlogModal();
+      return;
+    }
+    openModal(action.modal);
+  };
+
+  const setOrderDraftField = (field, value) => {
+    setOrderDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const setOrderDraftItem = (index, field, value) => {
+    setOrderDraft((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      )
+    }));
+  };
+
+  const addOrderDraftItem = () => {
+    setOrderDraft((current) => ({
+      ...current,
+      items: [...current.items, { productId: "", quantity: 1 }]
+    }));
+  };
+
+  const removeOrderDraftItem = (index) => {
+    setOrderDraft((current) => ({
+      ...current,
+      items: current.items.length > 1 ? current.items.filter((_, itemIndex) => itemIndex !== index) : current.items
+    }));
+  };
+
+  const handleCreateOrder = async (event) => {
+    event.preventDefault();
+    resetModalFeedback();
+    try {
+      const payload = {
+        ...orderDraft,
+        customerId: orderDraft.customerId ? Number(orderDraft.customerId) : undefined,
+        items: orderDraft.items
+          .filter((item) => item.productId)
+          .map((item) => ({ productId: item.productId, quantity: Number(item.quantity) || 1 }))
+      };
+      const result = await createAdminOrder(payload);
+      if (!result?.order) throw new Error("Could not create order.");
+      setOrders((current) => [result.order, ...current]);
+      setOrderStatusDrafts((current) => ({ ...current, [result.order.id]: result.order.orderStatus || "pending" }));
+      setOrderDraft(EMPTY_ORDER_DRAFT);
+      setActiveModal(null);
+      setOrderStatusNotice(`Order ${result.order.id} created.`);
+    } catch (requestError) {
+      setModalError(requestError.message || "Could not create order.");
+    }
+  };
+
+  const handleCreateCustomer = async (event) => {
+    event.preventDefault();
+    resetModalFeedback();
+    try {
+      const result = await createAdminCustomer(customerDraft);
+      if (!result?.customer) throw new Error("Could not create customer.");
+      setCustomers((current) => [result.customer, ...current]);
+      setCustomerDraft(EMPTY_CUSTOMER_DRAFT);
+      setActiveModal(null);
+      setCustomerActionNotice(`Customer "${result.customer.fullName || result.customer.email}" created.`);
+    } catch (requestError) {
+      setModalError(requestError.message || "Could not create customer.");
+    }
+  };
+
+  const handleCreateSubscriber = async (event) => {
+    event.preventDefault();
+    resetModalFeedback();
+    try {
+      const result = await createSubscription(subscriberDraft);
+      const now = new Date().toISOString();
+      setSubscriptions((current) => [
+        {
+          id: result?.id || `new-${Date.now()}`,
+          email: subscriberDraft.email,
+          source: subscriberDraft.source || "admin",
+          createdAt: now
+        },
+        ...current.filter((subscription) => subscription.email !== subscriberDraft.email)
+      ]);
+      setSubscriberDraft(EMPTY_SUBSCRIBER_DRAFT);
+      setActiveModal(null);
+      setModalMessage("Subscriber added.");
+    } catch (requestError) {
+      setModalError(requestError.message || "Could not add subscriber.");
+    }
+  };
+
+  const openAddProductModal = () => {
+    onCancelEdit?.();
+    setActiveTab("products");
+    openModal("product");
+  };
+
+  const openEditProductModal = (product) => {
+    onStartEdit(product);
+    setActiveTab("products");
+    openModal("product");
+  };
+
+  const closeProductModal = () => {
+    onCancelEdit?.();
+    setActiveModal(null);
+  };
+
+  const handleProductModalSubmit = async (event) => {
+    await onProductSubmit(event);
+    setActiveModal(null);
+  };
+
   const startEditBlog = (blog) => {
     setBlogDraft({
       id: blog.id,
@@ -233,6 +590,14 @@ function AdminOverlay({
     });
     setIsEditingBlog(true);
     setBlogMessage("");
+    setActiveTab("blogs");
+    setActiveModal("blog");
+  };
+
+  const openAddBlogModal = () => {
+    resetBlogDraft();
+    setActiveTab("blogs");
+    openModal("blog");
   };
 
   const handleBlogSubmit = async (event) => {
@@ -259,8 +624,26 @@ function AdminOverlay({
       syncBlogs(nextBlogs);
       setBlogMessage(isEditingBlog ? "Blog post updated." : "Blog post published.");
       resetBlogDraft();
+      setActiveModal(null);
     } catch (requestError) {
       setBlogMessage(requestError.message || "Could not save blog post.");
+    }
+  };
+
+  const handleBlogImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBlogMessage("");
+    setIsBlogImageUploading(true);
+    try {
+      const image = await readImageAsDataUrl(file);
+      setBlogDraft((current) => ({ ...current, image }));
+      setBlogMessage("Blog picture saved.");
+    } catch (requestError) {
+      setBlogMessage(requestError.message || "Could not save blog picture.");
+    } finally {
+      setIsBlogImageUploading(false);
+      event.target.value = "";
     }
   };
 
@@ -308,19 +691,125 @@ function AdminOverlay({
     onSettingsDraftChange(group, nextItems);
   };
 
+  const handleSettingsModalSubmit = async (event) => {
+    await onSaveSettings(event);
+    setActiveModal(null);
+  };
+
+  const closeModal = () => {
+    if (activeModal === "blog") resetBlogDraft();
+    if (activeModal === "product") onCancelEdit?.();
+    resetModalFeedback();
+    setActiveModal(null);
+  };
+
   return (
-    <div className="page admin-page">
-      <div className="site-shell admin-shell">
-        <header className="admin-topbar">
+    <div className={`page admin-page admin-theme-${adminTheme} ${isNavOpen ? "admin-nav-open" : ""}`}>
+      {isNavOpen ? <button type="button" className="admin-nav-backdrop" aria-label="Close navigation" onClick={() => setIsNavOpen(false)} /> : null}
+      <aside className={`admin-sidebar ${isNavOpen ? "is-open" : ""}`} aria-label="Admin navigation">
+        <div className="admin-sidebar-brand">
+          <img className="admin-brand-logo" src="/brand/ife-logo-circle.png" alt="" />
+          <span className="admin-brand-text">
+            IfeShades<span>n</span>More
+          </span>
+        </div>
+
+        <nav className="admin-tabs" aria-label="Admin sections">
+          <p>Admin</p>
+          {ADMIN_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={activeTab === tab.id ? "is-active" : ""}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setIsNavOpen(false);
+              }}
+            >
+              <span>
+                <AdminIcon name={tab.icon} />
+              </span>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="admin-sidebar-user">
+          <span className="admin-profile-avatar">
+            <img src="/brand/ife-logo-circle.png" alt="" />
+          </span>
           <div>
-            <h1>Admin Dashboard</h1>
-            <p>
-              Signed in as <strong>{currentUser?.email || "admin"}</strong>
-            </p>
+            <strong>{adminName}</strong>
+            <small>Store owner</small>
+          </div>
+        </div>
+      </aside>
+
+      <div className="admin-main">
+        <header className="admin-topbar">
+          <button
+            type="button"
+            className="admin-menu-button"
+            onClick={() => setIsNavOpen(true)}
+            aria-label="Open admin navigation"
+          >
+            <span className="admin-menu-lines" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </button>
+          <strong className="admin-mobile-title">{activeTabMeta.label}</strong>
+          <div className="admin-search-shell">
+            <span className="admin-search-icon">
+              <AdminIcon name="search" />
+            </span>
+            <span aria-hidden="true">⌕</span>
+            <input placeholder="Search orders, products, customers..." type="search" />
           </div>
           <div className="admin-topbar-actions">
+            <div className={`admin-theme-picker ${isThemeOpen ? "is-open" : ""}`} aria-label="Admin theme selector">
+              <button
+                type="button"
+                className="admin-theme-toggle"
+                onClick={() => setIsThemeOpen((current) => !current)}
+                aria-expanded={isThemeOpen}
+                aria-label={`Theme: ${activeThemeMeta.label}`}
+              >
+                <span className="admin-theme-orbit" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>{activeThemeMeta.label}</span>
+                <AdminIcon name="chevron" />
+              </button>
+              <div className="admin-theme-menu" aria-hidden={!isThemeOpen}>
+                {ADMIN_THEME_OPTIONS.map((themeOption) => (
+                  <button
+                    key={themeOption.id}
+                    type="button"
+                    className={adminTheme === themeOption.id ? "is-active" : ""}
+                    onClick={() => {
+                      setAdminTheme(themeOption.id);
+                      setIsThemeOpen(false);
+                    }}
+                    aria-pressed={adminTheme === themeOption.id}
+                  >
+                    {themeOption.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button type="button" className="secondary-action" onClick={onOpenStorefront}>
-              View Storefront
+              Storefront
+            </button>
+            <button type="button" className="admin-storefront-icon-button" onClick={onOpenStorefront} aria-label="Open storefront">
+              <AdminIcon name="storefront" />
+            </button>
+            <button type="button" className="admin-bell-button" aria-label="Notifications">
+              <AdminIcon name="bell" />
+              <span />
             </button>
             <button type="button" className="secondary-action" onClick={onLogout}>
               Logout
@@ -328,94 +817,311 @@ function AdminOverlay({
           </div>
         </header>
 
-        <section className="admin-kpi-grid">
-          <article className="admin-kpi-card">
-            <h2>{orders.length}</h2>
-            <p>Total Orders</p>
-          </article>
-          <article className="admin-kpi-card">
-            <h2>{pendingOrders}</h2>
-            <p>Pending/Processing</p>
-          </article>
-          <article className="admin-kpi-card">
-            <h2>{toPrice(totalRevenue)}</h2>
-            <p>Paid Revenue</p>
-          </article>
-          <article className="admin-kpi-card">
-            <h2>{customers.length}</h2>
-            <p>Customers</p>
-          </article>
-        </section>
+        <main className="site-shell admin-shell">
+          <section className="admin-page-heading">
+            <div>
+              <p>
+                <AdminIcon name={activeTabMeta.icon} />
+              </p>
+              <h1>{activeTabMeta.label}</h1>
+              <span>Welcome back. Here is what is happening with your store today.</span>
+            </div>
+          </section>
 
-        <nav className="admin-tabs" aria-label="Admin sections">
-          {ADMIN_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={activeTab === tab.id ? "is-active" : ""}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+          <section className="admin-kpi-grid">
+            <article className="admin-kpi-card">
+              <p>Total Orders</p>
+              <h2>{paidOrders.length}</h2>
+              <span>Paid orders only</span>
+            </article>
+            <article className="admin-kpi-card">
+              <p>Pending</p>
+              <h2>{pendingOrders}</h2>
+              <span>Needs attention</span>
+            </article>
+            <article className="admin-kpi-card">
+              <p>Paid Revenue</p>
+              <h2>{toPrice(totalRevenue)}</h2>
+              <span>Confirmed payments</span>
+            </article>
+            <article className="admin-kpi-card">
+              <p>Customers</p>
+              <h2>{customers.length}</h2>
+              <span>Registered accounts</span>
+            </article>
+          </section>
 
-        {isLoadingData ? <p className="admin-hint">Loading admin data...</p> : null}
-        {dataError ? <p className="form-error">{dataError}</p> : null}
-        {orderStatusNotice ? <p className="form-success">{orderStatusNotice}</p> : null}
-        {orderStatusError ? <p className="form-error">{orderStatusError}</p> : null}
-        {customerActionNotice ? <p className="form-success">{customerActionNotice}</p> : null}
-        {customerActionError ? <p className="form-error">{customerActionError}</p> : null}
-        {adminMessage ? <p className="form-success">{adminMessage}</p> : null}
+          {isLoadingData ? <p className="admin-hint">Loading admin data...</p> : null}
+          {dataError ? <p className="form-error">{dataError}</p> : null}
+          {orderStatusNotice ? <p className="form-success">{orderStatusNotice}</p> : null}
+          {orderStatusError ? <p className="form-error">{orderStatusError}</p> : null}
+          {customerActionNotice ? <p className="form-success">{customerActionNotice}</p> : null}
+          {customerActionError ? <p className="form-error">{customerActionError}</p> : null}
+          {modalMessage ? <p className="form-success">{modalMessage}</p> : null}
+          {adminMessage ? <p className="form-success">{adminMessage}</p> : null}
 
-        <div className="admin-sections">
+          <div className="admin-sections">
+          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "order" ? "is-open" : ""}`} onSubmit={handleCreateOrder}>
+            <header className="admin-section-header">
+              <h2>Create Order</h2>
+              <p>Create an order manually from existing products.</p>
+              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close order creator">
+                x
+              </button>
+            </header>
+            {modalError && activeModal === "order" ? <p className="form-error">{modalError}</p> : null}
+            <label>
+              Existing customer
+              <select
+                value={orderDraft.customerId}
+                onChange={(event) => {
+                  const customerId = event.target.value;
+                  const customer = customers.find((entry) => String(entry.id) === String(customerId));
+                  setOrderDraft((current) => ({
+                    ...current,
+                    customerId,
+                    fullName: customer?.fullName || "",
+                    email: customer?.email || "",
+                    phone: customer?.phone || current.phone,
+                    address: customer?.address || current.address,
+                    city: customer?.city || current.city
+                  }));
+                }}
+              >
+                <option value="">New or guest customer</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.fullName || customer.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Customer name
+              <input
+                value={orderDraft.fullName}
+                onChange={(event) => setOrderDraftField("fullName", event.target.value)}
+                disabled={Boolean(orderDraft.customerId)}
+              />
+            </label>
+            <label>
+              Customer email
+              <input
+                type="email"
+                value={orderDraft.email}
+                onChange={(event) => setOrderDraftField("email", event.target.value)}
+                disabled={Boolean(orderDraft.customerId)}
+              />
+            </label>
+            <label>
+              Phone
+              <input value={orderDraft.phone} onChange={(event) => setOrderDraftField("phone", event.target.value)} required />
+            </label>
+            <label>
+              Address
+              <input value={orderDraft.address} onChange={(event) => setOrderDraftField("address", event.target.value)} required />
+            </label>
+            <label>
+              City
+              <input value={orderDraft.city} onChange={(event) => setOrderDraftField("city", event.target.value)} required />
+            </label>
+            <div className="admin-section-grid admin-compact-grid">
+              <label>
+                Payment method
+                <select value={orderDraft.paymentMethod} onChange={(event) => setOrderDraftField("paymentMethod", event.target.value)}>
+                  <option value="transfer">Transfer</option>
+                  <option value="card">Card</option>
+                </select>
+              </label>
+              <label>
+                Payment status
+                <select value={orderDraft.paymentStatus} onChange={(event) => setOrderDraftField("paymentStatus", event.target.value)}>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <label>
+                Order status
+                <select value={orderDraft.orderStatus} onChange={(event) => setOrderDraftField("orderStatus", event.target.value)}>
+                  {ORDER_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="admin-bullet-editor">
+              <h3>Order items</h3>
+              {orderDraft.items.map((item, index) => (
+                <div className="admin-bullet-row" key={`order-item-${index}`}>
+                  <select value={item.productId} onChange={(event) => setOrderDraftItem(index, "productId", event.target.value)} required>
+                    <option value="">Select product</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} - {toPrice(product.price)}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={item.quantity}
+                    onChange={(event) => setOrderDraftItem(index, "quantity", event.target.value)}
+                    required
+                  />
+                  <button type="button" className="secondary-action danger-action" onClick={() => removeOrderDraftItem(index)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="secondary-action" onClick={addOrderDraftItem}>
+                Add Item
+              </button>
+            </div>
+            <div className="admin-inline-actions">
+              <button type="submit" className="primary-action">Create Order</button>
+              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
+            </div>
+          </form>
+
+          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "customer" ? "is-open" : ""}`} onSubmit={handleCreateCustomer}>
+            <header className="admin-section-header">
+              <h2>Create Customer</h2>
+              <p>Add a customer record for manual orders and future checkout history.</p>
+              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close customer creator">
+                x
+              </button>
+            </header>
+            {modalError && activeModal === "customer" ? <p className="form-error">{modalError}</p> : null}
+            <label>
+              Full name
+              <input value={customerDraft.fullName} onChange={(event) => setCustomerDraft((current) => ({ ...current, fullName: event.target.value }))} required />
+            </label>
+            <label>
+              Email
+              <input type="email" value={customerDraft.email} onChange={(event) => setCustomerDraft((current) => ({ ...current, email: event.target.value }))} required />
+            </label>
+            <label>
+              Phone
+              <input value={customerDraft.phone} onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: event.target.value }))} required />
+            </label>
+            <label>
+              Address
+              <input value={customerDraft.address} onChange={(event) => setCustomerDraft((current) => ({ ...current, address: event.target.value }))} />
+            </label>
+            <label>
+              City
+              <input value={customerDraft.city} onChange={(event) => setCustomerDraft((current) => ({ ...current, city: event.target.value }))} />
+            </label>
+            <div className="admin-inline-actions">
+              <button type="submit" className="primary-action">Create Customer</button>
+              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
+            </div>
+          </form>
+
+          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "subscriber" ? "is-open" : ""}`} onSubmit={handleCreateSubscriber}>
+            <header className="admin-section-header">
+              <h2>Add Subscriber</h2>
+              <p>Add an email to the newsletter list.</p>
+              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close subscriber creator">
+                x
+              </button>
+            </header>
+            {modalError && activeModal === "subscriber" ? <p className="form-error">{modalError}</p> : null}
+            <label>
+              Email
+              <input type="email" value={subscriberDraft.email} onChange={(event) => setSubscriberDraft((current) => ({ ...current, email: event.target.value }))} required />
+            </label>
+            <label>
+              Source
+              <input value={subscriberDraft.source} onChange={(event) => setSubscriberDraft((current) => ({ ...current, source: event.target.value }))} />
+            </label>
+            <div className="admin-inline-actions">
+              <button type="submit" className="primary-action">Add Subscriber</button>
+              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
+            </div>
+          </form>
+
           {activeTab === "orders" ? (
             <section className="admin-section-card">
               <header className="admin-section-header">
-                <h2>Orders</h2>
-                <p>Manage fulfillment status, payment details, and delivery information.</p>
+                <div>
+                  <h2>Orders</h2>
+                  <p>Manage fulfillment status, payment details, and delivery information.</p>
+                </div>
+                <button type="button" className="primary-action" onClick={() => openModal("order")}>
+                  Create Order
+                </button>
               </header>
 
+              <div className="admin-order-tabs" role="tablist" aria-label="Order filters">
+                {ORDER_FILTERS.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    className={orderFilter === filter.id ? "is-active" : ""}
+                    onClick={() => setOrderFilter(filter.id)}
+                    role="tab"
+                    aria-selected={orderFilter === filter.id}
+                  >
+                    {filter.label}
+                    <span>
+                      {filter.id === "orders"
+                          ? paidOrders.length
+                          : filter.id === "failed"
+                            ? orders.filter((order) => order.paymentStatus === "failed").length
+                            : pendingOrders}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
               <div className="admin-order-list">
-                {orders.length === 0 ? <p className="admin-hint">No orders yet.</p> : null}
-                {orders.map((order) => (
+                {filteredOrders.length === 0 ? <p className="admin-hint">No orders in this tab yet.</p> : null}
+                {filteredOrders.map((order) => (
                   <article className="admin-order-card" key={order.id}>
                     <div className="admin-order-main">
                       <div>
                         <h3>{order.id}</h3>
                         <p>
-                          {new Date(order.createdAt).toLocaleString()} | {toPrice(order.subtotal)}
+                          {new Date(order.createdAt).toLocaleString()} · {toPrice(order.subtotal)}
                         </p>
                       </div>
                       <div className="admin-status-row">
                         <span className={`order-status status-${order.paymentStatus}`}>
                           Payment: {order.paymentStatus}
                         </span>
-                        <label>
-                          Order status
-                          <select
-                            value={orderStatusDrafts[order.id] || order.orderStatus || "pending"}
-                            onChange={(event) =>
-                              setOrderStatusDrafts((current) => ({
-                                ...current,
-                                [order.id]: event.target.value
-                              }))
-                            }
+                        <div className="admin-order-status-control">
+                          <label>
+                            Order status
+                            <select
+                              value={orderStatusDrafts[order.id] || order.orderStatus || "pending"}
+                              onChange={(event) =>
+                                setOrderStatusDrafts((current) => ({
+                                  ...current,
+                                  [order.id]: event.target.value
+                                }))
+                              }
+                            >
+                              {ORDER_STATUS_OPTIONS.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            onClick={() => handleOrderStatusSave(order.id)}
                           >
-                            {ORDER_STATUS_OPTIONS.map((status) => (
-                              <option key={status} value={status}>
-                                {status}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          type="button"
-                          className="secondary-action"
-                          onClick={() => handleOrderStatusSave(order.id)}
-                        >
-                          Save
-                        </button>
+                            Save
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -458,8 +1164,13 @@ function AdminOverlay({
           {activeTab === "customers" ? (
             <section className="admin-section-card">
               <header className="admin-section-header">
-                <h2>Customers</h2>
-                <p>People registered as customer accounts.</p>
+                <div>
+                  <h2>Customers</h2>
+                  <p>People registered as customer accounts.</p>
+                </div>
+                <button type="button" className="primary-action" onClick={() => openModal("customer")}>
+                  Create Customer
+                </button>
               </header>
 
               <div className="admin-table-wrap">
@@ -510,8 +1221,13 @@ function AdminOverlay({
           {activeTab === "subscribers" ? (
             <section className="admin-section-card">
               <header className="admin-section-header">
-                <h2>Subscribers</h2>
-                <p>Email list from your "Stay Updated" form.</p>
+                <div>
+                  <h2>Subscribers</h2>
+                  <p>Email list from your "Stay Updated" form.</p>
+                </div>
+                <button type="button" className="primary-action" onClick={() => openModal("subscriber")}>
+                  Add Subscriber
+                </button>
               </header>
 
               <div className="admin-table-wrap">
@@ -545,10 +1261,13 @@ function AdminOverlay({
 
           {activeTab === "blogs" ? (
             <section className="admin-section-grid">
-              <form className="admin-section-card admin-form-card" onSubmit={handleBlogSubmit}>
+              <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "blog" ? "is-open" : ""}`} onSubmit={handleBlogSubmit}>
                 <header className="admin-section-header">
                   <h2>{isEditingBlog ? "Edit Blog Post" : "Write Blog Post"}</h2>
                   <p>Create journal entries that appear in the storefront editorial swiper.</p>
+                  <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close blog editor">
+                    x
+                  </button>
                 </header>
                 <label>
                   Title
@@ -577,13 +1296,17 @@ function AdminOverlay({
                     required
                   />
                 </label>
-                <label>
-                  Image URL
-                  <input
-                    value={blogDraft.image}
-                    onChange={(event) => setBlogDraft((current) => ({ ...current, image: event.target.value }))}
-                    placeholder="https://..."
-                  />
+                <label className="admin-image-upload-field">
+                  Blog picture
+                  {blogDraft.image ? (
+                    <span className="admin-image-preview">
+                      <img src={blogDraft.image} alt="" />
+                    </span>
+                  ) : null}
+                  <input type="file" accept="image/*" onChange={handleBlogImageUpload} />
+                  <span className="admin-hint">
+                    {isBlogImageUploading ? "Saving picture..." : "Choose the image that will appear on the blog page and editorial section."}
+                  </span>
                 </label>
                 <label>
                   Author
@@ -619,6 +1342,9 @@ function AdminOverlay({
                 <header className="admin-section-header">
                   <h2>Current Blog Posts</h2>
                   <p>Published posts rotate in the editorial section and link to blog pages.</p>
+                  <button type="button" className="primary-action" onClick={openAddBlogModal}>
+                    Write Blog
+                  </button>
                 </header>
                 <ul className="admin-product-list admin-blog-list">
                   {blogs.length === 0 ? <li>No blog posts yet.</li> : null}
@@ -655,10 +1381,13 @@ function AdminOverlay({
 
           {activeTab === "products" ? (
             <section className="admin-section-grid">
-              <form className="admin-section-card admin-form-card" onSubmit={onProductSubmit}>
+              <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "product" ? "is-open" : ""}`} onSubmit={handleProductModalSubmit}>
                 <header className="admin-section-header">
                   <h2>{isEditing ? "Edit Product" : "Add Product"}</h2>
                   <p>Create and update products in each collection.</p>
+                  <button type="button" className="admin-modal-close" onClick={closeProductModal} aria-label="Close product editor">
+                    x
+                  </button>
                 </header>
                 <label>
                   Product name
@@ -759,17 +1488,15 @@ function AdminOverlay({
                     <option value="aviator">Aviator</option>
                   </select>
                 </label>
-                <label>
-                  Product image URL
-                  <input
-                    placeholder="https://..."
-                    value={productDraft.image}
-                    onChange={(event) => onProductDraftChange("image", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Or upload product image
+                <label className="admin-image-upload-field">
+                  Product picture
+                  {productDraft.image ? (
+                    <span className="admin-image-preview">
+                      <img src={productDraft.image} alt="" />
+                    </span>
+                  ) : null}
                   <input type="file" accept="image/*" onChange={onProductUpload} />
+                  <span className="admin-hint">Choose the product image customers will see on the storefront.</span>
                 </label>
 
                 <div className="admin-inline-actions">
@@ -777,7 +1504,7 @@ function AdminOverlay({
                     {isEditing ? "Update Product" : "Add Product"}
                   </button>
                   {isEditing ? (
-                    <button type="button" className="secondary-action" onClick={onCancelEdit}>
+                    <button type="button" className="secondary-action" onClick={closeProductModal}>
                       Cancel
                     </button>
                   ) : null}
@@ -788,6 +1515,9 @@ function AdminOverlay({
                 <header className="admin-section-header">
                   <h2>Current Products</h2>
                   <p>Tap edit to modify product details quickly.</p>
+                  <button type="button" className="primary-action" onClick={openAddProductModal}>
+                    Add Product
+                  </button>
                 </header>
 
                 <ul className="admin-product-list">
@@ -812,7 +1542,7 @@ function AdminOverlay({
                         </span>
                       </div>
                       <div className="admin-list-actions">
-                        <button type="button" className="secondary-action" onClick={() => onStartEdit(product)}>
+                        <button type="button" className="secondary-action" onClick={() => openEditProductModal(product)}>
                           Edit
                         </button>
                         <button
@@ -831,13 +1561,16 @@ function AdminOverlay({
           ) : null}
 
           {activeTab === "settings" ? (
-            <section className="admin-section-card admin-form-card">
+            <section className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "settings" ? "is-open" : ""}`}>
               <header className="admin-section-header">
                 <h2>Store Settings</h2>
                 <p>Update brand text and hero section content.</p>
+                <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close settings editor">
+                  x
+                </button>
               </header>
 
-              <form onSubmit={onSaveSettings} className="admin-settings-form">
+              <form onSubmit={handleSettingsModalSubmit} className="admin-settings-form">
                 <label>
                   Brand name
                   <input
@@ -992,8 +1725,21 @@ function AdminOverlay({
               </form>
             </section>
           ) : null}
-        </div>
+          {activeTab === "settings" ? (
+            <section className="admin-section-card admin-list-card">
+              <header className="admin-section-header">
+                <h2>Store Settings</h2>
+                <p>Open the settings editor to update brand, hero, and storefront text.</p>
+                <button type="button" className="primary-action" onClick={() => setActiveModal("settings")}>
+                  Edit Settings
+                </button>
+              </header>
+            </section>
+          ) : null}
+          </div>
+        </main>
       </div>
+      {activeModal ? <button type="button" className="admin-modal-backdrop" aria-label="Close modal" onClick={closeModal} /> : null}
     </div>
   );
 }

@@ -54,9 +54,13 @@ const rateBuckets = new Map();
 const PLACEHOLDER_BLOG = {
   id: "style-guide-placeholder",
   title: "How to choose frames that match your mood",
-  excerpt: "A quick styling note on shape, color, and presence while the first journal posts are being prepared.",
+  excerpt: "A simple guide to choosing frame shapes, colors, and finishes that feel natural on your face.",
   content:
-    "The right frame should feel like an easy extension of your day. Start with the mood you want to carry: softer translucent frames for daylight, sharper dark silhouettes for definition, and warm tortoise tones when you want something polished but relaxed. If you are between two options, choose the one that makes your face feel more awake.",
+    [
+      "The right frame should feel like an easy extension of your day. Start with the mood you want to carry: softer translucent frames for daylight, sharper dark silhouettes for definition, and warm tortoise tones when you want something polished but relaxed.",
+      "Shape matters too. Rounded lenses can soften strong angles, cat-eye frames add lift and attitude, while oversized square frames create a confident editorial finish. The best choice is usually the one that makes your face feel more awake.",
+      "Think about where you will wear them most. A daily pair should be easy to repeat with your wardrobe, while a statement frame can carry color, shine, or detail. If you are between two options, choose the one you keep wanting to try on again."
+    ].join("\n\n"),
   image: "/preview/hero-v1-gallery.jpg",
   author: "IfeShadesnMore",
   isPublished: true,
@@ -201,6 +205,7 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "PATCH" && pathname === "/api/auth/password") return updatePassword(request);
     if (method === "GET" && pathname === "/api/orders/my") return getMyOrders(request);
     if (method === "GET" && pathname === "/api/orders") return getAllOrders(request);
+    if (method === "POST" && pathname === "/api/orders") return createAdminOrder(request);
     if (method === "PATCH" && match(pathname, /^\/api\/orders\/([^/]+)\/status$/)) {
       return updateOrderStatus(request, decodeURIComponent(match(pathname, /^\/api\/orders\/([^/]+)\/status$/)[1]));
     }
@@ -227,6 +232,7 @@ export async function handleApiRequest(request, splat = "") {
     }
     if (method === "GET" && pathname === "/api/admin/bootstrap-state") return adminBootstrapState();
     if (method === "GET" && pathname === "/api/admin/customers") return getCustomers(request);
+    if (method === "POST" && pathname === "/api/admin/customers") return createAdminCustomer(request);
     if (method === "DELETE" && match(pathname, /^\/api\/admin\/customers\/([^/]+)$/)) {
       return deleteCustomer(request, decodeURIComponent(match(pathname, /^\/api\/admin\/customers\/([^/]+)$/)[1]));
     }
@@ -537,6 +543,31 @@ const checkoutSchema = z.object({
     )
 });
 const orderStatusSchema = z.object({ orderStatus: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]) });
+const adminCustomerSchema = z.object({
+  fullName: z.string().min(1).max(120),
+  email: z.string().email(),
+  phone: z.string().min(1).max(40),
+  address: z.string().max(300).optional().default(""),
+  city: z.string().max(120).optional().default("")
+});
+const adminOrderSchema = z.object({
+  customerId: z.coerce.number().int().positive().optional(),
+  fullName: z.string().max(120).optional().default(""),
+  email: z.string().email().optional().or(z.literal("")).default(""),
+  phone: z.string().min(1).max(40),
+  address: z.string().min(1).max(300),
+  city: z.string().min(1).max(120),
+  paymentMethod: z.enum(["card", "transfer"]).optional().default("transfer"),
+  paymentStatus: z.enum(["pending", "paid", "failed", "cancelled"]).optional().default("pending"),
+  orderStatus: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]).optional().default("pending"),
+  items: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1).max(99) })).min(1)
+}).refine((value) => Boolean(value.customerId) || Boolean(normalizeEmail(value.email)), {
+  message: "Select a customer or enter an email address.",
+  path: ["email"]
+}).refine((value) => Boolean(value.customerId) || Boolean(String(value.fullName || "").trim()), {
+  message: "Customer name is required.",
+  path: ["fullName"]
+});
 const subscriptionSchema = z.object({
   email: z.string().email(),
   source: z.string().max(80).optional().default("footer")
@@ -699,6 +730,99 @@ async function getAllOrders(request) {
   if (auth.response) return auth.response;
   const rows = await queryAll("SELECT * FROM orders ORDER BY created_at DESC");
   return json({ orders: await withOrderItems(rows) });
+}
+
+async function createAdminOrder(request) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const parsed = adminOrderSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid order payload." }, 400);
+  const payload = parsed.data;
+
+  let customerRow = null;
+  if (payload.customerId) {
+    customerRow = await queryOne("SELECT * FROM users WHERE id = ? AND role = 'customer'", [payload.customerId]);
+    if (!customerRow) return json({ error: "Customer not found." }, 404);
+  } else {
+    const email = normalizeEmail(payload.email);
+    customerRow = await queryOne("SELECT * FROM users WHERE email = ? AND role = 'customer'", [email]);
+    if (!customerRow) {
+      const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
+      await execute(
+        "INSERT INTO users (email, password_hash, role, is_email_verified, full_name, phone, address, city) VALUES (?, ?, 'customer', true, ?, ?, ?, ?)",
+        [email, passwordHash, payload.fullName.trim(), payload.phone.trim(), payload.address.trim(), payload.city.trim()]
+      );
+      customerRow = await queryOne("SELECT * FROM users WHERE email = ? AND role = 'customer'", [email]);
+    }
+  }
+
+  const uniqueIds = [...new Set(payload.items.map((item) => item.productId))];
+  const productsRows = await queryAll(`SELECT * FROM products WHERE id IN (${uniqueIds.map(() => "?").join(",")})`, uniqueIds);
+  const productMap = new Map(productsRows.map(mapProductRow).map((product) => [product.id, product]));
+  const validItems = payload.items.map((item) => {
+    const product = productMap.get(item.productId);
+    if (!product) return null;
+    const availability = normalizeProductAvailability(product.availability);
+    const lineTotal = product.price * item.quantity;
+    return {
+      productId: product.id,
+      name: product.name,
+      availability,
+      preorderNote: availability === "preorder" ? normalizePreorderNote(product.preorderNote) : "",
+      unitPrice: product.price,
+      quantity: item.quantity,
+      lineTotal
+    };
+  });
+  if (validItems.some((item) => item === null)) return json({ error: "One or more products are invalid." }, 400);
+  const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  if (subtotal <= 0) return json({ error: "Invalid order amount." }, 400);
+
+  const orderId = createOrderId();
+  const reference = createPaymentReference();
+  const fullName = payload.customerId
+    ? String(customerRow.full_name || payload.fullName || "").trim() || "Customer"
+    : payload.fullName.trim();
+  const email = normalizeEmail(payload.customerId ? customerRow.email : payload.email);
+
+  await withTransaction(async (tx) => {
+    await tx.execute(
+      "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, order_status, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        orderId,
+        customerRow.id,
+        email,
+        fullName,
+        payload.phone.trim(),
+        payload.address.trim(),
+        payload.city.trim(),
+        payload.paymentMethod,
+        reference,
+        payload.paymentStatus,
+        payload.orderStatus,
+        subtotal
+      ]
+    );
+    for (const item of validItems) {
+      await tx.execute(
+        "INSERT INTO order_items (order_id, product_id, name, availability, preorder_note, unit_price, quantity, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [orderId, item.productId, item.name, item.availability, item.preorderNote, item.unitPrice, item.quantity, item.lineTotal]
+      );
+    }
+  });
+
+  await execute("UPDATE users SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now') WHERE id = ?", [
+    fullName,
+    payload.phone.trim(),
+    payload.address.trim(),
+    payload.city.trim(),
+    customerRow.id
+  ]);
+  await sendOrderAlertSafe({ orderId });
+  await sendCustomerOrderAlertSafe({ orderId });
+
+  const refreshed = await queryOne("SELECT * FROM orders WHERE id = ?", [orderId]);
+  return json({ order: { ...mapOrderRow(refreshed), items: await getOrderItems(orderId) } }, 201);
 }
 
 async function updateOrderStatus(request, id) {
@@ -1020,6 +1144,38 @@ async function getCustomers(request) {
   });
 }
 
+async function createAdminCustomer(request) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const parsed = adminCustomerSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid customer payload." }, 400);
+  const payload = parsed.data;
+  const email = normalizeEmail(payload.email);
+  const existing = await queryOne("SELECT id FROM users WHERE email = ?", [email]);
+  if (existing) return json({ error: "A customer with this email already exists." }, 409);
+
+  const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
+  await execute(
+    "INSERT INTO users (email, password_hash, role, is_email_verified, full_name, phone, address, city) VALUES (?, ?, 'customer', true, ?, ?, ?, ?)",
+    [email, passwordHash, payload.fullName.trim(), payload.phone.trim(), payload.address.trim(), payload.city.trim()]
+  );
+  const row = await queryOne("SELECT * FROM users WHERE email = ? AND role = 'customer'", [email]);
+  return json({
+    customer: {
+      id: Number(row.id),
+      email: row.email,
+      fullName: row.full_name || "",
+      phone: row.phone || "",
+      address: row.address || "",
+      city: row.city || "",
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      orderCount: 0,
+      totalSpent: 0
+    }
+  }, 201);
+}
+
 async function deleteCustomer(request, id) {
   const auth = await requireUser(request, "admin");
   if (auth.response) return auth.response;
@@ -1058,7 +1214,8 @@ async function uploadImage(request) {
   if (!process.env.CLOUDINARY_URL) return json({ error: "CLOUDINARY_URL is not configured." }, 503);
   const form = await request.formData();
   const file = form.get("file");
-  const kind = String(form.get("kind") || "product").trim() === "hero" ? "hero" : "product";
+  const requestedKind = String(form.get("kind") || "product").trim();
+  const kind = ["product", "hero", "blog"].includes(requestedKind) ? requestedKind : "product";
   if (!file || typeof file === "string") return json({ error: "Image file is required." }, 400);
   if (!String(file.type || "").startsWith("image/")) return json({ error: "Only image uploads are allowed." }, 400);
   if (file.size > 10 * 1024 * 1024) return json({ error: "Image must be 10MB or smaller." }, 400);

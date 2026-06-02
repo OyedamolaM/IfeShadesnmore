@@ -2,16 +2,11 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import PasswordVisibilityIcon from "../components/icons/PasswordVisibilityIcon";
 import { login, register, resendVerificationEmail } from "../utils/api";
-
-function getStoredThemeVariant() {
-  if (typeof window === "undefined") return "v1";
-  const stored = window.localStorage.getItem("ife_preview_theme");
-  return stored === "v2" || stored === "v3" ? stored : "v1";
-}
+import { getStoredThemeVariant } from "../utils/themePreference";
 
 function AuthContainer({ title, subtitle, children, shellClassName = "", onBack }) {
   const shellClass = ["site-shell", "auth-shell", shellClassName].filter(Boolean).join(" ");
-  const [themeVariant, setThemeVariant] = useState("v1");
+  const [themeVariant, setThemeVariant] = useState(() => getStoredThemeVariant());
 
   useEffect(() => {
     setThemeVariant(getStoredThemeVariant());

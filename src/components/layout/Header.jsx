@@ -19,8 +19,11 @@ function Header({
     <header className="site-header">
       <div className="container header-inner">
         <button type="button" className="brand-mark" onDoubleClick={onOpenAdmin} aria-label="Open admin">
-          <span className="brand-top">{brandName}</span>
-          <span className="brand-bottom">{brandTagline}</span>
+          <img className="brand-logo" src="/brand/ife-logo-circle.png" alt="" />
+          <span className="brand-copy">
+            <span className="brand-top">{brandName}</span>
+            <span className="brand-bottom">{brandTagline}</span>
+          </span>
         </button>
 
         <nav aria-label="Primary navigation" className="primary-nav">

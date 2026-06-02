@@ -91,6 +91,13 @@ export function fetchAllOrders() {
   return request("/api/orders");
 }
 
+export function createAdminOrder(payload) {
+  return request("/api/orders", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function updateOrderStatus(orderId, orderStatus) {
   return request(`/api/orders/${encodeURIComponent(orderId)}/status`, {
     method: "PATCH",
@@ -100,6 +107,13 @@ export function updateOrderStatus(orderId, orderStatus) {
 
 export function fetchAdminCustomers() {
   return request("/api/admin/customers");
+}
+
+export function createAdminCustomer(payload) {
+  return request("/api/admin/customers", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export function deleteAdminCustomer(customerId) {

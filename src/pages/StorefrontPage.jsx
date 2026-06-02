@@ -7,6 +7,7 @@ import CheckoutModal from "../components/cart/CheckoutModal";
 import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
 import { CART_STORAGE_KEY } from "../constants/storefront";
 import { createSubscription, initializeCheckout } from "../utils/api";
+import { getStoredThemeVariant, persistThemeVariant } from "../utils/themePreference";
 
 const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
 const NEWSLETTER_DISMISSED_UNTIL_KEY = "ife_newsletter_dismissed_until";
@@ -117,11 +118,10 @@ function StorefrontPage({
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
   const [showAboutModal, setShowAboutModal] = useState(false);
-  const [previewStyle, setPreviewStyle] = useState("v1");
+  const [previewStyle, setPreviewStyle] = useState(() => getStoredThemeVariant());
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("ife_preview_theme", previewStyle);
+    persistThemeVariant(previewStyle);
   }, [previewStyle]);
 
   useEffect(() => {

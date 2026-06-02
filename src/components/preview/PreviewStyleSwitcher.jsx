@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 const PREVIEW_OPTIONS = [
-  { id: "v1", label: "01", title: "Minimalist Gallery" },
-  { id: "v2", label: "02", title: "Warm Earth" },
-  { id: "v3", label: "03", title: "Solar Editorial" }
+  { id: "v1", label: "01", title: "Gallery" },
+  { id: "v2", label: "02", title: "Terra" },
+  { id: "v3", label: "03", title: "Solar" }
 ];
 
 function PreviewStyleSwitcher({ value, onChange, title = "Preview style selector", compactLabel = "Theme" }) {
