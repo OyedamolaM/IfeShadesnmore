@@ -801,7 +801,7 @@ function AdminOverlay({
                 ))}
               </div>
             </div>
-            <button type="button" className="secondary-action" onClick={onOpenStorefront}>
+            <button type="button" className="secondary-action admin-storefront-text-button" onClick={onOpenStorefront}>
               Storefront
             </button>
             <button type="button" className="admin-storefront-icon-button" onClick={onOpenStorefront} aria-label="Open storefront">
@@ -811,7 +811,7 @@ function AdminOverlay({
               <AdminIcon name="bell" />
               <span />
             </button>
-            <button type="button" className="secondary-action" onClick={onLogout}>
+            <button type="button" className="secondary-action admin-logout-button" onClick={onLogout}>
               Logout
             </button>
           </div>

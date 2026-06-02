@@ -75,11 +75,16 @@ function formatDetailBulletLines(value) {
   return resolved.join("\n");
 }
 
+function shouldLoadStorefront(screen) {
+  return ["home", "admin", "admin-preview"].includes(screen);
+}
+
 function App({ screen = "home", initialStorefront = null, initialUser = null }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const needsStorefront = shouldLoadStorefront(screen);
 
-  const [isLoading, setIsLoading] = useState(!initialStorefront);
+  const [isLoading, setIsLoading] = useState(needsStorefront && !initialStorefront);
   const [loadError, setLoadError] = useState("");
   const [products, setProducts] = useState(() =>
     Array.isArray(initialStorefront?.products)
@@ -150,9 +155,9 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
   };
 
   useEffect(() => {
-    if (initialStorefront) return;
+    if (!needsStorefront || initialStorefront) return;
     loadStore();
-  }, [initialStorefront]);
+  }, [initialStorefront, needsStorefront]);
 
   useEffect(() => {
     const onKeyDown = (event) => {

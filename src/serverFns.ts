@@ -11,6 +11,12 @@ export const getInitialAppData = createServerFn({ method: "GET" }).handler(async
   return { storefront, user };
 });
 
+export const getAuthOnlyData = createServerFn({ method: "GET" }).handler(async () => {
+  const { getCurrentUserFromFetchRequest } = await import("../server/apiCore.js");
+  const request = getRequest();
+  return { user: request ? await getCurrentUserFromFetchRequest(request) : null };
+});
+
 export const getProductPageData = createServerFn({ method: "GET" })
   .inputValidator((slugId: string) => slugId)
   .handler(async ({ data }) => {

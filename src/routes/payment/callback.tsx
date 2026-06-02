@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import App from "../../App.jsx";
-import { getInitialAppData } from "../../serverFns";
+import { getAuthOnlyData } from "../../serverFns";
 
 export const Route = createFileRoute("/payment/callback")({
-  loader: () => getInitialAppData(),
+  loader: () => getAuthOnlyData(),
   head: () => ({
     meta: [
       { title: "Payment Status | IfeShades & More" },
@@ -12,6 +12,6 @@ export const Route = createFileRoute("/payment/callback")({
   }),
   component: () => {
     const data = Route.useLoaderData();
-    return <App screen="payment-callback" initialStorefront={data.storefront} initialUser={data.user} />;
+    return <App screen="payment-callback" initialUser={data.user} />;
   }
 });

@@ -6820,3 +6820,29 @@ select {
   width: 1.15rem !important;
   height: 2px !important;
 }
+
+@media (max-width: 720px) {
+  .admin-page .admin-topbar-actions > .admin-storefront-text-button {
+    display: none !important;
+  }
+
+  .admin-page .admin-topbar-actions > .admin-logout-button {
+    display: inline-flex !important;
+    min-width: auto !important;
+    min-height: 2.35rem !important;
+    height: 2.35rem !important;
+    padding: 0 0.65rem !important;
+    flex: 0 0 auto;
+    font-size: 0.58rem !important;
+    letter-spacing: 0.1em !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-page .admin-topbar-actions > .admin-logout-button {
+    min-height: 2.1rem !important;
+    height: 2.1rem !important;
+    padding: 0 0.5rem !important;
+    font-size: 0.54rem !important;
+  }
+}

@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import App from "../../App.jsx";
-import { getInitialAppData } from "../../serverFns";
+import { getAuthOnlyData } from "../../serverFns";
 
 export const Route = createFileRoute("/account/login")({
-  loader: () => getInitialAppData(),
+  loader: () => getAuthOnlyData(),
   head: () => noindexHead("Customer Login | IfeShades & More"),
   component: () => {
     const data = Route.useLoaderData();
-    return <App screen="account-login" initialStorefront={data.storefront} initialUser={data.user} />;
+    return <App screen="account-login" initialUser={data.user} />;
   }
 });
 
