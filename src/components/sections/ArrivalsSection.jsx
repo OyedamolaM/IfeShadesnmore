@@ -91,10 +91,9 @@ const COLLECTION_CARDS = [
     title: "Anti Blue Light",
     ctaLabel: "Shop Anti-Blue Light",
     sectionId: "anti-blue-light-section",
-    comingSoon: true
   },
   {
-    audience: "prescrip",
+    audience: "prescription",
     title: "Prescriptions",
     ctaLabel: "Shop Prescription",
     sectionId: "prescription-section",
@@ -236,6 +235,7 @@ function ArrivalsSection({
 }) {
   const [expandedSections, setExpandedSections] = useState({});
   const [categoryInfoNotice, setCategoryInfoNotice] = useState({ id: "", message: "" });
+  const [openProductActionsId, setOpenProductActionsId] = useState("");
   const [sunglassesImageIndex, setSunglassesImageIndex] = useState(0);
   const [isMobileView, setIsMobileView] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -351,6 +351,10 @@ function ArrivalsSection({
     setExpandedSections((current) => ({ ...current, [audience]: !current[audience] }));
   };
 
+  const toggleProductActions = (productId) => {
+    setOpenProductActionsId((current) => (current === productId ? "" : productId));
+  };
+
   const onCategoryCardAction = (card) => {
     if (card.isAvailable) {
       scrollToSection(card.sectionId);
@@ -385,7 +389,6 @@ function ArrivalsSection({
     <section className={`shop-sections themed-product-section themed-product-${themeVariant}`} id="shop">
       <div className="container">
         <div className="shop-toolbar">
-          <h2>Shop Collection</h2>
           <input
             id="catalog-search-input"
             type="search"
@@ -402,7 +405,7 @@ function ArrivalsSection({
           <section className="featured-category-showcase" aria-labelledby="featured-category-heading">
             <div className="featured-category-heading">
               <div>
-                <p>The Drop</p>
+                
                 <h2 id="featured-category-heading">Featured categories</h2>
               </div>
               <button type="button" onClick={onViewAllCategories}>
@@ -506,6 +509,7 @@ function ArrivalsSection({
                   {visibleItems.map((product, index) => {
                     const availability = normalizeAvailability(product.availability);
                     const isOutOfStock = availability === "out_of_stock";
+                    const isActionsOpen = openProductActionsId === product.id;
                     return (
                       <article className={index % 2 === 1 ? "collection-card is-offset" : "collection-card"} key={product.id}>
                         <button
@@ -532,17 +536,45 @@ function ArrivalsSection({
                             <p>{toPrice(product.price)}</p>
                           </div>
                           {allowOrdering ? (
-                            <button
-                              type="button"
-                              className="collection-add-button"
-                              disabled={isOutOfStock}
-                              aria-label={isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`}
-                              onClick={() => {
-                                if (!isOutOfStock) onAddToCart(product, 1);
-                              }}
-                            >
-                              +
-                            </button>
+                            <div className={`collection-action-menu ${isActionsOpen ? "is-open" : ""}`}>
+                              <div className="collection-action-panel" aria-hidden={!isActionsOpen}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onViewProduct(product);
+                                    setOpenProductActionsId("");
+                                  }}
+                                >
+                                  View details
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isOutOfStock}
+                                  onClick={() => {
+                                    if (!isOutOfStock) onAddToCart(product, 1);
+                                    setOpenProductActionsId("");
+                                  }}
+                                >
+                                  Add to cart
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                className="collection-add-button"
+                                disabled={isOutOfStock}
+                                aria-expanded={isActionsOpen}
+                                aria-label={
+                                  isOutOfStock
+                                    ? `${product.name} is out of stock`
+                                    : `${isActionsOpen ? "Close" : "Open"} ${product.name} actions`
+                                }
+                                onClick={() => {
+                                  if (!isOutOfStock) toggleProductActions(product.id);
+                                }}
+                              >
+                                <span aria-hidden="true">{isActionsOpen ? "-" : "+"}</span>
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                       </article>

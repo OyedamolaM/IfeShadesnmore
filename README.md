@@ -23,7 +23,7 @@ TanStack Start + Vite storefront with:
 3. For real verification emails, configure one provider:
    - SMTP (`MAIL_PROVIDER=smtp`) or
    - Resend (`MAIL_PROVIDER=resend`) or
-   - SendGrid (`MAIL_PROVIDER=sendgrid`)
+   - Brevo (`MAIL_PROVIDER=brevo`)
 4. For admin order-alert emails on every paid order, set:
    - `ORDER_ALERT_EMAIL` (single email or comma-separated list)
    - If empty, it falls back to `ADMIN_EMAIL`
@@ -99,6 +99,13 @@ an email notification with customer details, delivery address, and items to:
 Customer confirmation:
 - By default, a confirmation/receipt email is also sent to the customer email on that order.
 - Control with `CUSTOMER_ORDER_EMAIL_ENABLED=true|false`.
+- Sender defaults to `MAIL_FROM`, or use `ORDER_MAIL_FROM` for a dedicated order sender.
+
+## Account Welcome Emails
+
+After a customer verifies their signup email, the server sends a separate account welcome email.
+Control with `ACCOUNT_WELCOME_EMAIL_ENABLED=true|false`.
+Sender defaults to `MAIL_FROM`, or use `WELCOME_MAIL_FROM` for account/newsletter emails.
 
 ## 5) Migrate Existing SQLite Data to Postgres
 
@@ -148,17 +155,19 @@ Optional TLS flags:
 - `SMTP_IGNORE_TLS`
 - `SMTP_TLS_REJECT_UNAUTHORIZED`
 
-## SendGrid Checklist (No Custom Domain Needed)
+## Brevo Checklist (No Custom Domain Needed)
 
-If you do not have a domain yet, use SendGrid API over HTTPS:
+If you do not have a domain yet, use Brevo API over HTTPS:
 
-1. Create a SendGrid API key with Mail Send permission.
-2. Verify a Single Sender Identity in SendGrid (an email you control).
+1. Create a Brevo API key with transactional email access.
+2. Verify a sender in Brevo (an email you control).
 3. Set:
-   - `MAIL_PROVIDER=sendgrid`
-   - `SENDGRID_API_KEY`
-   - `SENDGRID_API_BASE_URL=https://api.sendgrid.com`
+   - `MAIL_PROVIDER=brevo`
+   - `BREVO_API_KEY`
+   - `BREVO_API_BASE_URL=https://api.brevo.com`
    - `MAIL_FROM=IfeShadesnMore <your-verified-sender-email>`
+   - Optional: `WELCOME_MAIL_FROM=IfeShadesnMore <ife@ifeshades.com.ng>`
+   - Optional: `ORDER_MAIL_FROM=IfeShadesnMore Orders <orders@ifeshades.com.ng>`
 4. Redeploy and test signup/resend verification.
 
 ### Render SMTP Timeout Note
@@ -168,6 +177,6 @@ If logs show SMTP `ETIMEDOUT`/`ENETUNREACH` to `smtp.gmail.com`, use Resend API 
 - `RESEND_API_BASE_URL=https://api.resend.com`
 
 If `MAIL_PROVIDER` is not set, provider priority is:
-1. SendGrid (`SENDGRID_API_KEY`)
+1. Brevo (`BREVO_API_KEY`)
 2. Resend (`RESEND_API_KEY`)
 3. SMTP

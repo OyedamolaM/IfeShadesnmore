@@ -22,6 +22,7 @@ import { Route as PreviewV3RouteImport } from "./routes/preview/v3"
 import { Route as PreviewV2RouteImport } from "./routes/preview/v2"
 import { Route as PreviewV1RouteImport } from "./routes/preview/v1"
 import { Route as PaymentCallbackRouteImport } from "./routes/payment/callback"
+import { Route as BlogSlugIdRouteImport } from "./routes/blog/$slugId"
 import { Route as ApiSplatRouteImport } from "./routes/api/$"
 import { Route as AdminStorefrontRouteImport } from "./routes/admin/storefront"
 import { Route as AdminLoginRouteImport } from "./routes/admin/login"
@@ -93,6 +94,11 @@ const PaymentCallbackRoute = PaymentCallbackRouteImport.update({
   path: "/payment/callback",
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogSlugIdRoute = BlogSlugIdRouteImport.update({
+  id: "/blog/$slugId",
+  path: "/blog/$slugId",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSplatRoute = ApiSplatRouteImport.update({
   id: "/api/$",
   path: "/api/$",
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   "/admin/login": typeof AdminLoginRoute
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
+  "/blog/$slugId": typeof BlogSlugIdRoute
   "/payment/callback": typeof PaymentCallbackRoute
   "/preview/v1": typeof PreviewV1Route
   "/preview/v2": typeof PreviewV2Route
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   "/admin/login": typeof AdminLoginRoute
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
+  "/blog/$slugId": typeof BlogSlugIdRoute
   "/payment/callback": typeof PaymentCallbackRoute
   "/preview/v1": typeof PreviewV1Route
   "/preview/v2": typeof PreviewV2Route
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   "/admin/login": typeof AdminLoginRoute
   "/admin/storefront": typeof AdminStorefrontRoute
   "/api/$": typeof ApiSplatRoute
+  "/blog/$slugId": typeof BlogSlugIdRoute
   "/payment/callback": typeof PaymentCallbackRoute
   "/preview/v1": typeof PreviewV1Route
   "/preview/v2": typeof PreviewV2Route
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | "/admin/login"
     | "/admin/storefront"
     | "/api/$"
+    | "/blog/$slugId"
     | "/payment/callback"
     | "/preview/v1"
     | "/preview/v2"
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | "/admin/login"
     | "/admin/storefront"
     | "/api/$"
+    | "/blog/$slugId"
     | "/payment/callback"
     | "/preview/v1"
     | "/preview/v2"
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | "/admin/login"
     | "/admin/storefront"
     | "/api/$"
+    | "/blog/$slugId"
     | "/payment/callback"
     | "/preview/v1"
     | "/preview/v2"
@@ -254,6 +266,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminStorefrontRoute: typeof AdminStorefrontRoute
   ApiSplatRoute: typeof ApiSplatRoute
+  BlogSlugIdRoute: typeof BlogSlugIdRoute
   PaymentCallbackRoute: typeof PaymentCallbackRoute
   PreviewV1Route: typeof PreviewV1Route
   PreviewV2Route: typeof PreviewV2Route
@@ -357,6 +370,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PaymentCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/blog/$slugId": {
+      id: "/blog/$slugId"
+      path: "/blog/$slugId"
+      fullPath: "/blog/$slugId"
+      preLoaderRoute: typeof BlogSlugIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/api/$": {
       id: "/api/$"
       path: "/api/$"
@@ -406,6 +426,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminStorefrontRoute: AdminStorefrontRoute,
   ApiSplatRoute: ApiSplatRoute,
+  BlogSlugIdRoute: BlogSlugIdRoute,
   PaymentCallbackRoute: PaymentCallbackRoute,
   PreviewV1Route: PreviewV1Route,
   PreviewV2Route: PreviewV2Route,

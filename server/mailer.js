@@ -57,22 +57,26 @@ function getResendConfig() {
   };
 }
 
-function getSendGridConfig() {
+function getBrevoConfig() {
   return {
-    apiKey: stripWrappingQuotes(process.env.SENDGRID_API_KEY || ""),
-    apiBaseUrl: stripWrappingQuotes(process.env.SENDGRID_API_BASE_URL || "https://api.sendgrid.com").replace(
+    apiKey: stripWrappingQuotes(process.env.BREVO_API_KEY || ""),
+    apiBaseUrl: stripWrappingQuotes(process.env.BREVO_API_BASE_URL || "https://api.brevo.com").replace(
       /\/+$/,
       ""
     )
   };
 }
 
-function resolveMailProvider({ resend, sendgrid }) {
+function getSenderFromEnv(envName) {
+  return stripWrappingQuotes(process.env[envName] || process.env.MAIL_FROM || "");
+}
+
+function resolveMailProvider({ resend, brevo }) {
   const preferred = stripWrappingQuotes(process.env.MAIL_PROVIDER || "").toLowerCase();
-  if (preferred === "smtp" || preferred === "resend" || preferred === "sendgrid") {
+  if (preferred === "smtp" || preferred === "resend" || preferred === "brevo") {
     return preferred;
   }
-  if (sendgrid.apiKey) return "sendgrid";
+  if (brevo.apiKey) return "brevo";
   if (resend.apiKey) return "resend";
   return "smtp";
 }
@@ -158,9 +162,9 @@ function getResendConfigurationError(resend, config) {
   return "";
 }
 
-function getSendGridConfigurationError(sendgrid, config) {
-  if (!sendgrid.apiKey) {
-    return "SENDGRID_API_KEY is not configured.";
+function getBrevoConfigurationError(brevo, config) {
+  if (!brevo.apiKey) {
+    return "BREVO_API_KEY is not configured.";
   }
   const from = parseFromAddress(config.from);
   if (!from.email) {
@@ -172,13 +176,13 @@ function getSendGridConfigurationError(sendgrid, config) {
 export function isMailerConfigured() {
   const config = getMailerConfig();
   const resend = getResendConfig();
-  const sendgrid = getSendGridConfig();
-  const provider = resolveMailProvider({ resend, sendgrid });
+  const brevo = getBrevoConfig();
+  const provider = resolveMailProvider({ resend, brevo });
   if (provider === "resend") {
     return !getResendConfigurationError(resend, config);
   }
-  if (provider === "sendgrid") {
-    return !getSendGridConfigurationError(sendgrid, config);
+  if (provider === "brevo") {
+    return !getBrevoConfigurationError(brevo, config);
   }
   return !getMailerConfigurationError(config);
 }
@@ -195,18 +199,18 @@ function maskEmail(value) {
 export function getMailerRuntimeInfo() {
   const config = getMailerConfig();
   const resend = getResendConfig();
-  const sendgrid = getSendGridConfig();
-  const provider = resolveMailProvider({ resend, sendgrid });
+  const brevo = getBrevoConfig();
+  const provider = resolveMailProvider({ resend, brevo });
   const configError =
     provider === "resend"
       ? getResendConfigurationError(resend, config)
-      : provider === "sendgrid"
-        ? getSendGridConfigurationError(sendgrid, config)
+      : provider === "brevo"
+        ? getBrevoConfigurationError(brevo, config)
         : getMailerConfigurationError(config);
   return {
     provider,
     resendConfigured: Boolean(resend.apiKey),
-    sendgridConfigured: Boolean(sendgrid.apiKey),
+    brevoConfigured: Boolean(brevo.apiKey),
     configured: !configError,
     configError: configError || "",
     host: config.host,
@@ -271,45 +275,50 @@ async function sendWithResend({ config, toEmail, subject, text, html }) {
   }
 }
 
-async function sendWithSendGrid({ config, toEmail, subject, text, html }) {
-  const sendgrid = getSendGridConfig();
-  if (!sendgrid.apiKey) {
-    throw Object.assign(new Error("SENDGRID_API_KEY is missing."), {
-      code: "SENDGRID_MISSING_KEY"
+async function sendWithBrevo({ config, toEmail, subject, text, html }) {
+  const brevo = getBrevoConfig();
+  if (!brevo.apiKey) {
+    throw Object.assign(new Error("BREVO_API_KEY is missing."), {
+      code: "BREVO_MISSING_KEY"
     });
   }
 
   const from = parseFromAddress(config.from);
   if (!from.email) {
-    throw Object.assign(new Error("MAIL_FROM is missing or invalid for SendGrid."), {
-      code: "SENDGRID_INVALID_FROM"
+    throw Object.assign(new Error("MAIL_FROM is missing or invalid for Brevo."), {
+      code: "BREVO_INVALID_FROM"
     });
   }
 
   const body = {
-    personalizations: [
+    sender: {
+      ...(from.name ? { name: from.name } : {}),
+      email: from.email
+    },
+    to: [
       {
-        to: [{ email: toEmail }]
+        email: toEmail
       }
     ],
-    from: {
-      email: from.email,
-      ...(from.name ? { name: from.name } : {})
-    },
     subject,
-    content: [
-      { type: "text/plain", value: text },
-      { type: "text/html", value: html }
-    ]
+    textContent: text,
+    htmlContent: html
   };
+
+  if (from.name) {
+    body.replyTo = {
+      email: from.email,
+      name: from.name
+    };
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(`${sendgrid.apiBaseUrl}/v3/mail/send`, {
+    const response = await fetch(`${brevo.apiBaseUrl}/v3/smtp/email`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${sendgrid.apiKey}`,
+        "api-key": brevo.apiKey,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body),
@@ -332,16 +341,16 @@ async function sendWithSendGrid({ config, toEmail, subject, text, html }) {
           details = payload;
         }
       }
-      throw Object.assign(new Error(`SendGrid request failed (${response.status})`), {
-        code: `SENDGRID_HTTP_${response.status}`,
+      throw Object.assign(new Error(`Brevo request failed (${response.status})`), {
+        code: `BREVO_HTTP_${response.status}`,
         responseCode: response.status,
         response: details || ""
       });
     }
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw Object.assign(new Error("SendGrid request timed out."), {
-        code: "SENDGRID_TIMEOUT"
+      throw Object.assign(new Error("Brevo request timed out."), {
+        code: "BREVO_TIMEOUT"
       });
     }
     throw error;
@@ -527,11 +536,14 @@ async function sendSmtpMessageWithRetry({ config, toEmail, subject, text, html }
   }
 }
 
-async function sendTransactionalEmail({ toEmail, subject, text, html, logPrefix }) {
-  const config = getMailerConfig();
+async function sendTransactionalEmail({ toEmail, subject, text, html, logPrefix, from }) {
+  const config = {
+    ...getMailerConfig(),
+    ...(from ? { from: stripWrappingQuotes(from) } : {})
+  };
   const resend = getResendConfig();
-  const sendgrid = getSendGridConfig();
-  const provider = resolveMailProvider({ resend, sendgrid });
+  const brevo = getBrevoConfig();
+  const provider = resolveMailProvider({ resend, brevo });
 
   if (provider === "resend") {
     const configError = getResendConfigurationError(resend, config);
@@ -550,14 +562,14 @@ async function sendTransactionalEmail({ toEmail, subject, text, html, logPrefix 
     return { delivered: true };
   }
 
-  if (provider === "sendgrid") {
-    const configError = getSendGridConfigurationError(sendgrid, config);
+  if (provider === "brevo") {
+    const configError = getBrevoConfigurationError(brevo, config);
     if (configError) {
       // eslint-disable-next-line no-console
       console.log(`${logPrefix} Mailer not configured.`, configError);
       return { delivered: false };
     }
-    await sendWithSendGrid({
+    await sendWithBrevo({
       config,
       toEmail,
       subject,
@@ -613,7 +625,109 @@ export async function sendEmailVerification({ toEmail, fullName, verificationUrl
     subject,
     text,
     html,
-    logPrefix: "[email-verification]"
+    logPrefix: "[email-verification]",
+    from: getSenderFromEnv("WELCOME_MAIL_FROM")
+  });
+}
+
+export async function sendNewsletterWelcome({ toEmail, source }) {
+  const safeEmail = String(toEmail || "").trim();
+  const safeSource = String(source || "newsletter").trim() || "newsletter";
+  const subject = "You are on the IfeShadesnMore drop list";
+  const text = [
+    "Hi there,",
+    "",
+    "You are now on the IfeShadesnMore drop list.",
+    "We will send you early access to new frame drops, restock notes, and member-only updates.",
+    "",
+    "Thanks for joining us.",
+    "",
+    `Subscribed email: ${safeEmail}`,
+    `Source: ${safeSource}`
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f1a17;background:#fdf8f3;padding:28px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #eadfd4;border-radius:18px;padding:28px;">
+        <p style="margin:0 0 8px;color:#c96e4c;font-size:11px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">IfeShadesnMore</p>
+        <h1 style="margin:0 0 12px;font-family:Georgia,serif;font-size:32px;line-height:1.05;color:#2d1b11;">You are on the drop list.</h1>
+        <p style="margin:0 0 14px;line-height:1.65;color:#5d514a;">We will send you early access to new frame drops, restock notes, and member-only updates.</p>
+        <p style="margin:0;color:#7b6f68;font-size:13px;">Subscribed email: ${escapeHtml(safeEmail)}</p>
+      </div>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[newsletter-welcome]",
+    from: getSenderFromEnv("WELCOME_MAIL_FROM")
+  });
+}
+
+export async function sendNewsletterAdminNotification({ toEmail, subscriberEmail, source }) {
+  const safeSubscriberEmail = String(subscriberEmail || "").trim();
+  const safeSource = String(source || "newsletter").trim() || "newsletter";
+  const subject = `New newsletter subscriber: ${safeSubscriberEmail || "IfeShadesnMore"}`;
+  const text = [
+    "A new email joined the newsletter list.",
+    "",
+    `Email: ${safeSubscriberEmail || "N/A"}`,
+    `Source: ${safeSource}`
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;">
+      <h2 style="margin:0 0 12px;">New newsletter subscriber</h2>
+      <p style="margin:0 0 6px;"><strong>Email:</strong> ${escapeHtml(safeSubscriberEmail || "N/A")}</p>
+      <p style="margin:0;"><strong>Source:</strong> ${escapeHtml(safeSource)}</p>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[newsletter-admin-notification]",
+    from: getSenderFromEnv("WELCOME_MAIL_FROM")
+  });
+}
+
+export async function sendAccountWelcome({ toEmail, fullName }) {
+  const greetingName = String(fullName || "").trim() || "there";
+  const subject = "Welcome to IfeShadesnMore";
+  const text = [
+    `Hi ${greetingName},`,
+    "",
+    "Welcome to IfeShadesnMore.",
+    "Your account is now active, so you can save your details, checkout faster, and keep track of your orders.",
+    "",
+    "Thank you for joining us.",
+    "",
+    "IfeShadesnMore"
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f1a17;background:#fdf8f3;padding:28px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #eadfd4;border-radius:18px;padding:28px;">
+        <p style="margin:0 0 8px;color:#c96e4c;font-size:11px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">IfeShadesnMore</p>
+        <h1 style="margin:0 0 12px;font-family:Georgia,serif;font-size:32px;line-height:1.05;color:#2d1b11;">Welcome, ${escapeHtml(greetingName)}.</h1>
+        <p style="margin:0 0 14px;line-height:1.65;color:#5d514a;">Your account is now active, so you can save your details, checkout faster, and keep track of your orders.</p>
+        <p style="margin:0;color:#7b6f68;font-size:13px;">Thank you for joining us.</p>
+      </div>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[account-welcome]",
+    from: getSenderFromEnv("WELCOME_MAIL_FROM")
   });
 }
 
@@ -719,7 +833,8 @@ export async function sendOrderNotification({ toEmail, order, items }) {
     subject,
     text,
     html,
-    logPrefix: "[order-notification]"
+    logPrefix: "[order-notification]",
+    from: getSenderFromEnv("ORDER_MAIL_FROM")
   });
 }
 
@@ -825,6 +940,7 @@ export async function sendCustomerOrderConfirmation({ toEmail, order, items }) {
     subject,
     text,
     html,
-    logPrefix: "[customer-order-confirmation]"
+    logPrefix: "[customer-order-confirmation]",
+    from: getSenderFromEnv("ORDER_MAIL_FROM")
   });
 }

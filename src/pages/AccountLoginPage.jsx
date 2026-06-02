@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import PasswordVisibilityIcon from "../components/icons/PasswordVisibilityIcon";
 import { login, register, resendVerificationEmail } from "../utils/api";
 
-function AuthContainer({ title, subtitle, children, shellClassName = "" }) {
+function getStoredThemeVariant() {
+  if (typeof window === "undefined") return "v1";
+  const stored = window.localStorage.getItem("ife_preview_theme");
+  return stored === "v2" || stored === "v3" ? stored : "v1";
+}
+
+function AuthContainer({ title, subtitle, children, shellClassName = "", onBack }) {
   const shellClass = ["site-shell", "auth-shell", shellClassName].filter(Boolean).join(" ");
+  const [themeVariant, setThemeVariant] = useState("v1");
+
+  useEffect(() => {
+    setThemeVariant(getStoredThemeVariant());
+  }, []);
+
   return (
-    <div className="page auth-page">
+    <div className={`page auth-page auth-theme-${themeVariant}`}>
       <div className={shellClass}>
         <article className="auth-card">
+          <button type="button" className="auth-back-link" onClick={onBack}>
+            Back to store
+          </button>
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
           {children}
@@ -29,9 +45,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
     lastName: "",
     email: "",
     password: "",
-    phone: "",
-    address: "",
-    city: ""
+    phone: ""
   });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -67,15 +81,17 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           setError("First name and last name are required.");
           return;
         }
+        if (!form.phone.trim()) {
+          setError("Phone number is required.");
+          return;
+        }
 
         const payload = await register({
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           email: form.email.trim(),
           password: form.password,
-          phone: form.phone.trim(),
-          address: form.address.trim(),
-          city: form.city.trim()
+          phone: form.phone.trim()
         });
 
         setNotice(payload?.message || "Signup successful. Please verify your email, then login.");
@@ -123,6 +139,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
       title={mode === "login" ? "Customer Login" : "Create Customer Account"}
       subtitle="Login to view orders and complete secure checkout. New accounts must verify email."
       shellClassName={mode === "login" ? "auth-shell-login" : ""}
+      onBack={() => navigate({ to: "/" })}
     >
       <div className="auth-mode-switch">
         <button
@@ -206,34 +223,22 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
               aria-label={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
             >
-              {showPassword ? "Hide" : "Show"}
+              <PasswordVisibilityIcon visible={showPassword} />
             </button>
           </div>
         </label>
         {mode === "register" ? (
-          <>
-            <label>
-              Phone
-              <input
-                value={form.phone}
-                onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-              />
-            </label>
-            <label>
-              Address
-              <input
-                value={form.address}
-                onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
-              />
-            </label>
-            <label>
-              City
-              <input
-                value={form.city}
-                onChange={(event) => setForm((prev) => ({ ...prev, city: event.target.value }))}
-              />
-            </label>
-          </>
+          <label>
+            <span>
+              Phone <span className="required-mark">*</span>
+            </span>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+              required
+            />
+          </label>
         ) : null}
         {error ? <p className="form-error">{error}</p> : null}
         {notice ? <p className="form-success">{notice}</p> : null}

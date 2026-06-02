@@ -8,6 +8,10 @@ import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
 import { CART_STORAGE_KEY } from "../constants/storefront";
 import { createSubscription, initializeCheckout } from "../utils/api";
 
+const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
+const NEWSLETTER_DISMISSED_UNTIL_KEY = "ife_newsletter_dismissed_until";
+const NEWSLETTER_SUBSCRIBED_KEY = "ife_newsletter_subscribed";
+
 function normalizeAvailability(value) {
   const source = String(value || "").trim().toLowerCase();
   if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
@@ -63,10 +67,27 @@ function buildCheckoutLoginRedirect() {
   return `/account/login?redirect=${encodeURIComponent(`/?${params.toString()}`)}`;
 }
 
+function getStoredNewsletterDismissedUntil() {
+  if (typeof window === "undefined") return 0;
+  return Number(window.localStorage.getItem(NEWSLETTER_DISMISSED_UNTIL_KEY) || 0) || 0;
+}
+
+function isNewsletterMarkedSubscribed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(NEWSLETTER_SUBSCRIBED_KEY) === "true";
+}
+
+function setNewsletterSubscribedFlag() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(NEWSLETTER_SUBSCRIBED_KEY, "true");
+  window.localStorage.removeItem(NEWSLETTER_DISMISSED_UNTIL_KEY);
+}
+
 function StorefrontPage({
   products,
   settings,
   heroSlides,
+  blogs = [],
   currentUser,
   location,
   onNavigate,
@@ -89,10 +110,19 @@ function StorefrontPage({
   const [email, setEmail] = useState("");
   const [emailStatus, setEmailStatus] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [showNewsletterPopup, setShowNewsletterPopup] = useState(false);
+  const [newsletterPopupEmail, setNewsletterPopupEmail] = useState(() => currentUser?.email || "");
+  const [newsletterPopupStatus, setNewsletterPopupStatus] = useState("");
+  const [isPopupSubscribing, setIsPopupSubscribing] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [previewStyle, setPreviewStyle] = useState("v1");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("ife_preview_theme", previewStyle);
+  }, [previewStyle]);
 
   useEffect(() => {
     const nameParts = splitFullName(currentUser?.fullName || "");
@@ -106,6 +136,29 @@ function StorefrontPage({
       city: current.city || currentUser?.city || ""
     }));
   }, [currentUser]);
+
+  useEffect(() => {
+    setNewsletterPopupEmail((current) => current || currentUser?.email || "");
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.isNewsletterSubscribed) return;
+    setNewsletterSubscribedFlag();
+    setShowNewsletterPopup(false);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isAdminPreview || isNewsletterMarkedSubscribed()) return undefined;
+    if (getStoredNewsletterDismissedUntil() > Date.now()) return undefined;
+
+    const timer = window.setTimeout(() => {
+      if (!isNewsletterMarkedSubscribed() && getStoredNewsletterDismissedUntil() <= Date.now()) {
+        setShowNewsletterPopup(true);
+      }
+    }, 1600);
+
+    return () => window.clearTimeout(timer);
+  }, [isAdminPreview]);
 
   const productsById = useMemo(() => {
     const map = new Map();
@@ -351,26 +404,63 @@ function StorefrontPage({
     setPendingSearchFocus(true);
   };
 
-  const handleNewsletterSubmit = async (event) => {
-    event.preventDefault();
-    if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      setEmailStatus("Enter a valid email address.");
-      return;
+  const markNewsletterSubscribed = () => {
+    setNewsletterSubscribedFlag();
+  };
+
+  const dismissNewsletterPopup = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(NEWSLETTER_DISMISSED_UNTIL_KEY, String(Date.now() + NEWSLETTER_DISMISS_MS));
+    }
+    setShowNewsletterPopup(false);
+    setNewsletterPopupStatus("");
+  };
+
+  const submitNewsletterEmail = async ({ emailAddress, source, setStatus, setPending, resetEmail }) => {
+    if (!emailAddress.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      setStatus("Enter a valid email address.");
+      return false;
     }
 
-    setIsSubscribing(true);
+    setPending(true);
     try {
       await createSubscription({
-        email: email.trim(),
-        source: isAdminPreview ? "admin-storefront" : "footer"
+        email: emailAddress.trim(),
+        source
       });
-      setEmail("");
-      setEmailStatus("Thanks. We will keep you updated.");
+      markNewsletterSubscribed();
+      resetEmail?.();
+      setStatus("Thanks. We will keep you updated.");
+      setShowNewsletterPopup(false);
+      return true;
     } catch (requestError) {
-      setEmailStatus(requestError.message || "Could not subscribe right now. Try again.");
+      setStatus(requestError.message || "Could not subscribe right now. Try again.");
+      return false;
     } finally {
-      setIsSubscribing(false);
+      setPending(false);
     }
+  };
+
+  const handleNewsletterSubmit = async (event) => {
+    event.preventDefault();
+    await submitNewsletterEmail({
+      emailAddress: email,
+      source: isAdminPreview ? "admin-storefront" : "footer",
+      setStatus: setEmailStatus,
+      setPending: setIsSubscribing,
+      resetEmail: () => setEmail("")
+    });
+  };
+
+  const handleNewsletterPopupSubmit = async (event) => {
+    event.preventDefault();
+    await submitNewsletterEmail({
+      emailAddress: newsletterPopupEmail,
+      source: "popup",
+      setStatus: setNewsletterPopupStatus,
+      setPending: setIsPopupSubscribing,
+      resetEmail: () => setNewsletterPopupEmail("")
+    });
   };
 
   return (
@@ -389,6 +479,7 @@ function StorefrontPage({
         <PreviewStorefront
           products={products}
           settings={settings}
+          blogs={blogs}
           currentUser={currentUser}
           styleVariant={previewStyle}
           onStyleVariantChange={setPreviewStyle}
@@ -416,7 +507,9 @@ function StorefrontPage({
             themeVariant={previewStyle}
           />
           <PreviewSupportSections
+            blogs={blogs}
             onOpenAdmin={() => onNavigate(currentUser?.role === "admin" ? "/admin" : "/admin/login")}
+            includeFooter={false}
           />
           <ContactSection
             email={email}
@@ -427,6 +520,7 @@ function StorefrontPage({
             }}
             onSubscribe={handleNewsletterSubmit}
             isSubscribing={isSubscribing}
+            themeVariant={previewStyle}
           />
         </main>
       </div>
@@ -435,6 +529,53 @@ function StorefrontPage({
         <p className="purchase-toast" role="status" aria-live="polite">
           {cartToast}
         </p>
+      ) : null}
+
+      {showNewsletterPopup ? (
+        <div className="newsletter-popup-overlay" onClick={dismissNewsletterPopup}>
+          <section
+            className={`newsletter-popup newsletter-popup-${previewStyle}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="newsletter-popup-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="newsletter-popup-close"
+              onClick={dismissNewsletterPopup}
+              aria-label="Close newsletter popup"
+            >
+              x
+            </button>
+            <p>Newsletter</p>
+            <h2 id="newsletter-popup-title">
+              Join the <em>drop list</em>.
+            </h2>
+            <span>Get early access to new frames, restocks, and member-only notes.</span>
+            <form onSubmit={handleNewsletterPopupSubmit}>
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={newsletterPopupEmail}
+                onChange={(event) => {
+                  setNewsletterPopupEmail(event.target.value);
+                  setNewsletterPopupStatus("");
+                }}
+                disabled={isPopupSubscribing}
+                aria-label="Email address"
+              />
+              <button type="submit" disabled={isPopupSubscribing}>
+                {isPopupSubscribing ? "Joining..." : "Join"}
+              </button>
+            </form>
+            {newsletterPopupStatus ? (
+              <strong className="newsletter-popup-status" role="status">
+                {newsletterPopupStatus}
+              </strong>
+            ) : null}
+          </section>
+        </div>
       ) : null}
 
       {showAboutModal ? (

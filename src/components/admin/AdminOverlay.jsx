@@ -9,9 +9,13 @@ import {
 } from "../../constants/storefront";
 import {
   deleteAdminCustomer,
+  createBlog,
+  deleteBlog,
+  fetchAdminBlogs,
   fetchAdminCustomers,
   fetchAllOrders,
   fetchSubscriptions,
+  updateBlog,
   updateOrderStatus
 } from "../../utils/api";
 
@@ -19,11 +23,21 @@ const ADMIN_TABS = [
   { id: "orders", label: "Orders" },
   { id: "customers", label: "Customers" },
   { id: "subscribers", label: "Subscribers" },
+  { id: "blogs", label: "Blogs" },
   { id: "products", label: "Products" },
   { id: "settings", label: "Settings" }
 ];
 
 const ORDER_STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+const EMPTY_BLOG_DRAFT = {
+  id: "",
+  title: "",
+  excerpt: "",
+  content: "",
+  image: "",
+  author: "IfeShadesnMore",
+  isPublished: true
+};
 
 function normalizeAudienceSelections(value) {
   const source = Array.isArray(value) ? value : [];
@@ -59,6 +73,7 @@ function AdminOverlay({
   products,
   onStartEdit,
   onRemoveProduct,
+  onBlogsChange,
   adminMessage,
   onOpenStorefront,
   onLogout
@@ -69,6 +84,10 @@ function AdminOverlay({
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [blogs, setBlogs] = useState([]);
+  const [blogDraft, setBlogDraft] = useState(EMPTY_BLOG_DRAFT);
+  const [isEditingBlog, setIsEditingBlog] = useState(false);
+  const [blogMessage, setBlogMessage] = useState("");
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
   const [orderStatusNotice, setOrderStatusNotice] = useState("");
   const [orderStatusError, setOrderStatusError] = useState("");
@@ -87,10 +106,11 @@ function AdminOverlay({
       setIsLoadingData(true);
       setDataError("");
       try {
-        const [ordersPayload, customersPayload, subscriptionsPayload] = await Promise.all([
+        const [ordersPayload, customersPayload, subscriptionsPayload, blogsPayload] = await Promise.all([
           fetchAllOrders(),
           fetchAdminCustomers(),
-          fetchSubscriptions()
+          fetchSubscriptions(),
+          fetchAdminBlogs()
         ]);
 
         if (!isMounted) return;
@@ -101,6 +121,9 @@ function AdminOverlay({
         setSubscriptions(
           Array.isArray(subscriptionsPayload?.subscriptions) ? subscriptionsPayload.subscriptions : []
         );
+        const nextBlogs = Array.isArray(blogsPayload?.blogs) ? blogsPayload.blogs : [];
+        setBlogs(nextBlogs);
+        onBlogsChange?.(nextBlogs.filter((blog) => blog.isPublished));
 
         setOrderStatusDrafts(
           nextOrders.reduce((acc, order) => {
@@ -185,6 +208,73 @@ function AdminOverlay({
       setCustomerActionNotice(`Customer "${label}" was removed.`);
     } catch (requestError) {
       setCustomerActionError(requestError.message || "Could not delete customer.");
+    }
+  };
+
+  const syncBlogs = (nextBlogs) => {
+    setBlogs(nextBlogs);
+    onBlogsChange?.(nextBlogs.filter((blog) => blog.isPublished));
+  };
+
+  const resetBlogDraft = () => {
+    setBlogDraft(EMPTY_BLOG_DRAFT);
+    setIsEditingBlog(false);
+  };
+
+  const startEditBlog = (blog) => {
+    setBlogDraft({
+      id: blog.id,
+      title: blog.title || "",
+      excerpt: blog.excerpt || "",
+      content: blog.content || "",
+      image: blog.image || "",
+      author: blog.author || "IfeShadesnMore",
+      isPublished: Boolean(blog.isPublished)
+    });
+    setIsEditingBlog(true);
+    setBlogMessage("");
+  };
+
+  const handleBlogSubmit = async (event) => {
+    event.preventDefault();
+    setBlogMessage("");
+    try {
+      const payload = {
+        title: blogDraft.title.trim(),
+        excerpt: blogDraft.excerpt.trim(),
+        content: blogDraft.content.trim(),
+        image: blogDraft.image.trim(),
+        author: blogDraft.author.trim(),
+        isPublished: Boolean(blogDraft.isPublished)
+      };
+      if (!payload.title) throw new Error("Blog title is required.");
+      if (!payload.content) throw new Error("Blog content is required.");
+      const response = isEditingBlog
+        ? await updateBlog(blogDraft.id, payload)
+        : await createBlog(payload);
+      const savedBlog = response.blog;
+      const nextBlogs = isEditingBlog
+        ? blogs.map((blog) => (blog.id === savedBlog.id ? savedBlog : blog))
+        : [savedBlog, ...blogs];
+      syncBlogs(nextBlogs);
+      setBlogMessage(isEditingBlog ? "Blog post updated." : "Blog post published.");
+      resetBlogDraft();
+    } catch (requestError) {
+      setBlogMessage(requestError.message || "Could not save blog post.");
+    }
+  };
+
+  const handleDeleteBlog = async (blog) => {
+    const shouldDelete = window.confirm(`Delete blog post "${blog.title}"?`);
+    if (!shouldDelete) return;
+    setBlogMessage("");
+    try {
+      await deleteBlog(blog.id);
+      syncBlogs(blogs.filter((item) => item.id !== blog.id));
+      if (blogDraft.id === blog.id) resetBlogDraft();
+      setBlogMessage("Blog post deleted.");
+    } catch (requestError) {
+      setBlogMessage(requestError.message || "Could not delete blog post.");
     }
   };
 
@@ -453,6 +543,116 @@ function AdminOverlay({
             </section>
           ) : null}
 
+          {activeTab === "blogs" ? (
+            <section className="admin-section-grid">
+              <form className="admin-section-card admin-form-card" onSubmit={handleBlogSubmit}>
+                <header className="admin-section-header">
+                  <h2>{isEditingBlog ? "Edit Blog Post" : "Write Blog Post"}</h2>
+                  <p>Create journal entries that appear in the storefront editorial swiper.</p>
+                </header>
+                <label>
+                  Title
+                  <input
+                    value={blogDraft.title}
+                    onChange={(event) => setBlogDraft((current) => ({ ...current, title: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label>
+                  Excerpt
+                  <input
+                    maxLength={260}
+                    value={blogDraft.excerpt}
+                    onChange={(event) => setBlogDraft((current) => ({ ...current, excerpt: event.target.value }))}
+                    placeholder="Short teaser for the editorial swiper"
+                  />
+                </label>
+                <label>
+                  Content
+                  <textarea
+                    rows={8}
+                    value={blogDraft.content}
+                    onChange={(event) => setBlogDraft((current) => ({ ...current, content: event.target.value }))}
+                    placeholder="Write the full blog post. Separate paragraphs with a blank line."
+                    required
+                  />
+                </label>
+                <label>
+                  Image URL
+                  <input
+                    value={blogDraft.image}
+                    onChange={(event) => setBlogDraft((current) => ({ ...current, image: event.target.value }))}
+                    placeholder="https://..."
+                  />
+                </label>
+                <label>
+                  Author
+                  <input
+                    value={blogDraft.author}
+                    onChange={(event) => setBlogDraft((current) => ({ ...current, author: event.target.value }))}
+                  />
+                </label>
+                <label className="admin-audience-option">
+                  <input
+                    type="checkbox"
+                    checked={blogDraft.isPublished}
+                    onChange={(event) =>
+                      setBlogDraft((current) => ({ ...current, isPublished: event.target.checked }))
+                    }
+                  />
+                  <span>Publish on storefront</span>
+                </label>
+                {blogMessage ? <p className={blogMessage.includes("Could not") ? "form-error" : "form-success"}>{blogMessage}</p> : null}
+                <div className="admin-inline-actions">
+                  <button type="submit" className="primary-action">
+                    {isEditingBlog ? "Update Blog" : "Save Blog"}
+                  </button>
+                  {isEditingBlog ? (
+                    <button type="button" className="secondary-action" onClick={resetBlogDraft}>
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+
+              <section className="admin-section-card admin-list-card">
+                <header className="admin-section-header">
+                  <h2>Current Blog Posts</h2>
+                  <p>Published posts rotate in the editorial section and link to blog pages.</p>
+                </header>
+                <ul className="admin-product-list admin-blog-list">
+                  {blogs.length === 0 ? <li>No blog posts yet.</li> : null}
+                  {blogs.map((blog) => (
+                    <li key={blog.id}>
+                      {blog.image ? (
+                        <div className="mini-media">
+                          <img src={blog.image} alt="" />
+                        </div>
+                      ) : null}
+                      <div>
+                        <strong>{blog.title}</strong>
+                        <span>{blog.isPublished ? "Published" : "Draft"} | {blog.author || "IfeShadesnMore"}</span>
+                        <span>{blog.excerpt || "No excerpt yet."}</span>
+                      </div>
+                      <div className="admin-list-actions">
+                        <button type="button" className="secondary-action" onClick={() => startEditBlog(blog)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-action danger-action"
+                          onClick={() => handleDeleteBlog(blog)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </section>
+          ) : null}
+
           {activeTab === "products" ? (
             <section className="admin-section-grid">
               <form className="admin-section-card admin-form-card" onSubmit={onProductSubmit}>
@@ -652,6 +852,14 @@ function AdminOverlay({
                     value={settingsDraft.brandTagline}
                     onChange={(event) => onSettingsDraftChange("brandTagline", event.target.value)}
                     required
+                  />
+                </label>
+                <label>
+                  Hero small text
+                  <input
+                    placeholder="Leave blank for current month, e.g. June Drop"
+                    value={settingsDraft.heroKicker || ""}
+                    onChange={(event) => onSettingsDraftChange("heroKicker", event.target.value)}
                   />
                 </label>
                 <label>

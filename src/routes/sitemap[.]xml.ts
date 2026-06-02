@@ -4,7 +4,7 @@ export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
       GET: async () => {
-        const { getSiteUrl, getStorefrontPayload, productPath } = await import("../../server/apiCore.js");
+        const { blogPath, getSiteUrl, getStorefrontPayload, productPath } = await import("../../server/apiCore.js");
         const siteUrl = getSiteUrl();
         const payload = await getStorefrontPayload();
         const urls = [
@@ -14,6 +14,10 @@ export const Route = createFileRoute("/sitemap.xml")({
           ...(payload.products || []).map((product) => ({
             loc: `${siteUrl}${productPath(product)}`,
             priority: product.section === "bestseller" ? "0.8" : "0.7"
+          })),
+          ...(payload.blogs || []).map((blog) => ({
+            loc: `${siteUrl}${blogPath(blog)}`,
+            priority: "0.6"
           }))
         ];
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls

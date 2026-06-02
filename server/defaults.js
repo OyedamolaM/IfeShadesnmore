@@ -43,6 +43,7 @@ export const DEFAULT_PRODUCT_DETAIL_BULLETS = [
 export const DEFAULT_SETTINGS = {
   brandName: "IfeShadesnMore",
   brandTagline: "Fashion, Prescription, all in one place",
+  heroKicker: "",
   heroTitle: "Confidence Perfectly Framed",
   heroSubtitle: "Look the class, style with pride, pay with less.",
   heroButtonLabel: "Shop Now",

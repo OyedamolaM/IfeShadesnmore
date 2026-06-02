@@ -293,6 +293,7 @@ async function runMigrationsSqlite() {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       brand_name TEXT NOT NULL,
       brand_tagline TEXT NOT NULL,
+      hero_kicker TEXT DEFAULT '',
       hero_title TEXT NOT NULL,
       hero_subtitle TEXT NOT NULL,
       hero_button_label TEXT NOT NULL,
@@ -315,6 +316,18 @@ async function runMigrationsSqlite() {
       detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS blogs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      excerpt TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      image TEXT DEFAULT '',
+      author TEXT DEFAULT '',
+      is_published INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -392,6 +405,9 @@ async function runMigrationsSqlite() {
   if (!settingsColumns.some((column) => column.name === "hero_promise_items")) {
     sqliteDb.exec(`ALTER TABLE settings ADD COLUMN hero_promise_items TEXT DEFAULT '[]'`);
   }
+  if (!settingsColumns.some((column) => column.name === "hero_kicker")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN hero_kicker TEXT DEFAULT ''`);
+  }
   if (!settingsColumns.some((column) => column.name === "feature_items")) {
     sqliteDb.exec(`ALTER TABLE settings ADD COLUMN feature_items TEXT DEFAULT '[]'`);
   }
@@ -413,6 +429,17 @@ async function runMigrationsSqlite() {
   }
   if (!orderItemColumns.some((column) => column.name === "preorder_note")) {
     sqliteDb.exec(`ALTER TABLE order_items ADD COLUMN preorder_note TEXT DEFAULT ''`);
+  }
+
+  const blogColumns = sqliteDb.prepare("PRAGMA table_info(blogs)").all();
+  if (!blogColumns.some((column) => column.name === "image")) {
+    sqliteDb.exec(`ALTER TABLE blogs ADD COLUMN image TEXT DEFAULT ''`);
+  }
+  if (!blogColumns.some((column) => column.name === "author")) {
+    sqliteDb.exec(`ALTER TABLE blogs ADD COLUMN author TEXT DEFAULT ''`);
+  }
+  if (!blogColumns.some((column) => column.name === "is_published")) {
+    sqliteDb.exec(`ALTER TABLE blogs ADD COLUMN is_published INTEGER NOT NULL DEFAULT 1`);
   }
 }
 
@@ -436,6 +463,7 @@ async function runMigrationsPostgres() {
       id SMALLINT PRIMARY KEY,
       brand_name TEXT NOT NULL,
       brand_tagline TEXT NOT NULL,
+      hero_kicker TEXT DEFAULT '',
       hero_title TEXT NOT NULL,
       hero_subtitle TEXT NOT NULL,
       hero_button_label TEXT NOT NULL,
@@ -458,6 +486,18 @@ async function runMigrationsPostgres() {
       detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS blogs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      excerpt TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      image TEXT DEFAULT '',
+      author TEXT DEFAULT '',
+      is_published BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -517,12 +557,16 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_kicker TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS author TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT TRUE;`);
 }
 
 async function seedSettingsIfEmpty() {
@@ -532,15 +576,16 @@ async function seedSettingsIfEmpty() {
   await execute(
     `
       INSERT INTO settings (
-        id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image,
+        id, brand_name, brand_tagline, hero_kicker, hero_title, hero_subtitle, hero_button_label, hero_image,
         hero_promise_items, feature_items
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       1,
       DEFAULT_SETTINGS.brandName,
       DEFAULT_SETTINGS.brandTagline,
+      DEFAULT_SETTINGS.heroKicker || "",
       DEFAULT_SETTINGS.heroTitle,
       DEFAULT_SETTINGS.heroSubtitle,
       DEFAULT_SETTINGS.heroButtonLabel,
@@ -650,10 +695,25 @@ export function mapProductRow(row) {
   };
 }
 
+export function mapBlogRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    excerpt: row.excerpt || "",
+    content: row.content || "",
+    image: row.image || "",
+    author: row.author || "",
+    isPublished: Boolean(row.is_published),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 export function mapSettingsRow(row) {
   return {
     brandName: row.brand_name,
     brandTagline: row.brand_tagline,
+    heroKicker: row.hero_kicker || "",
     heroTitle: row.hero_title,
     heroSubtitle: row.hero_subtitle,
     heroButtonLabel: row.hero_button_label,

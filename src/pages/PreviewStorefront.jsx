@@ -1,44 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import CartIcon from "../components/icons/CartIcon";
 import PreviewStyleSwitcher from "../components/preview/PreviewStyleSwitcher";
 import "./PreviewStorefront.css";
 
 const VARIANTS = {
   v1: {
-    label: "Spring Drop 2026",
+    label: "",
     heroImage: "/preview/hero-v1-gallery.jpg",
     className: "preview-v1",
-    kicker: "Quiet luxury",
     headline: ["Confidence,", "perfectly", "framed."],
-    description:
-      "Hand-selected luxury frames for fashion, prescription, and statement days, delivered nationwide.",
+    description: "Luxury frames for fashion, prescription, and statement days.",
     primary: "Shop the drop",
     secondary: "Explore collections",
     statTone: "1,200+ happy customers"
   },
   v2: {
-    label: "Spring Drop 2026",
+    label: "",
     heroImage: "/preview/hero-v2-earth.jpg",
     className: "preview-v2",
-    kicker: "Warm earth edit",
     headline: ["Confidence,", "perfectly", "framed."],
-    description:
-      "A boutique eyewear edit with polished silhouettes, warm styling, and everyday Nigerian delivery.",
+    description: "A warm boutique edit of polished everyday eyewear.",
     primary: "Shop the drop",
     secondary: "Explore collections",
-    statTone: "Bestseller edit"
+    statTone: "1,200+ happy customers"
   },
   v3: {
-    label: "Spring Drop 2026",
+    label: "",
     heroImage: "/preview/hero-v3-solar.jpg",
     className: "preview-v3",
-    kicker: "Solar editorial",
     headline: ["Confidence,", "perfectly", "framed."],
-    description:
-      "Bold frames with a sunlit editorial feel, made for customers who like their eyewear to speak first.",
+    description: "Bold frames with a sunlit editorial feel.",
     primary: "Shop the drop",
     secondary: "Explore collections",
-    statTone: "New drops every Friday"
+    statTone: "1,200+ happy customers"
   }
 };
 
@@ -60,8 +55,72 @@ const VALUE_PROPS = [
   }
 ];
 
-const HERO_IMAGE_SEQUENCE = ["v1", "v2", "v3"];
+const HERO_SLIDES = [
+  {
+    id: "minimalist-gallery",
+    themeKey: "v1",
+    image: VARIANTS.v1.heroImage,
+    alt: "IfeShades editorial eyewear preview",
+    label: "Best seller",
+    title: "Photochromic Antiblue"
+  },
+  {
+    id: "warm-earth",
+    themeKey: "v2",
+    image: VARIANTS.v2.heroImage,
+    alt: "Warm editorial eyewear preview",
+    label: "Best seller",
+    title: "Rhinstone Classic"
+  },
+  {
+    id: "solar-editorial",
+    themeKey: "v3",
+    image: VARIANTS.v3.heroImage,
+    alt: "Solar editorial eyewear preview",
+    label: "Best seller",
+    title: "Solar Tints"
+  },
+  {
+    id: "round-blue-light",
+    image: "/hero/hero-male.jpg",
+    alt: "Man wearing round blue-light glasses indoors",
+    label: "Best seller",
+    title: "Anti Blue-Light Filter"
+  },
+  {
+    id: "gold-optical",
+    image: "/hero/hero-recent-6.jpg",
+    alt: "Woman wearing gold optical glasses",
+    label: "Best seller",
+    title: "Fashion Anti-blue-Light"
+  },
+  {
+    id: "modern-sun",
+    image: "/hero/hero-recent-1.jpg",
+    alt: "Man wearing modern sunglasses outdoors",
+    label: "Best seller",
+    title: "Photochromic Sunglasses"
+  },
+  {
+    id: "statement-cat-eye",
+    image: "/hero/hero-recent-3.jpg",
+    alt: "Woman wearing statement cat-eye eyeglasses",
+    label: "Best seller",
+    title: "Rhinestone Gold"
+  }
+];
 const HERO_IMAGE_INTERVAL_MS = 4200;
+const BLOG_SWIPER_INTERVAL_MS = 5200;
+const PLACEHOLDER_BLOGS = [
+  {
+    id: "style-guide-placeholder",
+    title: "How to choose frames that match your mood",
+    excerpt: "A quick styling note on shape, color, and presence while the first journal posts are being prepared.",
+    image: "/preview/hero-v1-gallery.jpg",
+    author: "IfeShadesnMore",
+    createdAt: ""
+  }
+];
 
 function normalizeAvailability(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -72,39 +131,89 @@ function normalizeAvailability(value) {
   return "in_stock";
 }
 
+function getDefaultHeroKicker() {
+  const month = new Date().toLocaleString("en", { month: "long" });
+  return `${month} Drop`;
+}
+
+function heroSlideIndexForTheme(styleVariant) {
+  const index = HERO_SLIDES.findIndex((slide) => slide.themeKey === styleVariant);
+  return index === -1 ? 0 : index;
+}
+
 function iconGlyph(type) {
   if (type === "truck") return "TR";
   if (type === "shield") return "OK";
   return "*";
 }
 
-export function PreviewSupportSections({ onOpenAdmin }) {
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function blogSlugId(blog) {
+  const slug = slugify(blog?.title || blog?.id || "blog") || "blog";
+  return `${slug}--${encodeURIComponent(blog.id)}`;
+}
+
+export function PreviewSupportSections({ blogs = [], onOpenAdmin, includeFooter = true }) {
+  const blogItems = (Array.isArray(blogs) && blogs.length > 0 ? blogs : PLACEHOLDER_BLOGS).filter(Boolean);
+  const [activeBlogIndex, setActiveBlogIndex] = useState(0);
+  const activeBlog = blogItems[activeBlogIndex % blogItems.length] || PLACEHOLDER_BLOGS[0];
+
+  useEffect(() => {
+    setActiveBlogIndex(0);
+  }, [blogItems.length]);
+
+  useEffect(() => {
+    if (blogItems.length < 2 || typeof window === "undefined") return undefined;
+    const timer = window.setInterval(() => {
+      setActiveBlogIndex((current) => (current + 1) % blogItems.length);
+    }, BLOG_SWIPER_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [blogItems.length]);
+
   return (
     <>
       <section className="preview-editorial" id="editorial">
         <div>
-          <p>Editorial</p>
+          <p>Blog</p>
           <h2>
-            Made for the way <em>you show up</em>.
+            Read the <em>latest</em>.
           </h2>
           <span>
-            Every frame is selected for presence: soft enough for daylight, sharp enough for the room.
+            Styling stories, care notes, and frame guides from the IfeShadesnMore blog.
           </span>
         </div>
-        <dl>
+        <article className="preview-blog-card" aria-live="polite">
+          {activeBlog.image ? <img src={activeBlog.image} alt="" /> : null}
           <div>
-            <dt>2k+</dt>
-            <dd>Frames sold</dd>
+            <p>Blog</p>
+            <h3>{activeBlog.title}</h3>
+            <span>{activeBlog.excerpt}</span>
+            <Link to="/blog/$slugId" params={{ slugId: blogSlugId(activeBlog) }}>
+              Read more
+            </Link>
           </div>
-          <div>
-            <dt>36</dt>
-            <dd>States shipped</dd>
-          </div>
-          <div>
-            <dt>4.9</dt>
-            <dd>Customer rating</dd>
-          </div>
-        </dl>
+          {blogItems.length > 1 ? (
+            <div className="preview-blog-dots" aria-label="Blog posts">
+              {blogItems.map((blog, index) => (
+                <button
+                  key={blog.id}
+                  type="button"
+                  className={index === activeBlogIndex ? "is-active" : ""}
+                  onClick={() => setActiveBlogIndex(index)}
+                  aria-label={`Show ${blog.title}`}
+                />
+              ))}
+            </div>
+          ) : null}
+        </article>
       </section>
 
       <section className="preview-values">
@@ -119,25 +228,27 @@ export function PreviewSupportSections({ onOpenAdmin }) {
         ))}
       </section>
 
-      <footer className="preview-footer" id="contact">
-        <div>
-          <h2>
-            Join the <em>drop list</em>.
-          </h2>
-          <p>Early access to new frame drops, member-only updates, and restock notes.</p>
-        </div>
-        <form onSubmit={(event) => event.preventDefault()}>
-          <input type="email" placeholder="your@email.com" aria-label="Email address" />
-          <button type="submit">Join</button>
-        </form>
-        <nav aria-label="Footer navigation">
-          <Link to="/privacy-policy">Privacy</Link>
-          <Link to="/terms-of-service">Terms</Link>
-          <button type="button" onClick={onOpenAdmin}>
-            Admin
-          </button>
-        </nav>
-      </footer>
+      {includeFooter ? (
+        <footer className="preview-footer" id="contact">
+          <div>
+            <h2>
+              Join the <em>drop list</em>.
+            </h2>
+            <p>Early access to new frame drops, member-only updates, and restock notes.</p>
+          </div>
+          <form onSubmit={(event) => event.preventDefault()}>
+            <input type="email" placeholder="your@email.com" aria-label="Email address" />
+            <button type="submit">Join</button>
+          </form>
+          <nav aria-label="Footer navigation">
+            <Link to="/privacy-policy">Privacy</Link>
+            <Link to="/terms-of-service">Terms</Link>
+            <button type="button" onClick={onOpenAdmin}>
+              Admin
+            </button>
+          </nav>
+        </footer>
+      ) : null}
     </>
   );
 }
@@ -154,42 +265,44 @@ function PreviewStorefront({
   onOpenAbout,
   onViewProduct,
   onAddToCart,
+  blogs = [],
   cartCount,
   allowOrdering = true,
-  primaryShopTargetId = "preview-shop",
+  primaryShopTargetId = "editorial",
   rotateHeroImages = true,
   showSupportSections = true
 }) {
   const variant = VARIANTS[styleVariant] || VARIANTS.v1;
   const [heroImageIndex, setHeroImageIndex] = useState(() =>
-    Math.max(0, HERO_IMAGE_SEQUENCE.indexOf(styleVariant))
+    heroSlideIndexForTheme(styleVariant)
   );
   const brandName = settings?.brandName || "IfeShadesnMore";
+  const heroKicker = String(settings?.heroKicker || "").trim() || getDefaultHeroKicker();
   const visibleProducts = (products || [])
     .filter((product) => normalizeAvailability(product.availability) !== "out_of_stock")
     .slice(0, 4);
-  const activeHeroImageKey = rotateHeroImages
-    ? HERO_IMAGE_SEQUENCE[heroImageIndex % HERO_IMAGE_SEQUENCE.length]
-    : styleVariant;
-  const activeHeroImage = VARIANTS[activeHeroImageKey]?.heroImage || variant.heroImage;
+  const activeHeroIndex = rotateHeroImages
+    ? heroImageIndex % HERO_SLIDES.length
+    : heroSlideIndexForTheme(styleVariant);
+  const activeHeroSlide = HERO_SLIDES[activeHeroIndex] || HERO_SLIDES[0];
 
   useEffect(() => {
-    setHeroImageIndex(Math.max(0, HERO_IMAGE_SEQUENCE.indexOf(styleVariant)));
+    setHeroImageIndex(heroSlideIndexForTheme(styleVariant));
   }, [styleVariant]);
 
   useEffect(() => {
     if (!rotateHeroImages || typeof window === "undefined") return undefined;
     const timer = window.setInterval(() => {
-      setHeroImageIndex((current) => (current + 1) % HERO_IMAGE_SEQUENCE.length);
+      setHeroImageIndex((current) => (current + 1) % HERO_SLIDES.length);
     }, HERO_IMAGE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [rotateHeroImages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    HERO_IMAGE_SEQUENCE.forEach((key) => {
+    HERO_SLIDES.forEach((slide) => {
       const image = new window.Image();
-      image.src = VARIANTS[key].heroImage;
+      image.src = slide.image;
     });
   }, []);
 
@@ -197,10 +310,6 @@ function PreviewStorefront({
 
   return (
     <div className={`preview-storefront ${variant.className}`}>
-      <div className="preview-switcher-stack">
-        <PreviewStyleSwitcher value={styleVariant} onChange={onStyleVariantChange} compactLabel="Theme" />
-      </div>
-
       <header className="preview-nav">
         <button type="button" className="preview-brand" onDoubleClick={onOpenAdmin} aria-label="Open admin">
           <span>I</span>
@@ -208,18 +317,19 @@ function PreviewStorefront({
         </button>
         <nav aria-label="Primary navigation">
           <a href={`#${primaryShopTargetId}`}>Shop</a>
-          <a href="#editorial">Editorial</a>
+          <a href="#editorial">Blog</a>
           <button type="button" onClick={onOpenAbout}>
             About
           </button>
         </nav>
         <div className="preview-nav-actions">
+          <PreviewStyleSwitcher value={styleVariant} onChange={onStyleVariantChange} compactLabel="Theme" />
           <button type="button" onClick={onOpenProfile}>
             {currentUser ? "Account" : "Login"}
           </button>
           {allowOrdering ? (
-            <button type="button" className="preview-cart-button" onClick={onOpenCart}>
-              Cart
+            <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
+              <CartIcon />
               {cartCount > 0 ? <span>{cartCount > 99 ? "99+" : cartCount}</span> : null}
             </button>
           ) : null}
@@ -231,9 +341,9 @@ function PreviewStorefront({
           <div className="preview-hero-copy">
             <p className="preview-kicker">
               <span />
-              {variant.kicker}
+              {heroKicker}
             </p>
-            <p className="preview-season">{variant.label}</p>
+            {variant.label ? <p className="preview-season">{variant.label}</p> : null}
             <h1>
               {variant.headline[0]}
               <br />
@@ -251,32 +361,38 @@ function PreviewStorefront({
                 {variant.secondary}
               </button>
             </div>
-            <p className="preview-proof">{variant.statTone}</p>
+            <div className="preview-proof" aria-label={variant.statTone}>
+              <span className="preview-proof-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>{variant.statTone}</span>
+            </div>
           </div>
           <div className="preview-hero-media" aria-live="off">
-            <img key={activeHeroImage} src={activeHeroImage} alt="IfeShades editorial eyewear preview" />
+            <img key={activeHeroSlide.image} src={activeHeroSlide.image} alt={activeHeroSlide.alt} />
             {rotateHeroImages ? (
               <div className="preview-hero-dots" aria-hidden="true">
-                {HERO_IMAGE_SEQUENCE.map((key) => (
-                  <span key={key} className={key === activeHeroImageKey ? "is-active" : ""} />
+                {HERO_SLIDES.map((slide, index) => (
+                  <span key={slide.id} className={index === activeHeroIndex ? "is-active" : ""} />
                 ))}
               </div>
             ) : null}
             <aside>
-              <span>Bestseller</span>
-              <strong>{visibleProducts[0]?.name || "Rhinestone Gold"}</strong>
+              <span>{activeHeroSlide.label}</span>
+              <strong>{activeHeroSlide.title}</strong>
             </aside>
           </div>
         </section>
 
         <div className="preview-ticker">
-          <span>Free shipping over NGN 30k</span>
-          <span>New drops every Friday</span>
+          <span>New drops every Month</span>
           <span>Nationwide delivery</span>
-          <span>Quality guaranteed</span>
+          <span>Bulk purchase discounts</span>
         </div>
 
-        {showSupportSections ? <PreviewSupportSections onOpenAdmin={onOpenAdmin} /> : null}
+        {showSupportSections ? <PreviewSupportSections blogs={blogs} onOpenAdmin={onOpenAdmin} /> : null}
       </main>
     </div>
   );

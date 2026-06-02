@@ -18,6 +18,13 @@ export const getProductPageData = createServerFn({ method: "GET" })
     return getProductBySlugId(data);
   });
 
+export const getBlogPageData = createServerFn({ method: "GET" })
+  .inputValidator((slugId: string) => slugId)
+  .handler(async ({ data }) => {
+    const { getBlogBySlugId } = await import("../server/apiCore.js");
+    return getBlogBySlugId(data);
+  });
+
 export const getSeoStorefront = createServerFn({ method: "GET" }).handler(async () => {
   const { getStorefrontPayload } = await import("../server/apiCore.js");
   return getStorefrontPayload();

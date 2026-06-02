@@ -1,12 +1,28 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import PasswordVisibilityIcon from "../components/icons/PasswordVisibilityIcon";
 import { fetchAdminBootstrapState, login, logout } from "../utils/api";
 
-function AuthContainer({ title, subtitle, children }) {
+function getStoredThemeVariant() {
+  if (typeof window === "undefined") return "v1";
+  const stored = window.localStorage.getItem("ife_preview_theme");
+  return stored === "v2" || stored === "v3" ? stored : "v1";
+}
+
+function AuthContainer({ title, subtitle, children, onBack }) {
+  const [themeVariant, setThemeVariant] = useState("v1");
+
+  useEffect(() => {
+    setThemeVariant(getStoredThemeVariant());
+  }, []);
+
   return (
-    <div className="page auth-page">
-      <div className="site-shell auth-shell">
+    <div className={`page auth-page auth-theme-${themeVariant}`}>
+      <div className="site-shell auth-shell auth-shell-login">
         <article className="auth-card">
+          <button type="button" className="auth-back-link" onClick={onBack}>
+            Back to store
+          </button>
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
           {children}
@@ -63,6 +79,7 @@ function AdminLoginPage({ currentUser, onAuthenticated }) {
     <AuthContainer
       title="Admin Login"
       subtitle="Sign in with an admin account to manage orders, customers, products, and settings."
+      onBack={() => navigate({ to: "/" })}
     >
       {!hasAdmin ? (
         <p className="form-error">
@@ -96,7 +113,7 @@ function AdminLoginPage({ currentUser, onAuthenticated }) {
               aria-label={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
             >
-              {showPassword ? "Hide" : "Show"}
+              <PasswordVisibilityIcon visible={showPassword} />
             </button>
           </div>
         </label>

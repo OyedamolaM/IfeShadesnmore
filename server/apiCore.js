@@ -6,6 +6,7 @@ import { v2 as cloudinary } from "cloudinary";
 import {
   execute,
   initDatabase,
+  mapBlogRow,
   mapProductRow,
   mapSettingsRow,
   mapUserRow,
@@ -23,14 +24,19 @@ import {
 } from "./paystack.js";
 import {
   getMailerRuntimeInfo,
+  sendAccountWelcome,
   sendCustomerOrderConfirmation,
   sendEmailVerification,
+  sendNewsletterAdminNotification,
+  sendNewsletterWelcome,
   sendOrderNotification
 } from "./mailer.js";
 import {
   DEFAULT_FEATURE_ITEMS,
   DEFAULT_HERO_PROMISE_ITEMS,
-  DEFAULT_PRODUCT_DETAIL_BULLETS
+  DEFAULT_PRODUCT_DETAIL_BULLETS,
+  DEFAULT_PRODUCTS,
+  DEFAULT_SETTINGS
 } from "./defaults.js";
 
 dotenv.config();
@@ -41,10 +47,25 @@ const PRODUCT_AUDIENCE_VALUES = ["women", "men", "sunglasses", "unisex", "antibl
 const PRODUCT_AUDIENCE_SET = new Set(PRODUCT_AUDIENCE_VALUES);
 const PRODUCT_AVAILABILITY_VALUES = ["in_stock", "out_of_stock", "preorder"];
 const PRODUCT_AVAILABILITY_SET = new Set(PRODUCT_AVAILABILITY_VALUES);
+const ACCOUNT_WELCOME_EMAIL_ENABLED = parseBooleanEnv(process.env.ACCOUNT_WELCOME_EMAIL_ENABLED, true);
 const CUSTOMER_ORDER_EMAIL_ENABLED = parseBooleanEnv(process.env.CUSTOMER_ORDER_EMAIL_ENABLED, true);
+const NEWSLETTER_EMAIL_ENABLED = parseBooleanEnv(process.env.NEWSLETTER_EMAIL_ENABLED, true);
 const rateBuckets = new Map();
+const PLACEHOLDER_BLOG = {
+  id: "style-guide-placeholder",
+  title: "How to choose frames that match your mood",
+  excerpt: "A quick styling note on shape, color, and presence while the first journal posts are being prepared.",
+  content:
+    "The right frame should feel like an easy extension of your day. Start with the mood you want to carry: softer translucent frames for daylight, sharper dark silhouettes for definition, and warm tortoise tones when you want something polished but relaxed. If you are between two options, choose the one that makes your face feel more awake.",
+  image: "/preview/hero-v1-gallery.jpg",
+  author: "IfeShadesnMore",
+  isPublished: true,
+  createdAt: new Date(0).toISOString(),
+  updatedAt: new Date(0).toISOString()
+};
 
 let readyPromise = null;
+let storefrontFallbackWarningLogged = false;
 
 export function getSiteUrl() {
   return String(process.env.SITE_URL || process.env.FRONTEND_URL || FRONTEND_URL)
@@ -66,6 +87,11 @@ export function productPath(product) {
   return `/products/${slug}--${encodeURIComponent(product.id)}`;
 }
 
+export function blogPath(blog) {
+  const slug = slugify(blog?.title || blog?.id || "blog") || "blog";
+  return `/blog/${slug}--${encodeURIComponent(blog.id)}`;
+}
+
 export async function ensureServerReady() {
   if (!readyPromise) {
     readyPromise = initDatabase().then(() => bootstrapAdminIfConfigured());
@@ -74,36 +100,83 @@ export async function ensureServerReady() {
 }
 
 export async function getStorefrontPayload() {
-  await ensureServerReady();
-  const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
-  const productsRows = await queryAll("SELECT * FROM products ORDER BY created_at DESC");
-  return {
-    settings: settingsRow ? mapSettingsRow(settingsRow) : null,
-    products: productsRows.map(mapProductRow)
-  };
+  try {
+    await ensureServerReady();
+    const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
+    const productsRows = await queryAll("SELECT * FROM products ORDER BY created_at DESC");
+    const blogRows = await queryAll("SELECT * FROM blogs WHERE is_published = true ORDER BY created_at DESC");
+    const blogs = blogRows.map(mapBlogRow);
+    return {
+      settings: settingsRow ? mapSettingsRow(settingsRow) : DEFAULT_SETTINGS,
+      products: productsRows.map(mapProductRow),
+      blogs: blogs.length > 0 ? blogs : [PLACEHOLDER_BLOG]
+    };
+  } catch (error) {
+    if (!storefrontFallbackWarningLogged) {
+      storefrontFallbackWarningLogged = true;
+      console.warn(
+        "Storefront database unavailable; rendering default storefront data.",
+        error?.message || error
+      );
+    }
+    return getFallbackStorefrontPayload();
+  }
 }
 
 export async function getProductBySlugId(slugId) {
-  await ensureServerReady();
   const raw = String(slugId || "");
   const marker = "--";
   const id = raw.includes(marker) ? raw.slice(raw.lastIndexOf(marker) + marker.length) : raw;
-  const row = await queryOne("SELECT * FROM products WHERE id = ?", [decodeURIComponent(id)]);
-  return row ? mapProductRow(row) : null;
+  const decodedId = decodeURIComponent(id);
+  try {
+    await ensureServerReady();
+    const row = await queryOne("SELECT * FROM products WHERE id = ?", [decodedId]);
+    return row ? mapProductRow(row) : null;
+  } catch {
+    return DEFAULT_PRODUCTS.find((product) => product.id === decodedId) || null;
+  }
+}
+
+export async function getBlogBySlugId(slugId) {
+  const raw = String(slugId || "");
+  const marker = "--";
+  const id = raw.includes(marker) ? raw.slice(raw.lastIndexOf(marker) + marker.length) : raw;
+  const decodedId = decodeURIComponent(id);
+  if (decodedId === PLACEHOLDER_BLOG.id) return PLACEHOLDER_BLOG;
+  try {
+    await ensureServerReady();
+    const row = await queryOne("SELECT * FROM blogs WHERE id = ? AND is_published = true", [decodedId]);
+    return row ? mapBlogRow(row) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCurrentUserFromFetchRequest(request) {
-  await ensureServerReady();
   const cookies = parseCookies(request.headers.get("cookie") || "");
   const token = cookies[TOKEN_COOKIE_NAME];
   if (!token) return null;
   try {
+    await ensureServerReady();
     const payload = verifyAuthToken(token);
     const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [Number(payload.sub)]);
-    return userRow ? mapUserRow(userRow) : null;
+    if (!userRow) return null;
+    const user = mapUserRow(userRow);
+    const subscriptionRow = user.email
+      ? await queryOne("SELECT id FROM subscriptions WHERE lower(email) = lower(?)", [user.email])
+      : null;
+    return { ...user, isNewsletterSubscribed: Boolean(subscriptionRow) };
   } catch {
     return null;
   }
+}
+
+function getFallbackStorefrontPayload() {
+  return {
+    settings: DEFAULT_SETTINGS,
+    products: DEFAULT_PRODUCTS,
+    blogs: [PLACEHOLDER_BLOG]
+  };
 }
 
 export async function handleApiRequest(request, splat = "") {
@@ -143,6 +216,14 @@ export async function handleApiRequest(request, splat = "") {
     }
     if (method === "DELETE" && match(pathname, /^\/api\/products\/([^/]+)$/)) {
       return deleteProduct(request, decodeURIComponent(match(pathname, /^\/api\/products\/([^/]+)$/)[1]));
+    }
+    if (method === "GET" && pathname === "/api/blogs") return getBlogs(request);
+    if (method === "POST" && pathname === "/api/blogs") return createBlog(request);
+    if (method === "PUT" && match(pathname, /^\/api\/blogs\/([^/]+)$/)) {
+      return updateBlog(request, decodeURIComponent(match(pathname, /^\/api\/blogs\/([^/]+)$/)[1]));
+    }
+    if (method === "DELETE" && match(pathname, /^\/api\/blogs\/([^/]+)$/)) {
+      return deleteBlog(request, decodeURIComponent(match(pathname, /^\/api\/blogs\/([^/]+)$/)[1]));
     }
     if (method === "GET" && pathname === "/api/admin/bootstrap-state") return adminBootstrapState();
     if (method === "GET" && pathname === "/api/admin/customers") return getCustomers(request);
@@ -277,6 +358,19 @@ async function sendVerificationEmailSafe({ toEmail, fullName, verificationUrl })
   }
 }
 
+async function sendAccountWelcomeSafe({ toEmail, fullName }) {
+  if (!ACCOUNT_WELCOME_EMAIL_ENABLED) return { delivered: false, skipped: "disabled" };
+  try {
+    return await sendAccountWelcome({ toEmail, fullName });
+  } catch (error) {
+    console.error("Could not send account welcome email:", {
+      message: error?.message || "",
+      mailer: getMailerRuntimeInfo()
+    });
+    return { delivered: false };
+  }
+}
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -355,7 +449,7 @@ const registerSchema = z
     firstName: z.string().max(60).optional().default(""),
     lastName: z.string().max(60).optional().default(""),
     fullName: z.string().max(120).optional().default(""),
-    phone: z.string().max(40).optional().default(""),
+    phone: z.string().trim().min(1).max(40),
     address: z.string().max(300).optional().default(""),
     city: z.string().max(120).optional().default("")
   })
@@ -386,6 +480,7 @@ const bulletItemSchema = z.object({
 const settingsSchema = z.object({
   brandName: z.string().min(1).max(120),
   brandTagline: z.string().min(1).max(80),
+  heroKicker: z.string().max(80).optional().default(""),
   heroTitle: z.string().min(1).max(180),
   heroSubtitle: z.string().min(1).max(240),
   heroButtonLabel: z.string().min(1).max(80),
@@ -407,6 +502,15 @@ const productSchema = z.object({
   preorderNote: z.string().max(180).optional().default(""),
   variant: z.string().max(40).optional().default("round"),
   image: z.string().max(5_000_000).optional().default("")
+});
+const blogSchema = z.object({
+  id: z.string().min(1).max(120).optional(),
+  title: z.string().min(1).max(180),
+  excerpt: z.string().max(260).optional().default(""),
+  content: z.string().min(1).max(8000),
+  image: z.string().max(5_000_000).optional().default(""),
+  author: z.string().max(120).optional().default(""),
+  isPublished: z.boolean().optional().default(true)
 });
 const checkoutSchema = z.object({
   items: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1).max(99) })).min(1),
@@ -471,6 +575,7 @@ async function verifyEmail(request) {
   await execute("UPDATE email_verification_tokens SET consumed_at = datetime('now') WHERE id = ?", [row.id]);
   const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [row.user_id]);
   const user = mapUserRow(userRow);
+  await sendAccountWelcomeSafe({ toEmail: user.email, fullName: user.fullName });
   return json({ user, message: "Email verified successfully." }, 200, authHeaders(user));
 }
 
@@ -754,10 +859,11 @@ async function updateSettings(request) {
   if (!parsed.success) return json({ error: "Invalid settings payload." }, 400);
   const payload = parsed.data;
   await execute(
-    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, updated_at = datetime('now') WHERE id = 1",
+    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_kicker = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, updated_at = datetime('now') WHERE id = 1",
     [
       payload.brandName.trim(),
       payload.brandTagline.trim(),
+      payload.heroKicker.trim(),
       payload.heroTitle.trim(),
       payload.heroSubtitle.trim(),
       payload.heroButtonLabel.trim(),
@@ -829,6 +935,64 @@ async function deleteProduct(request, id) {
   return json({ ok: true });
 }
 
+async function getBlogs(request) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const rows = await queryAll("SELECT * FROM blogs ORDER BY created_at DESC");
+  return json({ blogs: rows.map(mapBlogRow) });
+}
+
+async function createBlog(request) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const parsed = blogSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid blog payload." }, 400);
+  const payload = normalizeBlogPayload(parsed.data);
+  const id = parsed.data.id || crypto.randomUUID();
+  await execute(
+    "INSERT INTO blogs (id, title, excerpt, content, image, author, is_published) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [id, payload.title, payload.excerpt, payload.content, payload.image, payload.author, payload.isPublished]
+  );
+  const row = await queryOne("SELECT * FROM blogs WHERE id = ?", [id]);
+  return json({ blog: mapBlogRow(row) }, 201);
+}
+
+async function updateBlog(request, id) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const parsed = blogSchema.safeParse({ ...(await readJson(request)), id });
+  if (!parsed.success) return json({ error: "Invalid blog payload." }, 400);
+  const existing = await queryOne("SELECT id FROM blogs WHERE id = ?", [id]);
+  if (!existing) return json({ error: "Blog post not found." }, 404);
+  const payload = normalizeBlogPayload(parsed.data);
+  await execute(
+    "UPDATE blogs SET title = ?, excerpt = ?, content = ?, image = ?, author = ?, is_published = ?, updated_at = datetime('now') WHERE id = ?",
+    [payload.title, payload.excerpt, payload.content, payload.image, payload.author, payload.isPublished, id]
+  );
+  const row = await queryOne("SELECT * FROM blogs WHERE id = ?", [id]);
+  return json({ blog: mapBlogRow(row) });
+}
+
+function normalizeBlogPayload(payload) {
+  return {
+    title: payload.title.trim(),
+    excerpt: String(payload.excerpt || "").trim(),
+    content: String(payload.content || "").trim(),
+    image: String(payload.image || "").trim(),
+    author: String(payload.author || "").trim(),
+    isPublished: Boolean(payload.isPublished)
+  };
+}
+
+async function deleteBlog(request, id) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const existing = await queryOne("SELECT id FROM blogs WHERE id = ?", [id]);
+  if (!existing) return json({ error: "Blog post not found." }, 404);
+  await execute("DELETE FROM blogs WHERE id = ?", [id]);
+  return json({ ok: true });
+}
+
 async function adminBootstrapState() {
   const row = await queryOne("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'");
   return json({ hasAdmin: (Number(row?.count) || 0) > 0 });
@@ -872,11 +1036,13 @@ async function createSubscription(request) {
   const parsed = subscriptionSchema.safeParse(await readJson(request));
   if (!parsed.success) return json({ error: "Enter a valid email address." }, 400);
   const email = normalizeEmail(parsed.data.email);
+  const source = String(parsed.data.source || "footer").trim() || "footer";
   await execute(
     "INSERT INTO subscriptions (email, source) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET source = excluded.source",
-    [email, String(parsed.data.source || "footer").trim() || "footer"]
+    [email, source]
   );
-  return json({ ok: true, email }, 201);
+  const emailResult = await sendNewsletterEmailsSafe({ email, source });
+  return json({ ok: true, email, emailDelivered: Boolean(emailResult.customerDelivered) }, 201);
 }
 
 async function getSubscriptions(request) {
@@ -920,6 +1086,45 @@ async function uploadImage(request) {
 function getOrderAlertRecipients() {
   const configured = String(process.env.ORDER_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
   return [...new Set(configured.split(",").map((entry) => normalizeEmail(entry)).filter(Boolean))];
+}
+
+function getNewsletterAlertRecipients() {
+  const configured = String(process.env.NEWSLETTER_ALERT_EMAIL || process.env.ORDER_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
+  return [...new Set(configured.split(",").map((entry) => normalizeEmail(entry)).filter(Boolean))];
+}
+
+async function sendNewsletterEmailsSafe({ email, source }) {
+  if (!NEWSLETTER_EMAIL_ENABLED) return { customerDelivered: false, adminDelivered: false, skipped: "disabled" };
+
+  let customerDelivered = false;
+  try {
+    const result = await sendNewsletterWelcome({ toEmail: email, source });
+    customerDelivered = Boolean(result?.delivered);
+  } catch (error) {
+    console.error("Could not send newsletter welcome email:", {
+      message: error?.message || "",
+      mailer: getMailerRuntimeInfo()
+    });
+  }
+
+  let adminDeliveredCount = 0;
+  for (const toEmail of getNewsletterAlertRecipients()) {
+    try {
+      const result = await sendNewsletterAdminNotification({ toEmail, subscriberEmail: email, source });
+      if (result?.delivered) adminDeliveredCount += 1;
+    } catch (error) {
+      console.error("Could not send newsletter admin notification email:", {
+        message: error?.message || "",
+        mailer: getMailerRuntimeInfo()
+      });
+    }
+  }
+
+  return {
+    customerDelivered,
+    adminDelivered: adminDeliveredCount > 0,
+    adminDeliveredCount
+  };
 }
 
 async function sendOrderAlertSafe({ orderId }) {

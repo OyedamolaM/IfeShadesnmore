@@ -89,6 +89,9 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     initialStorefront?.settings ? { ...DEFAULT_SETTINGS, ...initialStorefront.settings } : DEFAULT_SETTINGS
   );
   const [currentUser, setCurrentUser] = useState(initialUser || null);
+  const [blogs, setBlogs] = useState(() =>
+    Array.isArray(initialStorefront?.blogs) ? initialStorefront.blogs : []
+  );
 
   const [settingsDraft, setSettingsDraft] = useState(DEFAULT_SETTINGS);
   const [productDraft, setProductDraft] = useState(EMPTY_PRODUCT);
@@ -132,9 +135,11 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
       const nextProducts = Array.isArray(storefrontPayload?.products)
         ? storefrontPayload.products.map(normalizeProduct)
         : [];
+      const nextBlogs = Array.isArray(storefrontPayload?.blogs) ? storefrontPayload.blogs : [];
       setSettings(nextSettings);
       setSettingsDraft(nextSettings);
       setProducts(nextProducts);
+      setBlogs(nextBlogs);
       setCurrentUser(mePayload?.user || null);
     } catch (requestError) {
       setLoadError(requestError.message || "Could not load storefront.");
@@ -243,6 +248,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
       const payload = await updateSettings({
         brandName: settingsDraft.brandName.trim() || DEFAULT_SETTINGS.brandName,
         brandTagline: settingsDraft.brandTagline.trim() || DEFAULT_SETTINGS.brandTagline,
+        heroKicker: String(settingsDraft.heroKicker || "").trim(),
         heroTitle: settingsDraft.heroTitle.trim() || DEFAULT_SETTINGS.heroTitle,
         heroSubtitle: settingsDraft.heroSubtitle.trim() || DEFAULT_SETTINGS.heroSubtitle,
         heroButtonLabel: settingsDraft.heroButtonLabel.trim() || DEFAULT_SETTINGS.heroButtonLabel,
@@ -329,6 +335,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
         products={products}
         settings={settings}
         heroSlides={heroSlides}
+        blogs={blogs}
         currentUser={currentUser}
         location={routeLocation}
         onNavigate={navigateTo}
@@ -381,6 +388,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
         products={products}
         onStartEdit={startEdit}
         onRemoveProduct={handleProductRemove}
+        onBlogsChange={setBlogs}
         adminMessage={adminMessage}
         onOpenStorefront={() => navigateTo("/admin/storefront")}
         onLogout={handleAdminLogout}
@@ -392,7 +400,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     return <PaymentCallbackPage />;
   }
 
-  return <StorefrontPage products={products} settings={settings} heroSlides={heroSlides} currentUser={currentUser} location={routeLocation} onNavigate={navigateTo} />;
+  return <StorefrontPage products={products} settings={settings} heroSlides={heroSlides} blogs={blogs} currentUser={currentUser} location={routeLocation} onNavigate={navigateTo} />;
 }
 
 export default App;

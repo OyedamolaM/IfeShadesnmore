@@ -34,7 +34,7 @@ function SocialIcon({ type }) {
   );
 }
 
-function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubscribing = false }) {
+function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubscribing = false, themeVariant = "v1" }) {
   const emailAddress = "oluborodedeborah2000@gmail.com";
   const phoneNumber = "09063556765";
   const officeAddress = "1, Sunday Akinbo Str, command Ipaja, Lagos";
@@ -44,13 +44,19 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
 
   return (
     <>
-      <section className="subscribe-section" id="contact">
+      <section className={`subscribe-section themed-contact-section themed-contact-${themeVariant}`} id="contact">
         <div className="container subscribe-inner">
-          <h2>Stay Updated</h2>
+          <div>
+            <p className="subscribe-kicker">Newsletter</p>
+            <h2>
+              Join the <em>drop list</em>.
+            </h2>
+            <p className="subscribe-copy">Early access to weekly frame drops, member-only updates, and restock notes.</p>
+          </div>
           <form onSubmit={onSubscribe}>
             <input
               type="email"
-              placeholder="Sign up for exclusive offers & updates"
+              placeholder="your@email.com"
               value={email}
               onChange={(event) => onEmailChange(event.target.value)}
               disabled={isSubscribing}
@@ -63,7 +69,7 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
         {emailStatus ? <p className="subscribe-status">{emailStatus}</p> : null}
       </section>
 
-      <footer className="site-footer">
+      <footer className={`site-footer themed-site-footer themed-site-footer-${themeVariant}`}>
         <div className="container footer-inner">
           <div className="footer-links">
             <Link to="/privacy-policy" className="footer-link-button">

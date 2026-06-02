@@ -167,6 +167,30 @@ export function deleteProduct(productId) {
   });
 }
 
+export function fetchAdminBlogs() {
+  return request("/api/blogs");
+}
+
+export function createBlog(payload) {
+  return request("/api/blogs", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateBlog(blogId, payload) {
+  return request(`/api/blogs/${encodeURIComponent(blogId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteBlog(blogId) {
+  return request(`/api/blogs/${encodeURIComponent(blogId)}`, {
+    method: "DELETE"
+  });
+}
+
 export function initializeCheckout(payload) {
   return request("/api/checkout/initialize", {
     method: "POST",

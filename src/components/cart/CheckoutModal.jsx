@@ -93,7 +93,7 @@ function CheckoutModal({
             <p className="checkout-hint">Phone or email is required for order updates.</p>
             <label>
               <span>
-                Delivery address <span className="required-mark">*</span>
+                Shipping address <span className="required-mark">*</span>
               </span>
               <input
                 value={form.address}
