@@ -11,6 +11,7 @@
     "start:server": "node .output/server/index.mjs",
     "postinstall": "patch-package",
     "migrate:sqlite-to-postgres": "node scripts/migrate-sqlite-to-postgres.mjs",
+    "migrate:images-to-supabase": "node scripts/migrate-product-images-to-supabase-storage.mjs",
     "optimize:hero-images": "node scripts/optimize-hero-images.mjs"
   },
   "dependencies": {

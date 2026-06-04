@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-const FALLBACK_GLASSES_IMAGE = "/hero/UnisexGlasses.jpg";
-
 function normalizeHeroPath(value) {
   const src = String(value || "").trim();
   if (!src) return "";
@@ -47,21 +45,24 @@ function ProductMedia({ product }) {
     setImageFailed(false);
   }, [normalizedImage]);
 
-  const src = !imageFailed && normalizedImage ? normalizedImage : FALLBACK_GLASSES_IMAGE;
   const alt = product.name || "Eyeglasses";
+
+  if (!normalizedImage || imageFailed) {
+    return (
+      <span className="product-image-missing" role="img" aria-label={`${alt} image unavailable`}>
+        Image unavailable
+      </span>
+    );
+  }
 
   return (
     <img
-      src={src}
+      src={normalizedImage}
       alt={alt}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => {
-        if (src !== FALLBACK_GLASSES_IMAGE) {
-          setImageFailed(true);
-        }
-      }}
+      onError={() => setImageFailed(true)}
     />
   );
 }

@@ -73,6 +73,28 @@ const PLACEHOLDER_BLOG = {
 let readyPromise = null;
 let storefrontFallbackWarningLogged = false;
 
+const PUBLIC_PRODUCT_SELECT = `
+  SELECT
+    id, name, price, section, audience, availability, preorder_note, cta_label,
+    description, detail_bullets, variant,
+    CASE
+      WHEN image LIKE 'data:image/%;base64,%' THEN '/api/products/' || id || '/image'
+      ELSE coalesce(image, '')
+    END AS image,
+    created_at, updated_at
+  FROM products
+`;
+const PUBLIC_BLOG_SELECT = `
+  SELECT
+    id, title, excerpt, content,
+    CASE
+      WHEN image LIKE 'data:image/%;base64,%' THEN '/api/blogs/' || id || '/image'
+      ELSE coalesce(image, '')
+    END AS image,
+    author, is_published, created_at, updated_at
+  FROM blogs
+`;
+
 function readPositiveIntegerEnv(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -129,10 +151,9 @@ export async function ensureServerReady() {
 
 export async function getStorefrontPayload() {
   try {
-    await ensureServerReady();
     const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
-    const productsRows = await queryAll("SELECT * FROM products ORDER BY created_at DESC");
-    const blogRows = await queryAll("SELECT * FROM blogs WHERE is_published = true ORDER BY created_at DESC");
+    const productsRows = await queryAll(`${PUBLIC_PRODUCT_SELECT} ORDER BY created_at DESC`);
+    const blogRows = await queryAll(`${PUBLIC_BLOG_SELECT} WHERE is_published = true ORDER BY created_at DESC`);
     const blogs = blogRows.map(mapBlogRow);
     return {
       settings: settingsRow ? mapSettingsRow(settingsRow) : DEFAULT_SETTINGS,
@@ -157,8 +178,7 @@ export async function getProductBySlugId(slugId) {
   const id = raw.includes(marker) ? raw.slice(raw.lastIndexOf(marker) + marker.length) : raw;
   const decodedId = decodeURIComponent(id);
   try {
-    await ensureServerReady();
-    const row = await queryOne("SELECT * FROM products WHERE id = ?", [decodedId]);
+    const row = await queryOne(`${PUBLIC_PRODUCT_SELECT} WHERE id = ?`, [decodedId]);
     return row ? mapProductRow(row) : null;
   } catch {
     return DEFAULT_PRODUCTS.find((product) => product.id === decodedId) || null;
@@ -172,8 +192,7 @@ export async function getBlogBySlugId(slugId) {
   const decodedId = decodeURIComponent(id);
   if (decodedId === PLACEHOLDER_BLOG.id) return PLACEHOLDER_BLOG;
   try {
-    await ensureServerReady();
-    const row = await queryOne("SELECT * FROM blogs WHERE id = ? AND is_published = true", [decodedId]);
+    const row = await queryOne(`${PUBLIC_BLOG_SELECT} WHERE id = ? AND is_published = true`, [decodedId]);
     return row ? mapBlogRow(row) : null;
   } catch {
     return null;
@@ -218,6 +237,12 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "GET" && pathname === "/api/storefront") return json(await getStorefrontPayload());
     if (method === "GET" && pathname === "/api/auth/me") {
       return json({ user: await getCurrentUserFromFetchRequest(request) });
+    }
+    if (method === "GET" && match(pathname, /^\/api\/products\/([^/]+)\/image$/)) {
+      return getStoredImageResponse("products", decodeURIComponent(match(pathname, /^\/api\/products\/([^/]+)\/image$/)[1]));
+    }
+    if (method === "GET" && match(pathname, /^\/api\/blogs\/([^/]+)\/image$/)) {
+      return getStoredImageResponse("blogs", decodeURIComponent(match(pathname, /^\/api\/blogs\/([^/]+)\/image$/)[1]));
     }
     await ensureServerReady();
     if (method === "POST" && pathname === "/api/auth/register") return register(request);
@@ -1122,15 +1147,20 @@ async function updateProduct(request, id) {
   if (auth.response) return auth.response;
   const parsed = productSchema.safeParse({ ...(await readJson(request)), id });
   if (!parsed.success) return json({ error: "Invalid product payload." }, 400);
-  const existing = await queryOne("SELECT id FROM products WHERE id = ?", [id]);
+  const existing = await queryOne("SELECT id, image FROM products WHERE id = ?", [id]);
   if (!existing) return json({ error: "Product not found." }, 404);
   const product = normalizeProductPayload(parsed.data);
+  const image = product.image === productImageEndpoint(id) ? existing.image || "" : product.image;
   await execute(
     "UPDATE products SET name = ?, price = ?, section = ?, audience = ?, availability = ?, preorder_note = ?, cta_label = ?, description = ?, detail_bullets = ?, variant = ?, image = ?, updated_at = datetime('now') WHERE id = ?",
-    [product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, product.image, id]
+    [product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, image, id]
   );
   const row = await queryOne("SELECT * FROM products WHERE id = ?", [id]);
   return json({ product: mapProductRow(row) });
+}
+
+function productImageEndpoint(id) {
+  return `/api/products/${encodeURIComponent(id)}/image`;
 }
 
 function normalizeProductPayload(payload) {
@@ -1358,6 +1388,33 @@ async function uploadImage(request) {
     height: null,
     format: String(file.type || "").split("/")[1] || ""
   }, 201);
+}
+
+async function getStoredImageResponse(tableName, id) {
+  const table = tableName === "blogs" ? "blogs" : "products";
+  const row = await queryOne(`SELECT image FROM ${table} WHERE id = ?`, [id]);
+  const image = String(row?.image || "");
+  if (!image) return new Response("Image not found.", { status: 404 });
+
+  if (/^https?:\/\//i.test(image)) {
+    return Response.redirect(image, 302);
+  }
+
+  if (image.startsWith("/")) {
+    return Response.redirect(`${getSiteUrl()}${image}`, 302);
+  }
+
+  const dataUrlMatch = image.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/i);
+  if (dataUrlMatch) {
+    return new Response(Buffer.from(dataUrlMatch[2], "base64"), {
+      headers: {
+        "Content-Type": dataUrlMatch[1] || "application/octet-stream",
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    });
+  }
+
+  return new Response("Unsupported image format.", { status: 415 });
 }
 
 function sanitizeUploadFileName(value) {

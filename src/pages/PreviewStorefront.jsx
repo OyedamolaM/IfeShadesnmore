@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import CartIcon from "../components/icons/CartIcon";
 import ProfileIcon from "../components/icons/ProfileIcon";
 import PreviewStyleSwitcher from "../components/preview/PreviewStyleSwitcher";
-import "./PreviewStorefront.css";
 
 const VARIANTS = {
   v1: {

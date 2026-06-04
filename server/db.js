@@ -22,6 +22,15 @@ function readPositiveIntegerEnv(name, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function buildPostgresConnectionString(connectionString, disableSsl) {
+  if (disableSsl) return connectionString;
+  const additions = [];
+  if (!/[?&]uselibpqcompat=/i.test(connectionString)) additions.push("uselibpqcompat=true");
+  if (!/[?&]sslmode=/i.test(connectionString)) additions.push("sslmode=require");
+  if (additions.length === 0) return connectionString;
+  return `${connectionString}${connectionString.includes("?") ? "&" : "?"}${additions.join("&")}`;
+}
+
 const DEFAULT_SQLITE_DATA_DIR = IS_VERCEL
   ? path.join(os.tmpdir(), "ife-shadesnmore")
   : path.join(process.cwd(), "server", "data");
@@ -40,7 +49,7 @@ if (USE_POSTGRES) {
     .toLowerCase();
   const shouldDisableSsl = disableSsl === "true" || disableSsl === "1";
   pgPool = new Pool({
-    connectionString: DATABASE_URL,
+    connectionString: buildPostgresConnectionString(DATABASE_URL, shouldDisableSsl),
     ssl: shouldDisableSsl ? false : { rejectUnauthorized: false },
     max: readPositiveIntegerEnv("PG_POOL_MAX", 5),
     connectionTimeoutMillis: readPositiveIntegerEnv("PG_CONNECTION_TIMEOUT_MS", 8000),
