@@ -237,10 +237,7 @@ function ArrivalsSection({
   const [categoryInfoNotice, setCategoryInfoNotice] = useState({ id: "", message: "" });
   const [openProductActionsId, setOpenProductActionsId] = useState("");
   const [sunglassesImageIndex, setSunglassesImageIndex] = useState(0);
-  const [isMobileView, setIsMobileView] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 760px)").matches;
-  });
+  const [isMobileView, setIsMobileView] = useState(false);
   const rawQuery = String(searchQuery || "").trim().toLowerCase();
   const query = rawQuery.length >= MIN_SEARCH_LENGTH ? rawQuery : "";
   const isSearching = query.length > 0;

@@ -10,6 +10,7 @@ import { createSubscription, initializeCheckout } from "../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../utils/themePreference";
 
 const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
+const NEWSLETTER_POPUP_DELAY_MS = 90 * 1000;
 const NEWSLETTER_DISMISSED_UNTIL_KEY = "ife_newsletter_dismissed_until";
 const NEWSLETTER_SUBSCRIBED_KEY = "ife_newsletter_subscribed";
 
@@ -155,7 +156,7 @@ function StorefrontPage({
       if (!isNewsletterMarkedSubscribed() && getStoredNewsletterDismissedUntil() <= Date.now()) {
         setShowNewsletterPopup(true);
       }
-    }, 1600);
+    }, NEWSLETTER_POPUP_DELAY_MS);
 
     return () => window.clearTimeout(timer);
   }, [isAdminPreview]);
