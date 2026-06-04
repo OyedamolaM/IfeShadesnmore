@@ -17,6 +17,11 @@ const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
 const USE_POSTGRES = Boolean(DATABASE_URL);
 const IS_VERCEL = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 
+function readPositiveIntegerEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 const DEFAULT_SQLITE_DATA_DIR = IS_VERCEL
   ? path.join(os.tmpdir(), "ife-shadesnmore")
   : path.join(process.cwd(), "server", "data");
@@ -36,7 +41,12 @@ if (USE_POSTGRES) {
   const shouldDisableSsl = disableSsl === "true" || disableSsl === "1";
   pgPool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: shouldDisableSsl ? false : { rejectUnauthorized: false }
+    ssl: shouldDisableSsl ? false : { rejectUnauthorized: false },
+    max: readPositiveIntegerEnv("PG_POOL_MAX", 5),
+    connectionTimeoutMillis: readPositiveIntegerEnv("PG_CONNECTION_TIMEOUT_MS", 8000),
+    idleTimeoutMillis: readPositiveIntegerEnv("PG_IDLE_TIMEOUT_MS", 30000),
+    query_timeout: readPositiveIntegerEnv("PG_QUERY_TIMEOUT_MS", 12000),
+    statement_timeout: readPositiveIntegerEnv("PG_STATEMENT_TIMEOUT_MS", 12000)
   });
 } else {
   if (!fs.existsSync(SQLITE_DATA_DIR)) {

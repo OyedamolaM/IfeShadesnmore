@@ -9,7 +9,7 @@ const GOOGLE_IDENTITY_SCRIPT_ID = "google-identity-services";
 
 function AuthContainer({ title, subtitle, children, shellClassName = "", onBack }) {
   const shellClass = ["site-shell", "auth-shell", shellClassName].filter(Boolean).join(" ");
-  const [themeVariant, setThemeVariant] = useState(() => getStoredThemeVariant());
+  const [themeVariant, setThemeVariant] = useState("v1");
 
   useEffect(() => {
     setThemeVariant(getStoredThemeVariant());

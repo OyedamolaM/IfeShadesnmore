@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import AdminOverlay from "./components/admin/AdminOverlay";
 import {
   DEFAULT_HERO_ROTATION_IMAGES,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
+  DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS,
   EMPTY_PRODUCT
 } from "./constants/storefront";
@@ -83,12 +84,12 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
   const location = useLocation();
   const needsStorefront = shouldLoadStorefront(screen);
 
-  const [isLoading, setIsLoading] = useState(needsStorefront && !initialStorefront);
+  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [products, setProducts] = useState(() =>
     Array.isArray(initialStorefront?.products)
       ? initialStorefront.products.map(normalizeProduct)
-      : []
+      : DEFAULT_PRODUCTS.map(normalizeProduct)
   );
   const [settings, setSettings] = useState(() =>
     initialStorefront?.settings ? { ...DEFAULT_SETTINGS, ...initialStorefront.settings } : DEFAULT_SETTINGS
@@ -102,6 +103,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
   const [productDraft, setProductDraft] = useState(EMPTY_PRODUCT);
   const [isEditingProduct, setIsEditingProduct] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
+  const [isAdminStorefrontOpen, setIsAdminStorefrontOpen] = useState(false);
 
   const heroSlides = useMemo(
     () => buildHeroSlides(settings.heroImage, DEFAULT_HERO_ROTATION_IMAGES),
@@ -117,7 +119,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     trackPageView(path);
   }, [location.pathname, location.searchStr, location.hash]);
 
-  const navigateTo = (target, options = {}) => {
+  const navigateTo = useCallback((target, options = {}) => {
     const value = String(target || "/");
     const [pathAndSearch, hashPart = ""] = value.split("#");
     const [pathname, searchPart = ""] = pathAndSearch.split("?");
@@ -127,13 +129,15 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
       hash: hashPart || undefined,
       replace: Boolean(options.replace)
     });
-  };
+  }, [navigate]);
 
   const loadStore = async () => {
     setIsLoading(true);
     setLoadError("");
-    try {
-      const [storefrontPayload, mePayload] = await Promise.all([fetchStorefront(), fetchMe()]);
+    const [storefrontResult, meResult] = await Promise.allSettled([fetchStorefront(), fetchMe()]);
+
+    if (storefrontResult.status === "fulfilled") {
+      const storefrontPayload = storefrontResult.value;
       const nextSettings = storefrontPayload?.settings
         ? { ...DEFAULT_SETTINGS, ...storefrontPayload.settings }
         : DEFAULT_SETTINGS;
@@ -145,18 +149,28 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
       setSettingsDraft(nextSettings);
       setProducts(nextProducts);
       setBlogs(nextBlogs);
-      setCurrentUser(mePayload?.user || null);
-    } catch (requestError) {
-      setLoadError(requestError.message || "Could not load storefront.");
-    } finally {
-      setIsLoading(false);
+    } else {
+      setLoadError(storefrontResult.reason?.message || "Could not load storefront.");
     }
+
+    if (meResult.status === "fulfilled") {
+      const mePayload = meResult.value;
+      setCurrentUser(mePayload?.user || null);
+    }
+
+    setIsLoading(false);
   };
 
   useEffect(() => {
     if (!needsStorefront || initialStorefront) return;
     loadStore();
   }, [initialStorefront, needsStorefront]);
+
+  useEffect(() => {
+    if (screen !== "admin") {
+      setIsAdminStorefrontOpen(false);
+    }
+  }, [screen]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -166,7 +180,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentUser]);
+  }, [currentUser, navigateTo]);
 
   const startEdit = (product) => {
     setIsEditingProduct(true);
@@ -307,33 +321,50 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     navigateTo("/admin/login", { replace: true });
   };
 
-  if (isLoading) return <LoadingView />;
-  if (loadError) return <ErrorView message={loadError} onRetry={loadStore} />;
-
   const routeLocation = {
     pathname: location.pathname || "/",
     search: location.searchStr || "",
     hash: location.hash || ""
   };
 
-  if (screen === "admin-preview" && currentUser?.role !== "admin") {
-    navigateTo("/admin/login", { replace: true });
+  const redirectTarget = (() => {
+    if (screen === "admin-preview" && currentUser?.role !== "admin") return "/admin/login";
+    if (screen === "account" && !currentUser) return "/account/login";
+    if (screen === "admin" && currentUser?.role !== "admin") return "/admin/login";
+    return "";
+  })();
+
+  useEffect(() => {
+    if (!redirectTarget) return;
+    navigateTo(redirectTarget, { replace: true });
+  }, [navigateTo, redirectTarget]);
+
+  if (redirectTarget) {
     return <LoadingView />;
   }
 
-  if (screen === "account" && !currentUser) {
-    navigateTo("/account/login", { replace: true });
-    return <LoadingView />;
-  }
+  if (screen === "admin" && isAdminStorefrontOpen) {
+    const handleAdminPreviewNavigate = (target, options = {}) => {
+      if (String(target || "") === "/admin") {
+        setIsAdminStorefrontOpen(false);
+        return;
+      }
+      navigateTo(target, options);
+    };
 
-  if (screen === "account" && currentUser?.role === "admin") {
-    navigateTo("/admin", { replace: true });
-    return <LoadingView />;
-  }
-
-  if (screen === "admin" && currentUser?.role !== "admin") {
-    navigateTo("/admin/login", { replace: true });
-    return <LoadingView />;
+    return (
+      <StorefrontPage
+        products={products}
+        settings={settings}
+        heroSlides={heroSlides}
+        blogs={blogs}
+        currentUser={currentUser}
+        location={{ ...routeLocation, pathname: "/admin/storefront" }}
+        onNavigate={handleAdminPreviewNavigate}
+        orderingEnabled={false}
+        isAdminPreview
+      />
+    );
   }
 
   if (screen === "home" || screen === "admin-preview") {
@@ -397,7 +428,10 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
         onRemoveProduct={handleProductRemove}
         onBlogsChange={setBlogs}
         adminMessage={adminMessage}
-        onOpenStorefront={() => navigateTo("/admin/storefront")}
+        onOpenStorefront={() => {
+          setIsAdminStorefrontOpen(true);
+          window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+        }}
         onLogout={handleAdminLogout}
       />
     );

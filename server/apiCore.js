@@ -73,6 +73,19 @@ const PLACEHOLDER_BLOG = {
 let readyPromise = null;
 let storefrontFallbackWarningLogged = false;
 
+function readPositiveIntegerEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
 export function getSiteUrl() {
   return String(process.env.SITE_URL || process.env.FRONTEND_URL || FRONTEND_URL)
     .trim()
@@ -100,9 +113,18 @@ export function blogPath(blog) {
 
 export async function ensureServerReady() {
   if (!readyPromise) {
-    readyPromise = initDatabase().then(() => bootstrapAdminIfConfigured());
+    readyPromise = initDatabase()
+      .then(() => bootstrapAdminIfConfigured())
+      .catch((error) => {
+        readyPromise = null;
+        throw error;
+      });
   }
-  return readyPromise;
+  return withTimeout(
+    readyPromise,
+    readPositiveIntegerEnv("SERVER_READY_TIMEOUT_MS", 10000),
+    "Server database initialization timed out."
+  );
 }
 
 export async function getStorefrontPayload() {
@@ -186,7 +208,6 @@ function getFallbackStorefrontPayload() {
 }
 
 export async function handleApiRequest(request, splat = "") {
-  await ensureServerReady();
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const pathname = `/api/${String(splat || "").replace(/^\/+/, "")}`.replace(/\/+$/, "") || "/api";
@@ -198,6 +219,7 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "GET" && pathname === "/api/auth/me") {
       return json({ user: await getCurrentUserFromFetchRequest(request) });
     }
+    await ensureServerReady();
     if (method === "POST" && pathname === "/api/auth/register") return register(request);
     if (method === "POST" && pathname === "/api/auth/verify-email") return verifyEmail(request);
     if (method === "POST" && pathname === "/api/auth/resend-verification") return resendVerification(request);

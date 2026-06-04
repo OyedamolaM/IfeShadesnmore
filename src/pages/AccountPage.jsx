@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { fetchMyOrders, logout, updatePassword, updateProfile } from "../utils/api";
 
 function normalizeAvailability(value) {
@@ -245,13 +245,12 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
             >
               Profile
             </button>
-            <button
-              type="button"
+            <Link
+              to="/"
               className="account-action-button account-action-shop"
-              onClick={() => navigate({ to: "/" })}
             >
               Back to Shop
-            </button>
+            </Link>
             <button type="button" className="account-action-button account-action-logout" onClick={signOut}>
               Logout
             </button>

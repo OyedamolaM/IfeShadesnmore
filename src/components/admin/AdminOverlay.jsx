@@ -292,7 +292,8 @@ function AdminOverlay({
   const [orderStatusError, setOrderStatusError] = useState("");
   const [customerActionNotice, setCustomerActionNotice] = useState("");
   const [customerActionError, setCustomerActionError] = useState("");
-  const [adminTheme, setAdminTheme] = useState(() => getStoredThemeVariant());
+  const [adminTheme, setAdminTheme] = useState("v1");
+  const [isAdminThemeHydrated, setIsAdminThemeHydrated] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isThemeOpen, setIsThemeOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
@@ -307,8 +308,14 @@ function AdminOverlay({
   const adminInitial = String(adminName || "I").trim().charAt(0).toUpperCase() || "I";
 
   useEffect(() => {
+    setAdminTheme(getStoredThemeVariant());
+    setIsAdminThemeHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdminThemeHydrated) return;
     persistThemeVariant(adminTheme);
-  }, [adminTheme]);
+  }, [adminTheme, isAdminThemeHydrated]);
 
   useEffect(() => {
     let isMounted = true;

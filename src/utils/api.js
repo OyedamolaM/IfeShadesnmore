@@ -1,6 +1,19 @@
 const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
+const DEFAULT_REQUEST_TIMEOUT_MS = readPositiveInteger(
+  import.meta.env.VITE_API_TIMEOUT_MS,
+  15000
+);
+const DEFAULT_UPLOAD_TIMEOUT_MS = readPositiveInteger(
+  import.meta.env.VITE_UPLOAD_TIMEOUT_MS,
+  60000
+);
+
+function readPositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 function buildApiUrl(path) {
   const route = String(path || "");
@@ -10,23 +23,39 @@ function buildApiUrl(path) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(buildApiUrl(path), {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    },
-    ...options
-  });
+  const { headers, timeoutMs, signal, ...fetchOptions } = options;
+  const controller = !signal && typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), readPositiveInteger(timeoutMs, DEFAULT_REQUEST_TIMEOUT_MS))
+    : null;
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload?.error || `Request failed (${response.status})`);
-    error.status = response.status;
-    error.details = payload;
+  try {
+    const response = await fetch(buildApiUrl(path), {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(headers || {})
+      },
+      signal: signal || controller?.signal,
+      ...fetchOptions
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload?.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.details = payload;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Request timed out. Please try again.");
+    }
     throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
-  return payload;
 }
 
 export function fetchStorefront() {
@@ -151,21 +180,35 @@ export async function uploadImage(file, kind = "product") {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("kind", kind);
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), DEFAULT_UPLOAD_TIMEOUT_MS)
+    : null;
 
-  const response = await fetch(buildApiUrl("/api/uploads/image"), {
-    method: "POST",
-    credentials: "include",
-    body: formData
-  });
+  try {
+    const response = await fetch(buildApiUrl("/api/uploads/image"), {
+      method: "POST",
+      credentials: "include",
+      signal: controller?.signal,
+      body: formData
+    });
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload?.error || `Request failed (${response.status})`);
-    error.status = response.status;
-    error.details = payload;
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload?.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.details = payload;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Upload timed out. Please try a smaller image or try again.");
+    }
     throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
-  return payload;
 }
 
 export function createProduct(payload) {

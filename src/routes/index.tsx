@@ -1,15 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import App from "../App.jsx";
-import { getInitialAppData } from "../serverFns";
 
 export const Route = createFileRoute("/")({
-  loader: () => getInitialAppData(),
-  head: ({ loaderData }) => {
-    const settings = loaderData?.storefront?.settings;
-    const title = `${settings?.brandName || "IfeShades & More"} | Stylish eyewear and accessories`;
+  head: () => {
+    const brandName = "IfeShades & More";
+    const title = "IfeShades & More | Stylish eyewear and accessories";
     const description = "Shop stylish sunglasses, optical frames, and fashion eyewear from IfeShades & More in Lagos.";
     const siteUrl = getSiteUrl();
-    const image = absoluteUrl(settings?.heroImage || "/hero/hero-candidate2.jpg", siteUrl);
+    const image = absoluteUrl("/hero/hero-candidate2.jpg", siteUrl);
     return {
       meta: [
         { title },
@@ -31,7 +29,7 @@ export const Route = createFileRoute("/")({
           children: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebSite",
-            name: settings?.brandName || "IfeShades & More",
+            name: brandName,
             url: siteUrl,
             potentialAction: {
               "@type": "SearchAction",
@@ -45,7 +43,7 @@ export const Route = createFileRoute("/")({
           children: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "Organization",
-            name: settings?.brandName || "IfeShades & More",
+            name: brandName,
             url: siteUrl,
             image
           })
@@ -57,8 +55,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomeRoute() {
-  const data = Route.useLoaderData();
-  return <App screen="home" initialStorefront={data.storefront} initialUser={data.user} />;
+  return <App screen="home" />;
 }
 
 function getSiteUrl() {

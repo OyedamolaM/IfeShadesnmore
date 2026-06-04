@@ -45,6 +45,46 @@ select {
   padding: 0;
 }
 
+.route-pending-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(211, 154, 44, 0.12), transparent 28rem),
+    #f8f4ee;
+  color: #1f2430;
+  padding: 2rem;
+}
+
+.route-pending-page > div {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+}
+
+.route-pending-page span {
+  width: 3.25rem;
+  height: 3.25rem;
+  border: 2px solid rgba(31, 36, 48, 0.12);
+  border-top-color: #d39a2c;
+  border-radius: 999px;
+  animation: route-pending-spin 760ms linear infinite;
+}
+
+.route-pending-page p {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@keyframes route-pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .site-shell {
   width: 100%;
   margin: 0;
@@ -3731,7 +3771,11 @@ select {
   border-radius: 999px;
   min-height: 40px;
   padding: 0.15rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
 }
 

@@ -5,7 +5,7 @@ import { fetchAdminBootstrapState, login, logout } from "../utils/api";
 import { getStoredThemeVariant } from "../utils/themePreference";
 
 function AuthContainer({ title, subtitle, children, onBack }) {
-  const [themeVariant, setThemeVariant] = useState(() => getStoredThemeVariant());
+  const [themeVariant, setThemeVariant] = useState("v1");
 
   useEffect(() => {
     setThemeVariant(getStoredThemeVariant());

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import CartIcon from "../components/icons/CartIcon";
+import ProfileIcon from "../components/icons/ProfileIcon";
 import PreviewStyleSwitcher from "../components/preview/PreviewStyleSwitcher";
 import "./PreviewStorefront.css";
 
@@ -145,6 +146,15 @@ function iconGlyph(type) {
   if (type === "truck") return "TR";
   if (type === "shield") return "OK";
   return "*";
+}
+
+function AdminProfileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.5 18.2 6v4.5c0 4.1-2.4 7.7-6.2 9.3-3.8-1.6-6.2-5.2-6.2-9.3V6L12 3.5Z" />
+      <path d="M9.2 12.4 11 14.2l3.9-4.4" />
+    </svg>
+  );
 }
 
 function slugify(value) {
@@ -332,9 +342,28 @@ function PreviewStorefront({
         </nav>
         <div className="preview-nav-actions">
           <PreviewStyleSwitcher value={styleVariant} onChange={onStyleVariantChange} compactLabel="Theme" />
-          <button type="button" onClick={onOpenProfile}>
-            {currentUser ? "Account" : "Login"}
-          </button>
+          {onOpenProfile ? (
+            <button
+              type="button"
+              className="preview-account-button"
+              onClick={onOpenProfile}
+              aria-label={currentUser ? "Open account" : "Log in"}
+              title={currentUser ? "Account" : "Login"}
+            >
+              <ProfileIcon />
+            </button>
+          ) : null}
+          {currentUser?.role === "admin" && onOpenAdmin ? (
+            <button
+              type="button"
+              className="preview-account-button preview-admin-button"
+              onClick={onOpenAdmin}
+              aria-label="Open admin"
+              title="Admin"
+            >
+              <AdminProfileIcon />
+            </button>
+          ) : null}
           {allowOrdering ? (
             <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
               <CartIcon />

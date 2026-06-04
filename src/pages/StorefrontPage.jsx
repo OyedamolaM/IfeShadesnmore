@@ -119,11 +119,18 @@ function StorefrontPage({
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
   const [showAboutModal, setShowAboutModal] = useState(false);
-  const [previewStyle, setPreviewStyle] = useState(() => getStoredThemeVariant());
+  const [previewStyle, setPreviewStyle] = useState("v1");
+  const [isPreviewStyleHydrated, setIsPreviewStyleHydrated] = useState(false);
 
   useEffect(() => {
+    setPreviewStyle(getStoredThemeVariant());
+    setIsPreviewStyleHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isPreviewStyleHydrated) return;
     persistThemeVariant(previewStyle);
-  }, [previewStyle]);
+  }, [previewStyle, isPreviewStyleHydrated]);
 
   useEffect(() => {
     const nameParts = splitFullName(currentUser?.fullName || "");
@@ -467,16 +474,6 @@ function StorefrontPage({
   return (
     <div className="page">
       <div className="site-shell">
-        {isAdminPreview ? (
-          <div className="admin-preview-banner">
-            <div className="container admin-preview-banner-inner">
-              <p>You are viewing storefront in admin preview mode. Ordering is disabled.</p>
-              <button type="button" className="secondary-action" onClick={() => onNavigate("/admin")}>
-                Back to Admin
-              </button>
-            </div>
-          </div>
-        ) : null}
         <PreviewStorefront
           products={products}
           settings={settings}
@@ -487,9 +484,7 @@ function StorefrontPage({
           onOpenAdmin={() => onNavigate(currentUser?.role === "admin" ? "/admin" : "/admin/login")}
           cartCount={cartCount}
           onOpenCart={orderingEnabled ? () => setShowCart(true) : undefined}
-          onOpenProfile={() =>
-            onNavigate(currentUser ? (currentUser.role === "admin" ? "/admin" : "/account") : "/account/login")
-          }
+          onOpenProfile={() => onNavigate(currentUser ? "/account" : "/account/login")}
           onOpenAbout={() => setShowAboutModal(true)}
           onViewProduct={setSelectedProduct}
           onAddToCart={addToCart}
