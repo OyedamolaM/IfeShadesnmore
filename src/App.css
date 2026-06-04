@@ -3375,6 +3375,44 @@ select {
   border-color: var(--auth-ink);
 }
 
+.auth-google-panel {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.auth-google-button {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.auth-google-status,
+.auth-google-panel > span {
+  margin: 0;
+  color: var(--auth-muted);
+  font-size: 0.78rem;
+}
+
+.auth-google-panel > span {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+}
+
+.auth-google-panel > span::before,
+.auth-google-panel > span::after {
+  content: "";
+  height: 1px;
+  background: var(--auth-line);
+}
+
 .auth-form {
   display: grid;
   gap: 12px;

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 import { z } from "zod";
 import {
   execute,
@@ -49,6 +50,8 @@ const PRODUCT_AVAILABILITY_SET = new Set(PRODUCT_AVAILABILITY_VALUES);
 const ACCOUNT_WELCOME_EMAIL_ENABLED = parseBooleanEnv(process.env.ACCOUNT_WELCOME_EMAIL_ENABLED, true);
 const CUSTOMER_ORDER_EMAIL_ENABLED = parseBooleanEnv(process.env.CUSTOMER_ORDER_EMAIL_ENABLED, true);
 const NEWSLETTER_EMAIL_ENABLED = parseBooleanEnv(process.env.NEWSLETTER_EMAIL_ENABLED, true);
+const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 const rateBuckets = new Map();
 const PLACEHOLDER_BLOG = {
   id: "style-guide-placeholder",
@@ -199,6 +202,7 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "POST" && pathname === "/api/auth/verify-email") return verifyEmail(request);
     if (method === "POST" && pathname === "/api/auth/resend-verification") return resendVerification(request);
     if (method === "POST" && pathname === "/api/auth/login") return login(request);
+    if (method === "POST" && pathname === "/api/auth/google") return googleLogin(request);
     if (method === "POST" && pathname === "/api/auth/logout") return logout();
     if (method === "PATCH" && pathname === "/api/auth/profile") return updateProfile(request);
     if (method === "PATCH" && pathname === "/api/auth/password") return updatePassword(request);
@@ -465,6 +469,7 @@ const registerSchema = z
     { message: "First and last name are required.", path: ["firstName"] }
   );
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+const googleLoginSchema = z.object({ credential: z.string().min(20).max(5000) });
 const verifyEmailSchema = z.object({ token: z.string().min(20).max(500) });
 const resendVerificationSchema = z.object({ email: z.string().email() });
 const profileSchema = z.object({
@@ -635,6 +640,81 @@ async function login(request) {
   }
   const user = mapUserRow(userRow);
   return json({ user }, 200, authHeaders(user));
+}
+
+async function googleLogin(request) {
+  if (!checkRateLimit(request, "auth")) return json({ error: "Too many requests. Please try again later." }, 429);
+  if (!googleOAuthClient || !GOOGLE_CLIENT_ID) {
+    return json({ error: "Google login is not configured." }, 503);
+  }
+
+  const parsed = googleLoginSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid Google login payload." }, 400);
+
+  let payload = null;
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: parsed.data.credential,
+      audience: GOOGLE_CLIENT_ID
+    });
+    payload = ticket.getPayload();
+  } catch (error) {
+    console.error("Could not verify Google credential:", { message: error?.message || "" });
+    return json({ error: "Could not verify Google login." }, 401);
+  }
+
+  const email = normalizeEmail(payload?.email);
+  const googleSub = String(payload?.sub || "").trim();
+  const emailVerified = payload?.email_verified === true || payload?.email_verified === "true";
+  if (!email || !googleSub || !emailVerified) {
+    return json({ error: "Google account email is not verified." }, 401);
+  }
+
+  const fullName = String(payload?.name || `${payload?.given_name || ""} ${payload?.family_name || ""}`)
+    .trim()
+    .slice(0, 180);
+
+  const authResult = await withTransaction(async (tx) => {
+    const googleUser = await tx.queryOne("SELECT * FROM users WHERE google_sub = ?", [googleSub]);
+    const emailUser = googleUser || (await tx.queryOne("SELECT * FROM users WHERE email = ?", [email]));
+
+    if (emailUser) {
+      if (emailUser.google_sub && emailUser.google_sub !== googleSub) {
+        throw new Error("This email is already linked to another Google account.");
+      }
+
+      await tx.execute(
+        `
+          UPDATE users
+          SET google_sub = ?, auth_provider = ?, is_email_verified = true,
+              full_name = CASE WHEN COALESCE(full_name, '') = '' THEN ? ELSE full_name END,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `,
+        [googleSub, emailUser.auth_provider === "password" ? "password,google" : "google", fullName, emailUser.id]
+      );
+      return { user: mapUserRow(await tx.queryOne("SELECT * FROM users WHERE id = ?", [emailUser.id])), isNew: false };
+    }
+
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
+    await tx.execute(
+      `
+        INSERT INTO users (email, password_hash, full_name, phone, address, city, is_email_verified, google_sub, auth_provider)
+        VALUES (?, ?, ?, '', '', '', true, ?, 'google')
+      `,
+      [email, passwordHash, fullName, googleSub]
+    );
+    return { user: mapUserRow(await tx.queryOne("SELECT * FROM users WHERE email = ?", [email])), isNew: true };
+  }).catch((error) => {
+    if (error?.message === "This email is already linked to another Google account.") return { error: error.message };
+    throw error;
+  });
+
+  if (authResult?.error) return json({ error: authResult.error }, 409);
+  if (authResult?.isNew) {
+    await sendAccountWelcomeSafe({ toEmail: authResult.user.email, fullName: authResult.user.fullName });
+  }
+  return json({ user: authResult.user }, 200, authHeaders(authResult.user));
 }
 
 function logout() {

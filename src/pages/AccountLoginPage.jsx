@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import PasswordVisibilityIcon from "../components/icons/PasswordVisibilityIcon";
-import { login, register, resendVerificationEmail } from "../utils/api";
+import { login, loginWithGoogle, register, resendVerificationEmail } from "../utils/api";
 import { getStoredThemeVariant } from "../utils/themePreference";
+
+const GOOGLE_CLIENT_ID = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+const GOOGLE_IDENTITY_SCRIPT_ID = "google-identity-services";
 
 function AuthContainer({ title, subtitle, children, shellClassName = "", onBack }) {
   const shellClass = ["site-shell", "auth-shell", shellClassName].filter(Boolean).join(" ");
@@ -48,12 +51,82 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const googleButtonRef = useRef(null);
 
   useEffect(() => {
     if (currentUser) {
       navigate({ to: currentUser.role === "admin" ? "/admin" : redirect, replace: true });
     }
   }, [currentUser, navigate, redirect]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return undefined;
+
+    let isCancelled = false;
+
+    const handleGoogleCredential = async (response) => {
+      if (!response?.credential) {
+        setError("Google did not return a login credential.");
+        return;
+      }
+
+      setError("");
+      setNotice("");
+      setPendingVerificationEmail("");
+      setIsGoogleSubmitting(true);
+      try {
+        const payload = await loginWithGoogle(response.credential);
+        onAuthenticated(payload.user);
+        setNotice("Google login successful. Redirecting...");
+        navigate({ to: payload.user?.role === "admin" ? "/admin" : redirect, replace: true });
+      } catch (requestError) {
+        setError(requestError.message || "Google login failed. Please try again.");
+      } finally {
+        setIsGoogleSubmitting(false);
+      }
+    };
+
+    const renderGoogleButton = () => {
+      if (isCancelled || !window.google?.accounts?.id || !googleButtonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential
+      });
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        shape: "pill",
+        text: "continue_with",
+        width: 320
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      renderGoogleButton();
+    } else {
+      let script = document.getElementById(GOOGLE_IDENTITY_SCRIPT_ID);
+      if (!script) {
+        script = document.createElement("script");
+        script.id = GOOGLE_IDENTITY_SCRIPT_ID;
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", renderGoogleButton);
+      return () => {
+        isCancelled = true;
+        script.removeEventListener("load", renderGoogleButton);
+      };
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [navigate, onAuthenticated, redirect]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -162,6 +235,14 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           Register
         </button>
       </div>
+
+      {GOOGLE_CLIENT_ID ? (
+        <div className="auth-google-panel">
+          <div ref={googleButtonRef} className="auth-google-button" aria-label="Continue with Google" />
+          {isGoogleSubmitting ? <p className="auth-google-status">Signing in with Google...</p> : null}
+          <span>or continue with email</span>
+        </div>
+      ) : null}
 
       <form className="auth-form" onSubmit={submit}>
         {mode === "register" ? (

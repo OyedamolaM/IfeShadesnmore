@@ -281,6 +281,8 @@ async function runMigrationsSqlite() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin','customer')) DEFAULT 'customer',
       is_email_verified INTEGER NOT NULL DEFAULT 1,
+      google_sub TEXT DEFAULT '',
+      auth_provider TEXT NOT NULL DEFAULT 'password',
       full_name TEXT DEFAULT '',
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
@@ -400,6 +402,13 @@ async function runMigrationsSqlite() {
   if (!userColumns.some((column) => column.name === "is_email_verified")) {
     sqliteDb.exec(`ALTER TABLE users ADD COLUMN is_email_verified INTEGER NOT NULL DEFAULT 1`);
   }
+  if (!userColumns.some((column) => column.name === "google_sub")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN google_sub TEXT DEFAULT ''`);
+  }
+  if (!userColumns.some((column) => column.name === "auth_provider")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'password'`);
+  }
+  sqliteDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != ''`);
 
   const settingsColumns = sqliteDb.prepare("PRAGMA table_info(settings)").all();
   if (!settingsColumns.some((column) => column.name === "hero_promise_items")) {
@@ -451,6 +460,8 @@ async function runMigrationsPostgres() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'customer' CHECK(role IN ('admin','customer')),
       is_email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+      google_sub TEXT DEFAULT '',
+      auth_provider TEXT NOT NULL DEFAULT 'password',
       full_name TEXT DEFAULT '',
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
@@ -553,6 +564,9 @@ async function runMigrationsPostgres() {
   `);
 
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'password';`);
+  await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != '';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
@@ -729,6 +743,7 @@ export function mapUserRow(row) {
     email: row.email,
     role: row.role,
     isEmailVerified: Boolean(row.is_email_verified),
+    authProvider: row.auth_provider || "password",
     fullName: row.full_name || "",
     phone: row.phone || "",
     address: row.address || "",
