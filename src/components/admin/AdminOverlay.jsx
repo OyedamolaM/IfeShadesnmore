@@ -1050,7 +1050,7 @@ function AdminOverlay({
           </form>
 
           {activeTab === "orders" ? (
-            <section className="admin-section-card">
+            <section className="admin-section-card admin-table-card">
               <header className="admin-section-header">
                 <div>
                   <h2>Orders</h2>
@@ -1165,7 +1165,7 @@ function AdminOverlay({
           ) : null}
 
           {activeTab === "customers" ? (
-            <section className="admin-section-card">
+            <section className="admin-section-card admin-table-card">
               <header className="admin-section-header">
                 <div>
                   <h2>Customers</h2>
@@ -1222,7 +1222,7 @@ function AdminOverlay({
           ) : null}
 
           {activeTab === "subscribers" ? (
-            <section className="admin-section-card">
+            <section className="admin-section-card admin-table-card">
               <header className="admin-section-header">
                 <div>
                   <h2>Subscribers</h2>
