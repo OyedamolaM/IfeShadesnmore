@@ -5662,6 +5662,33 @@ select {
   color: rgba(255, 248, 234, 0.62);
 }
 
+.admin-sidebar-logout-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 2.35rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--admin-surface) 86%, transparent);
+  color: var(--admin-ink);
+  font: 900 0.66rem/1 "Inter", "Manrope", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.admin-sidebar-logout-button:hover {
+  border-color: color-mix(in srgb, var(--admin-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--admin-accent) 12%, transparent);
+  color: var(--admin-ink);
+}
+
+.admin-theme-v3 .admin-sidebar-logout-button {
+  border-color: rgba(255, 248, 234, 0.18);
+  background: rgba(255, 248, 234, 0.08);
+  color: #fff8ea;
+}
+
 .admin-page .admin-topbar {
   min-height: 4.25rem;
   border-bottom: 1px solid var(--admin-line);
@@ -6346,6 +6373,8 @@ select {
 }
 
 .admin-page .admin-tabs button {
+  width: fit-content;
+  max-width: 100%;
   color: var(--admin-muted) !important;
   border-color: transparent !important;
   background: transparent !important;
@@ -6356,6 +6385,12 @@ select {
   color: var(--admin-ink) !important;
   border-color: color-mix(in srgb, var(--admin-accent) 35%, transparent) !important;
   background: color-mix(in srgb, var(--admin-accent) 12%, transparent) !important;
+}
+
+@media (max-width: 760px) {
+  .admin-page .admin-tabs button {
+    width: 100%;
+  }
 }
 
 .admin-page .admin-form-card input,
@@ -6839,17 +6874,6 @@ select {
 @media (max-width: 720px) {
   .admin-page .admin-topbar-actions > .admin-storefront-text-button {
     display: none !important;
-  }
-
-  .admin-page .admin-topbar-actions > .admin-logout-button {
-    display: inline-flex !important;
-    min-width: auto !important;
-    min-height: 2.35rem !important;
-    height: 2.35rem !important;
-    padding: 0 0.65rem !important;
-    flex: 0 0 auto;
-    font-size: 0.58rem !important;
-    letter-spacing: 0.1em !important;
   }
 }
 

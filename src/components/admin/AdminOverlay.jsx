@@ -742,6 +742,9 @@ function AdminOverlay({
             <strong>{adminName}</strong>
             <small>Store owner</small>
           </div>
+          <button type="button" className="admin-sidebar-logout-button" onClick={onLogout}>
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -810,9 +813,6 @@ function AdminOverlay({
             <button type="button" className="admin-bell-button" aria-label="Notifications">
               <AdminIcon name="bell" />
               <span />
-            </button>
-            <button type="button" className="secondary-action admin-logout-button" onClick={onLogout}>
-              Logout
             </button>
           </div>
         </header>
