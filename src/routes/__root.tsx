@@ -21,7 +21,7 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-ife-theme="v1" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

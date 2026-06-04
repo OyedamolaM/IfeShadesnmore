@@ -70,7 +70,7 @@ const HERO_SLIDES = [
     image: VARIANTS.v2.heroImage,
     alt: "Warm editorial eyewear preview",
     label: "Best seller",
-    title: "Rhinstone Classic"
+    title: "Rhinestone Classic"
   },
   {
     id: "solar-editorial",
@@ -355,9 +355,11 @@ function PreviewStorefront({
             <h1>
               {variant.headline[0]}
               <br />
-              <em>{variant.headline[1]}</em>
-              <br />
-              {variant.headline[2]}
+              <span className="preview-hero-tail">
+                <em className="preview-hero-emphasis">{variant.headline[1]}</em>
+                {" "}
+                {variant.headline[2]}
+              </span>
             </h1>
             <p className="preview-hero-text">{variant.description}</p>
             <div className="preview-actions">
@@ -379,7 +381,17 @@ function PreviewStorefront({
             </div>
           </div>
           <div className="preview-hero-media" aria-live="off">
-            <img key={activeHeroSlide.image} src={activeHeroSlide.image} alt={activeHeroSlide.alt} />
+            <div className="preview-hero-image-stack">
+              {HERO_SLIDES.map((slide, index) => (
+                <img
+                  key={slide.id}
+                  className={index === activeHeroIndex ? "is-active" : ""}
+                  src={slide.image}
+                  alt={index === activeHeroIndex ? slide.alt : ""}
+                  aria-hidden={index === activeHeroIndex ? undefined : "true"}
+                />
+              ))}
+            </div>
             {rotateHeroImages ? (
               <div className="preview-hero-dots" aria-hidden="true">
                 {HERO_SLIDES.map((slide, index) => (

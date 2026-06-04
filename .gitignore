@@ -15,3 +15,4 @@ tmp_checkpoint.mjs
 .claude/
 skills-lock.json
 tmp_hero/
+*.dump
