@@ -2368,6 +2368,84 @@ select {
   gap: 0.45rem;
 }
 
+.admin-blog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.admin-blog-item,
+.admin-blog-empty {
+  border: 1px solid #e6ddd2;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.admin-blog-item {
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.admin-blog-empty {
+  padding: 1rem;
+  display: grid;
+  gap: 0.35rem;
+  color: #2a303b;
+}
+
+.admin-blog-empty strong,
+.admin-blog-copy strong {
+  display: block;
+  color: #17191f;
+  font-weight: 900;
+}
+
+.admin-blog-empty span,
+.admin-blog-copy p,
+.admin-blog-status {
+  color: #59606a;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.admin-blog-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ece4da;
+}
+
+.admin-blog-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.admin-blog-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.admin-blog-copy p {
+  margin: 0;
+}
+
+.admin-blog-status {
+  color: #c48100;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .danger-action {
   border-color: #efc2c8;
   color: #8e2f3d;
@@ -3451,11 +3529,18 @@ select {
 .split-input-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
+  column-gap: 1rem;
+  row-gap: 0.75rem;
 }
 
 .split-input-row label {
+  min-width: 0;
   margin: 0;
+}
+
+.split-input-row input {
+  width: 100%;
+  min-width: 0;
 }
 
 .form-helper-note {
@@ -5005,6 +5090,24 @@ select {
   .admin-list-card .admin-section-header .primary-action {
     width: 100%;
   }
+
+  .admin-blog-item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    padding: 0.85rem;
+  }
+
+  .admin-blog-thumb {
+    aspect-ratio: 16 / 9;
+  }
+
+  .admin-blog-item .admin-list-actions {
+    width: 100%;
+  }
+
+  .admin-blog-item .admin-list-actions button {
+    flex: 1 1 0;
+  }
 }
 
 /* Admin polish pass: align with the three storefront themes without playful badges. */
@@ -5612,10 +5715,10 @@ select {
 }
 
 .admin-page .admin-tabs button {
-  min-height: 2.75rem;
+  min-height: 2rem;
   border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 0 0.8rem;
+  border-radius: 0.75rem;
+  padding: 0 0.65rem;
   background: transparent;
   color: var(--admin-muted);
   font-family: "Inter", "Manrope", sans-serif;
@@ -6350,6 +6453,8 @@ select {
 .admin-page .admin-kpi-card,
 .admin-page .admin-section-card,
 .admin-page .admin-product-list li,
+.admin-page .admin-blog-item,
+.admin-page .admin-blog-empty,
 .admin-page .admin-order-card,
 .admin-page .admin-table-wrap,
 .admin-sidebar-user,
@@ -6374,6 +6479,11 @@ select {
 .admin-page .admin-table td,
 .admin-page .admin-product-list strong,
 .admin-page .admin-product-list span,
+.admin-page .admin-blog-copy strong,
+.admin-page .admin-blog-empty strong,
+.admin-page .admin-blog-copy p,
+.admin-page .admin-blog-empty span,
+.admin-page .admin-blog-status,
 .admin-page .admin-order-main h3,
 .admin-page .admin-order-main p,
 .admin-page .admin-order-meta-grid h4,
@@ -6394,6 +6504,8 @@ select {
 .admin-page .admin-kpi-card p,
 .admin-page .admin-table th,
 .admin-page .admin-product-list span,
+.admin-page .admin-blog-copy p,
+.admin-page .admin-blog-empty span,
 .admin-page .admin-order-main p,
 .admin-page .admin-order-meta-grid p,
 .admin-page .admin-status-row label,
@@ -6403,6 +6515,7 @@ select {
 
 .admin-page .admin-kpi-card span,
 .admin-page .admin-tabs button.is-active span,
+.admin-page .admin-blog-status,
 .admin-page .status-pending,
 .admin-page .status-order-pending,
 .admin-page .status-order-processing,
@@ -6411,8 +6524,11 @@ select {
 }
 
 .admin-page .admin-tabs button {
-  width: fit-content;
+  width: auto;
   max-width: 100%;
+  min-height: 2rem !important;
+  border-radius: 0.75rem !important;
+  padding: 0 0.65rem !important;
   color: var(--admin-muted) !important;
   border-color: transparent !important;
   background: transparent !important;
@@ -6425,9 +6541,190 @@ select {
   background: color-mix(in srgb, var(--admin-accent) 12%, transparent) !important;
 }
 
+.admin-page .admin-blog-list {
+  width: 100%;
+}
+
+.admin-page .admin-blog-card {
+  grid-column: 1 / -1;
+}
+
+.admin-page .admin-blog-card .admin-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-page .admin-blog-card .admin-section-header h2 {
+  max-width: none;
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+  line-height: 1.05;
+}
+
+.admin-page .admin-blog-card .admin-section-header p {
+  max-width: 42rem;
+  margin: 0.35rem 0 0;
+}
+
+.admin-page .admin-blog-card .primary-action {
+  min-width: 8.5rem;
+  white-space: nowrap;
+}
+
+.admin-page .admin-products-card {
+  grid-column: 1 / -1;
+}
+
+.admin-page .admin-products-card .admin-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+.admin-page .admin-products-card .admin-section-header h2 {
+  max-width: none;
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+  line-height: 1.05;
+}
+
+.admin-page .admin-products-card .admin-section-header p {
+  max-width: 44rem;
+  margin: 0.35rem 0 0;
+}
+
+.admin-page .admin-products-card .primary-action {
+  min-width: 9.5rem;
+  white-space: nowrap;
+}
+
+.admin-page .admin-products-card .admin-product-list {
+  gap: 0.9rem;
+}
+
+.admin-page .admin-products-card .admin-product-list li {
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 1rem;
+  padding: 0.85rem !important;
+}
+
+.admin-page .admin-products-card .mini-media {
+  height: 72px;
+  border-radius: 0.75rem;
+}
+
+.admin-page .admin-products-card .admin-product-list strong {
+  margin-bottom: 0.25rem;
+  font-family: "Inter", "Manrope", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.admin-page .admin-products-card .admin-product-list span {
+  display: block;
+  line-height: 1.45;
+}
+
+.admin-page .admin-blog-item,
+.admin-page .admin-blog-empty {
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--admin-ink) 6%, transparent);
+}
+
+.admin-page .admin-blog-empty {
+  min-height: 8rem;
+  align-content: center;
+}
+
+.admin-page .admin-blog-copy strong,
+.admin-page .admin-blog-empty strong {
+  font-family: "Inter", "Manrope", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.22;
+}
+
+.admin-page .admin-blog-copy p,
+.admin-page .admin-blog-empty span {
+  max-width: 42rem;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.admin-page .admin-blog-status {
+  font-size: 0.66rem;
+  line-height: 1.2;
+}
+
+.admin-page .admin-blog-thumb {
+  border: 1px solid var(--admin-line);
+}
+
 @media (max-width: 760px) {
   .admin-page .admin-tabs button {
     width: 100%;
+    min-height: 2.75rem !important;
+    border-radius: 1.15rem !important;
+  }
+
+  .admin-page .admin-blog-card .admin-section-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 0.8rem;
+  }
+
+  .admin-page .admin-blog-card .admin-section-header h2 {
+    font-size: clamp(1.35rem, 8vw, 1.75rem);
+  }
+
+  .admin-page .admin-blog-card .primary-action {
+    width: 100%;
+  }
+
+  .admin-page .admin-products-card .admin-section-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+  }
+
+  .admin-page .admin-products-card .admin-section-header h2 {
+    font-size: clamp(1.35rem, 8vw, 1.75rem);
+  }
+
+  .admin-page .admin-products-card .primary-action {
+    width: 100%;
+  }
+
+  .admin-page .admin-products-card .admin-product-list {
+    gap: 0.85rem;
+  }
+
+  .admin-page .admin-products-card .admin-product-list li {
+    grid-template-columns: 70px minmax(0, 1fr);
+    align-items: start;
+    gap: 0.8rem;
+  }
+
+  .admin-page .admin-products-card .mini-media {
+    height: 70px;
+  }
+
+  .admin-page .admin-products-card .admin-list-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .admin-page .admin-products-card .admin-list-actions button {
+    flex: 1 1 0;
+  }
+
+  .admin-page .admin-blog-empty {
+    min-height: 7rem;
+    padding: 1rem !important;
   }
 }
 
@@ -6898,15 +7195,71 @@ select {
 }
 
 .admin-page .admin-menu-button .admin-menu-lines {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
   width: 1.15rem !important;
+  height: 1rem !important;
   gap: 0.25rem !important;
+  color: inherit !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .admin-page .admin-menu-button .admin-menu-lines i,
 .admin-page .admin-menu-button .admin-menu-lines i:nth-child(2),
 .admin-page .admin-menu-button .admin-menu-lines i:nth-child(3) {
+  display: block !important;
+  flex: 0 0 2px !important;
   width: 1.15rem !important;
   height: 2px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: currentColor !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+
+.route-not-found {
+  min-height: 72vh;
+  display: grid;
+  align-content: center;
+  gap: 0.9rem;
+  padding-block: clamp(4rem, 10vw, 7rem);
+}
+
+.route-not-found h1 {
+  max-width: 14ch;
+  margin: 0;
+  color: #241b16;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(3rem, 9vw, 6.5rem);
+  line-height: 0.92;
+}
+
+.route-not-found p {
+  max-width: 34rem;
+  margin: 0;
+  color: #665f59;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.7rem;
+}
+
+.not-found-actions a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 @media (max-width: 720px) {
@@ -6921,5 +7274,94 @@ select {
     height: 2.1rem !important;
     padding: 0 0.5rem !important;
     font-size: 0.54rem !important;
+  }
+}
+
+/* Final admin typography pass: keep labels crisp without making every heading shout. */
+.admin-page,
+.admin-page button,
+.admin-page input,
+.admin-page select,
+.admin-page textarea {
+  font-family: "Inter", "Manrope", Arial, sans-serif !important;
+}
+
+.admin-mobile-title,
+.admin-page-heading h1,
+.admin-page .admin-section-header h2,
+.admin-page .admin-list-card .admin-section-header h2,
+.admin-page .admin-blog-card .admin-section-header h2,
+.admin-page .admin-products-card .admin-section-header h2 {
+  font-weight: 720 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.admin-mobile-title {
+  font-size: 0.78rem !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+}
+
+.admin-page-heading h1 {
+  font-size: clamp(1.9rem, 3vw, 2.65rem) !important;
+  line-height: 1.02 !important;
+}
+
+.admin-page .admin-section-header h2,
+.admin-page .admin-list-card .admin-section-header h2,
+.admin-page .admin-blog-card .admin-section-header h2,
+.admin-page .admin-products-card .admin-section-header h2 {
+  font-size: clamp(1.25rem, 1.8vw, 1.65rem) !important;
+  line-height: 1.08 !important;
+}
+
+.admin-page .primary-action,
+.admin-page .secondary-action,
+.admin-page .admin-tabs button,
+.admin-order-tabs button,
+.admin-page .admin-form-card label,
+.admin-page .admin-settings-form label,
+.admin-page .admin-status-row label,
+.admin-page .admin-product-list strong,
+.admin-page .admin-blog-copy strong,
+.admin-page .admin-blog-empty strong,
+.admin-page .admin-order-main h3,
+.admin-page .admin-order-meta-grid h4,
+.admin-page .admin-order-items h4 {
+  font-weight: 700 !important;
+}
+
+.admin-page .admin-tabs button,
+.admin-order-tabs button,
+.admin-page .primary-action,
+.admin-page .secondary-action {
+  letter-spacing: 0.07em !important;
+}
+
+.admin-page .admin-section-header p,
+.admin-page-heading span,
+.admin-page .admin-product-list span,
+.admin-page .admin-order-main p,
+.admin-page .admin-hint {
+  font-weight: 400 !important;
+}
+
+@media (max-width: 760px) {
+  .admin-page-heading h1 {
+    font-size: clamp(1.65rem, 8vw, 2.25rem) !important;
+  }
+
+  .admin-page .admin-section-header h2,
+  .admin-page .admin-list-card .admin-section-header h2,
+  .admin-page .admin-blog-card .admin-section-header h2,
+  .admin-page .admin-products-card .admin-section-header h2 {
+    font-size: clamp(1.25rem, 6vw, 1.55rem) !important;
+  }
+
+  .admin-page .primary-action,
+  .admin-page .secondary-action,
+  .admin-page .admin-tabs button,
+  .admin-order-tabs button {
+    font-weight: 680 !important;
   }
 }

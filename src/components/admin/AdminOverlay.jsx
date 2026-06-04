@@ -25,6 +25,7 @@ import {
 } from "../../utils/api";
 
 const ADMIN_TABS = [
+  { id: "overview", label: "Overview", icon: "overview" },
   { id: "orders", label: "Orders", icon: "orders" },
   { id: "customers", label: "Customers", icon: "customers" },
   { id: "subscribers", label: "Subscribers", icon: "subscribers" },
@@ -97,6 +98,16 @@ function AdminIcon({ name }) {
         <path d="M8 9h8" />
         <path d="M8 13h8" />
         <path d="M8 17h5" />
+      </svg>
+    );
+  }
+  if (name === "overview") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="7" height="7" rx="1.5" />
+        <rect x="13" y="4" width="7" height="7" rx="1.5" />
+        <rect x="4" y="13" width="7" height="7" rx="1.5" />
+        <rect x="13" y="13" width="7" height="7" rx="1.5" />
       </svg>
     );
   }
@@ -259,7 +270,7 @@ function AdminOverlay({
   onOpenStorefront,
   onLogout
 }) {
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTab] = useState("overview");
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState("");
   const [orders, setOrders] = useState([]);
@@ -818,38 +829,30 @@ function AdminOverlay({
         </header>
 
         <main className="site-shell admin-shell">
-          <section className="admin-page-heading">
-            <div>
-              <p>
-                <AdminIcon name={activeTabMeta.icon} />
-              </p>
-              <h1>{activeTabMeta.label}</h1>
-              <span>Welcome back. Here is what is happening with your store today.</span>
-            </div>
-          </section>
-
-          <section className="admin-kpi-grid">
-            <article className="admin-kpi-card">
-              <p>Total Orders</p>
-              <h2>{paidOrders.length}</h2>
-              <span>Paid orders only</span>
-            </article>
-            <article className="admin-kpi-card">
-              <p>Pending</p>
-              <h2>{pendingOrders}</h2>
-              <span>Needs attention</span>
-            </article>
-            <article className="admin-kpi-card">
-              <p>Paid Revenue</p>
-              <h2>{toPrice(totalRevenue)}</h2>
-              <span>Confirmed payments</span>
-            </article>
-            <article className="admin-kpi-card">
-              <p>Customers</p>
-              <h2>{customers.length}</h2>
-              <span>Registered accounts</span>
-            </article>
-          </section>
+          {activeTab === "overview" ? (
+            <section className="admin-kpi-grid">
+              <article className="admin-kpi-card">
+                <p>Total Orders</p>
+                <h2>{paidOrders.length}</h2>
+                <span>Paid orders only</span>
+              </article>
+              <article className="admin-kpi-card">
+                <p>Pending</p>
+                <h2>{pendingOrders}</h2>
+                <span>Needs attention</span>
+              </article>
+              <article className="admin-kpi-card">
+                <p>Paid Revenue</p>
+                <h2>{toPrice(totalRevenue)}</h2>
+                <span>Confirmed payments</span>
+              </article>
+              <article className="admin-kpi-card">
+                <p>Customers</p>
+                <h2>{customers.length}</h2>
+                <span>Registered accounts</span>
+              </article>
+            </section>
+          ) : null}
 
           {isLoadingData ? <p className="admin-hint">Loading admin data...</p> : null}
           {dataError ? <p className="form-error">{dataError}</p> : null}
@@ -1338,27 +1341,34 @@ function AdminOverlay({
                 </div>
               </form>
 
-              <section className="admin-section-card admin-list-card">
+              <section className="admin-section-card admin-list-card admin-blog-card">
                 <header className="admin-section-header">
-                  <h2>Current Blog Posts</h2>
-                  <p>Published posts rotate in the editorial section and link to blog pages.</p>
+                  <div>
+                    <h2>Current Blog Posts</h2>
+                    <p>Published posts rotate in the editorial section and link to blog pages.</p>
+                  </div>
                   <button type="button" className="primary-action" onClick={openAddBlogModal}>
                     Write Blog
                   </button>
                 </header>
-                <ul className="admin-product-list admin-blog-list">
-                  {blogs.length === 0 ? <li>No blog posts yet.</li> : null}
+                <ul className="admin-blog-list">
+                  {blogs.length === 0 ? (
+                    <li className="admin-blog-empty">
+                      <strong>No blog posts yet.</strong>
+                      <span>Write your first post to start filling the storefront editorial section.</span>
+                    </li>
+                  ) : null}
                   {blogs.map((blog) => (
-                    <li key={blog.id}>
+                    <li key={blog.id} className="admin-blog-item">
                       {blog.image ? (
-                        <div className="mini-media">
+                        <div className="admin-blog-thumb">
                           <img src={blog.image} alt="" />
                         </div>
                       ) : null}
-                      <div>
+                      <div className="admin-blog-copy">
+                        <span className="admin-blog-status">{blog.isPublished ? "Published" : "Draft"} | {blog.author || "IfeShadesnMore"}</span>
                         <strong>{blog.title}</strong>
-                        <span>{blog.isPublished ? "Published" : "Draft"} | {blog.author || "IfeShadesnMore"}</span>
-                        <span>{blog.excerpt || "No excerpt yet."}</span>
+                        <p>{blog.excerpt || "No excerpt yet."}</p>
                       </div>
                       <div className="admin-list-actions">
                         <button type="button" className="secondary-action" onClick={() => startEditBlog(blog)}>
@@ -1511,10 +1521,12 @@ function AdminOverlay({
                 </div>
               </form>
 
-              <section className="admin-section-card admin-list-card">
+              <section className="admin-section-card admin-list-card admin-products-card">
                 <header className="admin-section-header">
-                  <h2>Current Products</h2>
-                  <p>Tap edit to modify product details quickly.</p>
+                  <div>
+                    <h2>Current Products</h2>
+                    <p>Tap edit to modify product details quickly.</p>
+                  </div>
                   <button type="button" className="primary-action" onClick={openAddProductModal}>
                     Add Product
                   </button>

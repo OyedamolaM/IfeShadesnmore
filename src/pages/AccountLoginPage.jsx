@@ -36,7 +36,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.searchStr || "");
   const redirectParam = String(searchParams.get("redirect") || "").trim();
-  const redirect = redirectParam.startsWith("/") ? redirectParam : "/";
+  const redirect = redirectParam.startsWith("/") ? redirectParam : "/account";
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     firstName: "",

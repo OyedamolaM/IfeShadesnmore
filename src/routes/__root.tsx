@@ -16,8 +16,27 @@ export const Route = createRootRoute({
     ]
   }),
   shellComponent: RootDocument,
-  component: Outlet
+  component: Outlet,
+  notFoundComponent: NotFoundPage
 });
+
+export function NotFoundPage() {
+  return (
+    <main className="site-shell route-not-found">
+      <p className="section-kicker">Not found</p>
+      <h1>Page not found</h1>
+      <p>The page you opened is not available. Return to the storefront or sign in to continue.</p>
+      <div className="not-found-actions">
+        <a className="primary-action" href="/">
+          Back to Store
+        </a>
+        <a className="secondary-action" href="/account/login">
+          Sign In
+        </a>
+      </div>
+    </main>
+  );
+}
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
