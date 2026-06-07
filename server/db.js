@@ -341,6 +341,8 @@ async function runMigrationsSqlite() {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      profile_image TEXT DEFAULT '',
+      two_factor_enabled INTEGER NOT NULL DEFAULT 0,
       account_preferences TEXT DEFAULT '{}',
       notification_preferences TEXT DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -502,6 +504,12 @@ async function runMigrationsSqlite() {
   if (!userColumns.some((column) => column.name === "notification_preferences")) {
     sqliteDb.exec(`ALTER TABLE users ADD COLUMN notification_preferences TEXT DEFAULT '{}'`);
   }
+  if (!userColumns.some((column) => column.name === "profile_image")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN profile_image TEXT DEFAULT ''`);
+  }
+  if (!userColumns.some((column) => column.name === "two_factor_enabled")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0`);
+  }
   sqliteDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != ''`);
 
   const settingsColumns = sqliteDb.prepare("PRAGMA table_info(settings)").all();
@@ -592,6 +600,8 @@ async function runMigrationsPostgres() {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      profile_image TEXT DEFAULT '',
+      two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       account_preferences TEXT DEFAULT '{}',
       notification_preferences TEXT DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -725,6 +735,8 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'password';`);
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_preferences TEXT DEFAULT '{}';`);
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_preferences TEXT DEFAULT '{}';`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE;`);
   await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != '';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
@@ -950,6 +962,8 @@ export function mapUserRow(row) {
     fullName: row.full_name || "",
     phone: row.phone || "",
     address: row.address || "",
-    city: row.city || ""
+    city: row.city || "",
+    profileImage: row.profile_image || "",
+    twoFactorEnabled: Boolean(row.two_factor_enabled)
   };
 }

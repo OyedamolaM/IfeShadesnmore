@@ -134,6 +134,47 @@ export function updateAccountPreferences(payload) {
   });
 }
 
+export function updateAccountSecurity(payload) {
+  return request("/api/account/security", {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function uploadAccountAvatar(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), DEFAULT_UPLOAD_TIMEOUT_MS)
+    : null;
+
+  try {
+    const response = await fetch(buildApiUrl("/api/account/avatar"), {
+      method: "POST",
+      credentials: "include",
+      signal: controller?.signal,
+      body: formData
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload?.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.details = payload;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Upload timed out. Please try a smaller image or try again.");
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export function createAccountAddress(payload) {
   return request("/api/account/addresses", {
     method: "POST",

@@ -11,8 +11,10 @@ import {
   setDefaultAccountAddress,
   updateAccountAddress,
   updateAccountPreferences,
+  updateAccountSecurity,
   updatePassword,
-  updateProfile
+  updateProfile,
+  uploadAccountAvatar
 } from "../utils/api";
 import { toPrice } from "../utils/format";
 
@@ -180,6 +182,8 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
   const [passwordError, setPasswordError] = useState("");
   const [accountError, setAccountError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [profileSection, setProfileSection] = useState("personal");
   const [orderFilter, setOrderFilter] = useState("All");
@@ -198,6 +202,8 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
     phone: currentUser?.phone || "",
     address: currentUser?.address || "",
     city: currentUser?.city || "",
+    profileImage: currentUser?.profileImage || "",
+    twoFactorEnabled: Boolean(currentUser?.twoFactorEnabled),
     frameSize: "Medium",
     prescription: "",
     frameStyles: [],
@@ -223,7 +229,9 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
       fullName: currentUser?.fullName || "",
       phone: currentUser?.phone || "",
       address: currentUser?.address || "",
-      city: currentUser?.city || ""
+      city: currentUser?.city || "",
+      profileImage: currentUser?.profileImage || current.profileImage || "",
+      twoFactorEnabled: Boolean(currentUser?.twoFactorEnabled)
     }));
   }, [currentUser]);
 
@@ -240,6 +248,8 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
           prescription: payload.preferences?.prescription || "",
           frameStyles: Array.isArray(payload.preferences?.frameStyles) ? payload.preferences.frameStyles : [],
           lensPreferences: Array.isArray(payload.preferences?.lensPreferences) ? payload.preferences.lensPreferences : [],
+          profileImage: payload.user?.profileImage || current.profileImage || "",
+          twoFactorEnabled: Boolean(payload.user?.twoFactorEnabled),
           notifications: {
             ...current.notifications,
             ...(payload.notifications || {})
@@ -296,6 +306,28 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
     }
   };
 
+  const uploadAvatar = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setNotice("");
+    setProfileError("");
+    setIsUploadingAvatar(true);
+    try {
+      const payload = await uploadAccountAvatar(file);
+      if (payload.user) onUserUpdated(payload.user);
+      setProfileDraft((current) => ({
+        ...current,
+        profileImage: payload.profileImage || payload.user?.profileImage || ""
+      }));
+      setNotice("Profile photo updated.");
+    } catch (requestError) {
+      setProfileError(requestError.message || "Could not upload profile photo.");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const changePassword = async (event) => {
     event.preventDefault();
     setNotice("");
@@ -324,6 +356,25 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
       setPasswordError(requestError.message || "Could not update password.");
     } finally {
       setIsChangingPassword(false);
+    }
+  };
+
+  const saveSecurity = async (nextTwoFactorEnabled) => {
+    setAccountError("");
+    setNotice("");
+    setIsSavingSecurity(true);
+    try {
+      const payload = await updateAccountSecurity({ twoFactorEnabled: nextTwoFactorEnabled });
+      if (payload.user) onUserUpdated(payload.user);
+      setProfileDraft((current) => ({
+        ...current,
+        twoFactorEnabled: Boolean(payload.user?.twoFactorEnabled)
+      }));
+      setNotice("Security settings updated.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not update security settings.");
+    } finally {
+      setIsSavingSecurity(false);
     }
   };
 
@@ -493,9 +544,13 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
           profileError={profileError}
           passwordError={passwordError}
           isSaving={isSaving}
+          isUploadingAvatar={isUploadingAvatar}
+          isSavingSecurity={isSavingSecurity}
           isChangingPassword={isChangingPassword}
           onSaveProfile={saveProfile}
+          onUploadAvatar={uploadAvatar}
           onSavePreferences={saveAccountPreferences}
+          onSaveSecurity={saveSecurity}
           onChangePassword={changePassword}
         />
       ) : null}
@@ -788,15 +843,21 @@ function Field({ label, children, hint }) {
   return <label className="customer-field"><span>{label}</span>{children}{hint ? <small>{hint}</small> : null}</label>;
 }
 
-function PersonalProfile({ currentUser, profileDraft, setProfileDraft, profileError, isSaving, onSaveProfile }) {
+function PersonalProfile({ currentUser, profileDraft, setProfileDraft, profileError, isSaving, isUploadingAvatar, onSaveProfile, onUploadAvatar }) {
   const initial = String(profileDraft.fullName || currentUser?.email || "I").trim().charAt(0).toUpperCase() || "I";
+  const profileImage = profileDraft.profileImage || currentUser?.profileImage || "";
   return (
     <form onSubmit={onSaveProfile}>
       <ProfileCard title="Personal info" subtitle="Your name and contact details.">
         <div className="customer-photo-row">
-          <i>{initial}</i>
+          <span className="customer-profile-photo">
+            {profileImage ? <img src={profileImage} alt="" /> : initial}
+          </span>
           <div><strong>Profile photo</strong><span>PNG or JPG. Square recommended.</span></div>
-          <button type="button">Upload</button>
+          <label className={isUploadingAvatar ? "is-disabled" : ""}>
+            {isUploadingAvatar ? "Uploading..." : "Upload"}
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onUploadAvatar} disabled={isUploadingAvatar} />
+          </label>
         </div>
         <Field label="Full name"><input value={profileDraft.fullName} onChange={(event) => setProfileDraft((current) => ({ ...current, fullName: event.target.value }))} required /></Field>
         <Field label="Email"><input value={currentUser?.email || ""} readOnly /></Field>
@@ -873,7 +934,7 @@ function NotificationProfile({ profileDraft, setProfileDraft, onSavePreferences 
   );
 }
 
-function SecurityProfile({ passwordDraft, setPasswordDraft, passwordError, isChangingPassword, onChangePassword }) {
+function SecurityProfile({ profileDraft, passwordDraft, setPasswordDraft, passwordError, isSavingSecurity, isChangingPassword, onSaveSecurity, onChangePassword }) {
   return (
     <form onSubmit={onChangePassword}>
       <ProfileCard title="Security" subtitle="Keep your account locked down.">
@@ -882,7 +943,15 @@ function SecurityProfile({ passwordDraft, setPasswordDraft, passwordError, isCha
         <Field label="Confirm new password"><input type="password" value={passwordDraft.confirmPassword} onChange={(event) => setPasswordDraft((current) => ({ ...current, confirmPassword: event.target.value }))} minLength={8} /></Field>
         <div className="customer-toggle-row">
           <div><strong>Two-factor authentication</strong><span>Extra protection when signing in.</span></div>
-          <button type="button"><i /></button>
+          <button
+            type="button"
+            className={profileDraft.twoFactorEnabled ? "is-on" : ""}
+            onClick={() => onSaveSecurity(!profileDraft.twoFactorEnabled)}
+            disabled={isSavingSecurity}
+            aria-pressed={profileDraft.twoFactorEnabled}
+          >
+            <i />
+          </button>
         </div>
         {passwordError ? <p className="customer-error-note">{passwordError}</p> : null}
         <footer><button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? "Updating..." : "Update password"}</button></footer>

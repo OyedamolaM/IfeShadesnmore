@@ -255,6 +255,8 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "PATCH" && pathname === "/api/auth/password") return updatePassword(request);
     if (method === "GET" && pathname === "/api/account/dashboard") return getAccountDashboard(request);
     if (method === "PATCH" && pathname === "/api/account/preferences") return updateAccountPreferences(request);
+    if (method === "PATCH" && pathname === "/api/account/security") return updateAccountSecurity(request);
+    if (method === "POST" && pathname === "/api/account/avatar") return uploadAccountAvatar(request);
     if (method === "POST" && pathname === "/api/account/addresses") return createAccountAddress(request);
     if (method === "PUT" && match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)) {
       return updateAccountAddress(request, decodeURIComponent(match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)[1]));
@@ -718,6 +720,9 @@ const accountPreferencesSchema = z.object({
     sms: z.boolean().optional()
   }).optional()
 });
+const accountSecuritySchema = z.object({
+  twoFactorEnabled: z.boolean()
+});
 const orderStatusSchema = z.object({ orderStatus: z.enum(["processing", "shipped", "delivered", "cancelled"]) });
 const adminCustomerSchema = z.object({
   fullName: z.string().min(1).max(120),
@@ -1131,6 +1136,19 @@ async function updateAccountPreferences(request) {
     [JSON.stringify(nextPrefs), JSON.stringify(nextNotifications), auth.user.id]
   );
   return json({ preferences: nextPrefs, notifications: nextNotifications });
+}
+
+async function updateAccountSecurity(request) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const parsed = accountSecuritySchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid security settings." }, 400);
+  await execute(
+    "UPDATE users SET two_factor_enabled = ?, updated_at = datetime('now') WHERE id = ?",
+    [parsed.data.twoFactorEnabled, auth.user.id]
+  );
+  const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [auth.user.id]);
+  return json({ user: mapUserRow(userRow) });
 }
 
 async function createAccountAddress(request) {
@@ -1844,19 +1862,40 @@ async function sendNewsletter(request) {
 async function uploadImage(request) {
   const auth = await requireUser(request, "admin");
   if (auth.response) return auth.response;
-  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  const bucket = String(process.env.SUPABASE_STORAGE_BUCKET || "ife-shadesnmore").trim();
-  if (!supabaseUrl || !serviceRoleKey || !bucket) {
-    return json({ error: "Supabase Storage is not configured." }, 503);
-  }
   const form = await request.formData();
   const file = form.get("file");
   const requestedKind = String(form.get("kind") || "product").trim();
   const kind = ["product", "hero", "blog"].includes(requestedKind) ? requestedKind : "product";
-  if (!file || typeof file === "string") return json({ error: "Image file is required." }, 400);
-  if (!String(file.type || "").startsWith("image/")) return json({ error: "Only image uploads are allowed." }, 400);
-  if (file.size > 10 * 1024 * 1024) return json({ error: "Image must be 10MB or smaller." }, 400);
+  const result = await storeImageFile(file, kind);
+  if (result.response) return result.response;
+  return json(result.payload, 201);
+}
+
+async function uploadAccountAvatar(request) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const form = await request.formData();
+  const file = form.get("file");
+  const result = await storeImageFile(file, "avatar");
+  if (result.response) return result.response;
+  await execute(
+    "UPDATE users SET profile_image = ?, updated_at = datetime('now') WHERE id = ?",
+    [result.payload.secureUrl, auth.user.id]
+  );
+  const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [auth.user.id]);
+  return json({ user: mapUserRow(userRow), profileImage: result.payload.secureUrl }, 201);
+}
+
+async function storeImageFile(file, kind) {
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  const bucket = String(process.env.SUPABASE_STORAGE_BUCKET || "ife-shadesnmore").trim();
+  if (!supabaseUrl || !serviceRoleKey || !bucket) {
+    return { response: json({ error: "Supabase Storage is not configured." }, 503) };
+  }
+  if (!file || typeof file === "string") return { response: json({ error: "Image file is required." }, 400) };
+  if (!String(file.type || "").startsWith("image/")) return { response: json({ error: "Only image uploads are allowed." }, 400) };
+  if (file.size > 10 * 1024 * 1024) return { response: json({ error: "Image must be 10MB or smaller." }, 400) };
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileName = sanitizeUploadFileName(file.name || "image");
   const folder = String(process.env.SUPABASE_STORAGE_FOLDER || "uploads").trim().replace(/^\/+|\/+$/g, "") || "uploads";
@@ -1877,19 +1916,23 @@ async function uploadImage(request) {
   });
   const uploadPayload = await uploadResponse.json().catch(() => ({}));
   if (!uploadResponse.ok) {
-    return json({ error: uploadPayload?.message || "Could not upload image to Supabase Storage." }, uploadResponse.status);
+    return {
+      response: json({ error: uploadPayload?.message || "Could not upload image to Supabase Storage." }, uploadResponse.status)
+    };
   }
   const secureUrl = `${supabaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath
     .split("/")
     .map((part) => encodeURIComponent(part))
     .join("/")}`;
-  return json({
-    secureUrl,
-    publicId: objectPath,
-    width: null,
-    height: null,
-    format: String(file.type || "").split("/")[1] || ""
-  }, 201);
+  return {
+    payload: {
+      secureUrl,
+      publicId: objectPath,
+      width: null,
+      height: null,
+      format: String(file.type || "").split("/")[1] || ""
+    }
+  };
 }
 
 async function getStoredImageResponse(tableName, id) {

@@ -3936,6 +3936,27 @@ select {
   font-weight: 700;
 }
 
+.customer-profile-photo {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 999px;
+  background: var(--customer-gold);
+  color: #17120a;
+  display: grid;
+  flex: 0 0 auto;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  overflow: hidden;
+  place-items: center;
+}
+
+.customer-profile-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .customer-brand strong {
   font-family: "Syne", ui-serif, system-ui, sans-serif;
   font-weight: 500;
@@ -4302,6 +4323,7 @@ select {
 .customer-wishlist-card > div > button,
 .customer-profile-card footer button,
 .customer-photo-row button,
+.customer-photo-row label,
 .customer-drawer footer button {
   border: 1px solid var(--customer-border);
   border-radius: 999px;
@@ -4309,6 +4331,15 @@ select {
   color: var(--customer-fg);
   cursor: pointer;
   padding: 0.5rem 0.875rem;
+}
+
+.customer-photo-row label input {
+  display: none;
+}
+
+.customer-photo-row label.is-disabled {
+  cursor: progress;
+  opacity: 0.65;
 }
 
 .customer-progress {

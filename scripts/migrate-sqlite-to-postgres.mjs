@@ -60,6 +60,8 @@ async function ensurePostgresSchema(client) {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      profile_image TEXT DEFAULT '',
+      two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       account_preferences TEXT DEFAULT '{}',
       notification_preferences TEXT DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -176,6 +178,8 @@ async function ensurePostgresSchema(client) {
   `);
 
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT DEFAULT '';`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE;`);
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_preferences TEXT DEFAULT '{}';`);
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_preferences TEXT DEFAULT '{}';`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
@@ -245,9 +249,9 @@ async function main() {
       await client.query(
         `
           INSERT INTO users (
-            id, email, password_hash, role, is_email_verified, full_name, phone, address, city, account_preferences, notification_preferences, created_at, updated_at
+            id, email, password_hash, role, is_email_verified, full_name, phone, address, city, profile_image, two_factor_enabled, account_preferences, notification_preferences, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, CURRENT_TIMESTAMP), COALESCE($13::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14::timestamptz, CURRENT_TIMESTAMP), COALESCE($15::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             password_hash = EXCLUDED.password_hash,
@@ -257,6 +261,8 @@ async function main() {
             phone = EXCLUDED.phone,
             address = EXCLUDED.address,
             city = EXCLUDED.city,
+            profile_image = EXCLUDED.profile_image,
+            two_factor_enabled = EXCLUDED.two_factor_enabled,
             account_preferences = EXCLUDED.account_preferences,
             notification_preferences = EXCLUDED.notification_preferences,
             updated_at = EXCLUDED.updated_at
@@ -271,6 +277,8 @@ async function main() {
           row.phone || "",
           row.address || "",
           row.city || "",
+          row.profile_image || "",
+          Boolean(row.two_factor_enabled),
           row.account_preferences || "{}",
           row.notification_preferences || "{}",
           toIsoOrNull(row.created_at),
