@@ -1,6 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import ProductMedia from "../components/product/ProductMedia";
 import { fetchMyOrders, logout, updatePassword, updateProfile } from "../utils/api";
+import { toPrice } from "../utils/format";
+
+const ACCOUNT_TABS = [
+  { id: "overview", label: "Overview", icon: "grid" },
+  { id: "orders", label: "My orders", icon: "box" },
+  { id: "wishlist", label: "Wishlist", icon: "heart" },
+  { id: "addresses", label: "Addresses", icon: "pin" },
+  { id: "profile", label: "Profile", icon: "user" }
+];
+
+const ORDER_TABS = ["All", "Active", "Delivered", "Cancelled"];
+const WISHLIST_STORAGE_KEY = "ife_shadesnmore_customer_wishlist_v1";
+
+function AccountIcon({ name }) {
+  const shared = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true"
+  };
+  if (name === "grid") return <svg {...shared}><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></svg>;
+  if (name === "box") return <svg {...shared}><path d="M4 7.5 12 3l8 4.5-8 4.5L4 7.5Z" /><path d="M4 7.5v9L12 21l8-4.5v-9" /><path d="M12 12v9" /></svg>;
+  if (name === "heart") return <svg {...shared}><path d="M20.8 8.6c0 5-8.8 10-8.8 10s-8.8-5-8.8-10A4.8 4.8 0 0 1 12 5a4.8 4.8 0 0 1 8.8 3.6Z" /></svg>;
+  if (name === "pin") return <svg {...shared}><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z" /><path d="M12 10.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" /></svg>;
+  if (name === "user") return <svg {...shared}><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
+  if (name === "bell") return <svg {...shared}><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>;
+  if (name === "logout") return <svg {...shared}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
+  if (name === "plus") return <svg {...shared}><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+  if (name === "edit") return <svg {...shared}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" /></svg>;
+  if (name === "trash") return <svg {...shared}><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 14h10l1-14" /><path d="M9 7V4h6v3" /></svg>;
+  if (name === "shop") return <svg {...shared}><path d="M6 8h12l-1 12H7L6 8Z" /><path d="M9 8a3 3 0 0 1 6 0" /></svg>;
+  return <svg {...shared}><path d="M5 12h14" /></svg>;
+}
 
 function normalizeAvailability(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -11,39 +48,181 @@ function normalizeAvailability(value) {
   return "in_stock";
 }
 
-function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
+function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return date.toLocaleDateString("en-NG", { month: "short", day: "2-digit", year: "numeric" });
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return date.toLocaleString("en-NG", { month: "short", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function getOrderTotal(order) {
+  return (Number(order?.subtotal) || 0) + (Number(order?.shippingFee) || 0);
+}
+
+function getOrderLabel(order) {
+  const paymentStatus = String(order?.paymentStatus || "pending").toLowerCase();
+  const orderStatus = String(order?.orderStatus || "processing").toLowerCase();
+  if (paymentStatus === "failed") return "Cancelled";
+  if (paymentStatus === "pending") return "Awaiting payment";
+  if (orderStatus === "delivered") return "Delivered";
+  if (orderStatus === "shipped") return "Shipped";
+  if (orderStatus === "cancelled") return "Cancelled";
+  return "Processing";
+}
+
+function getOrderStep(order) {
+  const label = getOrderLabel(order);
+  if (label === "Processing") return 1;
+  if (label === "Shipped") return 3;
+  if (label === "Delivered") return 4;
+  return 0;
+}
+
+function AccountBadge({ tone = "neutral", children }) {
+  return <span className={`customer-badge customer-badge-${tone}`}>{children}</span>;
+}
+
+function AccountShell({ currentUser, activeTab, setActiveTab, title, subtitle, actions, children, onLogout }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const fullName = currentUser?.fullName || currentUser?.email || "Customer";
+  const initial = String(fullName).trim().charAt(0).toUpperCase() || "I";
+  const joinedYear = currentUser?.createdAt ? new Date(currentUser.createdAt).getFullYear() : new Date().getFullYear();
+
+  return (
+    <div className={`customer-dashboard ${mobileOpen ? "is-nav-open" : ""}`}>
+      <aside className={`customer-sidebar ${mobileOpen ? "is-open" : ""}`}>
+        <Link to="/" className="customer-brand">
+          <span>I</span>
+          <strong>IfeShades<span>n</span>More</strong>
+        </Link>
+        <nav className="customer-nav" aria-label="Customer account sections">
+          <p>Your account</p>
+          {ACCOUNT_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={activeTab === tab.id ? "is-active" : ""}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setMobileOpen(false);
+              }}
+            >
+              <AccountIcon name={tab.icon} />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="customer-member-card">
+          <p>Gold member</p>
+          <span>Free shipping on every order and early access to new drops.</span>
+          <Link to="/"><AccountIcon name="shop" /> Continue shopping</Link>
+        </div>
+        <div className="customer-owner-card">
+          <i>{initial}</i>
+          <div>
+            <strong>{fullName}</strong>
+            <span>Member since {joinedYear}</span>
+          </div>
+          <button type="button" onClick={onLogout} aria-label="Logout"><AccountIcon name="logout" /></button>
+        </div>
+      </aside>
+
+      {mobileOpen ? <button type="button" className="customer-nav-backdrop" aria-label="Close menu" onClick={() => setMobileOpen(false)} /> : null}
+
+      <div className="customer-main">
+        <header className="customer-topbar">
+          <button type="button" className="customer-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu">
+            <AccountIcon name="grid" />
+          </button>
+          <Link to="/" className="customer-back-link">Back to store</Link>
+          <button type="button" className="customer-bell" aria-label="Notifications">
+            <AccountIcon name="bell" />
+            <i />
+          </button>
+        </header>
+        <main className="customer-content">
+          <div className="customer-page-heading">
+            <div>
+              <h1>{title}</h1>
+              {subtitle ? <p>{subtitle}</p> : null}
+            </div>
+            {actions ? <div className="customer-page-actions">{actions}</div> : null}
+          </div>
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] }) {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("overview");
   const [orders, setOrders] = useState([]);
   const [ordersError, setOrdersError] = useState("");
+  const [notice, setNotice] = useState("");
   const [profileError, setProfileError] = useState("");
-  const [profileNotice, setProfileNotice] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
+  const [profileSection, setProfileSection] = useState("personal");
+  const [orderFilter, setOrderFilter] = useState("All");
+  const [addressDrawer, setAddressDrawer] = useState(null);
+  const [wishlistIds, setWishlistIds] = useState(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(WISHLIST_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [addresses, setAddresses] = useState(() => [
+    {
+      id: "default",
+      label: "Home",
+      name: currentUser?.fullName || "",
+      street: currentUser?.address || "",
+      city: currentUser?.city || "",
+      state: "",
+      phone: currentUser?.phone || "",
+      isDefault: true
+    }
+  ].filter((address) => address.name || address.street || address.phone));
+  const [profileDraft, setProfileDraft] = useState({
+    fullName: currentUser?.fullName || "",
+    phone: currentUser?.phone || "",
+    address: currentUser?.address || "",
+    city: currentUser?.city || "",
+    frameSize: "Medium",
+    prescription: "",
+    notifications: {
+      orders: true,
+      restocks: true,
+      drops: true,
+      offers: false,
+      sms: false
+    }
+  });
   const [passwordDraft, setPasswordDraft] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
   });
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordNotice, setPasswordNotice] = useState("");
-  const [profileDraft, setProfileDraft] = useState({
-    fullName: currentUser?.fullName || "",
-    phone: currentUser?.phone || "",
-    address: currentUser?.address || "",
-    city: currentUser?.city || ""
-  });
-  const firstName = String(currentUser?.fullName || "").trim().split(/\s+/)[0] || "there";
 
   useEffect(() => {
-    setProfileDraft({
+    setProfileDraft((current) => ({
+      ...current,
       fullName: currentUser?.fullName || "",
       phone: currentUser?.phone || "",
       address: currentUser?.address || "",
       city: currentUser?.city || ""
-    });
+    }));
   }, [currentUser]);
 
   useEffect(() => {
@@ -53,63 +232,32 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
   }, []);
 
   useEffect(() => {
-    if (!isProfileModalOpen) return undefined;
-    const handleEscClose = (event) => {
-      if (event.key !== "Escape") return;
-      if (isSaving) return;
-      setIsProfileModalOpen(false);
-      setProfileError("");
-    };
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlistIds));
+  }, [wishlistIds]);
 
-    window.addEventListener("keydown", handleEscClose);
-    return () => window.removeEventListener("keydown", handleEscClose);
-  }, [isProfileModalOpen, isSaving]);
+  const firstName = String(currentUser?.fullName || "").trim().split(/\s+/)[0] || "there";
+  const paidOrders = useMemo(() => orders.filter((order) => String(order.paymentStatus || "").toLowerCase() === "paid"), [orders]);
+  const deliveredOrders = useMemo(() => orders.filter((order) => String(order.orderStatus || "").toLowerCase() === "delivered"), [orders]);
+  const activeOrders = useMemo(() => orders.filter((order) => ["Processing", "Shipped", "Awaiting payment"].includes(getOrderLabel(order))), [orders]);
+  const latestOrder = orders[0] || null;
+  const wishlistProducts = useMemo(() => {
+    const visible = products.filter((product) => normalizeAvailability(product.availability) !== "out_of_stock");
+    const selected = wishlistIds
+      .map((id) => products.find((product) => String(product.id) === String(id)))
+      .filter(Boolean);
+    return selected.length > 0 ? selected : visible.slice(0, 4);
+  }, [products, wishlistIds]);
 
-  useEffect(() => {
-    if (!isPasswordModalOpen) return undefined;
-    const handleEscClose = (event) => {
-      if (event.key !== "Escape") return;
-      if (isChangingPassword) return;
-      setIsPasswordModalOpen(false);
-      setPasswordError("");
-      setPasswordDraft({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: ""
-      });
-    };
-
-    window.addEventListener("keydown", handleEscClose);
-    return () => window.removeEventListener("keydown", handleEscClose);
-  }, [isChangingPassword, isPasswordModalOpen]);
-
-  useEffect(() => {
-    if (!isOrderHistoryModalOpen) return undefined;
-    const handleEscClose = (event) => {
-      if (event.key !== "Escape") return;
-      setIsOrderHistoryModalOpen(false);
-    };
-
-    window.addEventListener("keydown", handleEscClose);
-    return () => window.removeEventListener("keydown", handleEscClose);
-  }, [isOrderHistoryModalOpen]);
-
-  const saveProfile = async (event) => {
-    event.preventDefault();
-    setProfileError("");
-    setProfileNotice("");
-    setIsSaving(true);
-    try {
-      const payload = await updateProfile(profileDraft);
-      onUserUpdated(payload.user);
-      setProfileNotice("Profile updated.");
-      setIsProfileModalOpen(false);
-    } catch (requestError) {
-      setProfileError(requestError.message || "Could not update profile.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const label = getOrderLabel(order);
+      if (orderFilter === "All") return true;
+      if (orderFilter === "Active") return label !== "Delivered" && label !== "Cancelled";
+      if (orderFilter === "Delivered") return label === "Delivered";
+      return label === "Cancelled";
+    });
+  }, [orderFilter, orders]);
 
   const signOut = async () => {
     await logout().catch(() => {});
@@ -117,75 +265,51 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
     navigate({ to: "/", replace: true });
   };
 
-  const openProfileModal = () => {
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setNotice("");
     setProfileError("");
-    setIsProfileModalOpen(true);
-  };
-
-  const closeProfileModal = () => {
-    if (isSaving) return;
-    setIsProfileModalOpen(false);
-    setProfileError("");
-  };
-
-  const openPasswordModal = () => {
-    setPasswordError("");
-    setIsProfileModalOpen(false);
-    setIsPasswordModalOpen(true);
-  };
-
-  const closePasswordModal = () => {
-    if (isChangingPassword) return;
-    setIsPasswordModalOpen(false);
-    setPasswordError("");
-    setPasswordDraft({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: ""
-    });
-  };
-
-  const openOrderHistoryModal = () => {
-    setIsOrderHistoryModalOpen(true);
-  };
-
-  const closeOrderHistoryModal = () => {
-    setIsOrderHistoryModalOpen(false);
+    setIsSaving(true);
+    try {
+      const payload = await updateProfile({
+        fullName: profileDraft.fullName,
+        phone: profileDraft.phone,
+        address: profileDraft.address,
+        city: profileDraft.city
+      });
+      onUserUpdated(payload.user);
+      setNotice("Profile updated.");
+    } catch (requestError) {
+      setProfileError(requestError.message || "Could not update profile.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const changePassword = async (event) => {
     event.preventDefault();
+    setNotice("");
     setPasswordError("");
-    setPasswordNotice("");
-
     if (!passwordDraft.currentPassword || !passwordDraft.newPassword) {
       setPasswordError("Current and new password are required.");
       return;
     }
-
     if (passwordDraft.newPassword.length < 8) {
       setPasswordError("New password must be at least 8 characters.");
       return;
     }
-
     if (passwordDraft.newPassword !== passwordDraft.confirmPassword) {
       setPasswordError("New password and confirm password do not match.");
       return;
     }
-
     setIsChangingPassword(true);
     try {
       const payload = await updatePassword({
         currentPassword: passwordDraft.currentPassword,
         newPassword: passwordDraft.newPassword
       });
-      setPasswordNotice(payload?.message || "Password updated successfully.");
-      setIsPasswordModalOpen(false);
-      setPasswordDraft({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: ""
-      });
+      setNotice(payload?.message || "Password updated successfully.");
+      setPasswordDraft({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch (requestError) {
       setPasswordError(requestError.message || "Could not update password.");
     } finally {
@@ -193,245 +317,504 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated }) {
     }
   };
 
-  const latestOrder = orders[0] || null;
-  const hasOrderHistory = orders.length > 1;
+  const removeWishlistProduct = (productId) => {
+    setWishlistIds((current) => current.filter((id) => String(id) !== String(productId)));
+  };
 
-  const renderOrderCard = (order, keyPrefix = "order") => (
-    <article className="order-item" key={`${keyPrefix}-${order.id}`}>
+  const saveAddress = (address) => {
+    setAddresses((current) => {
+      const normalized = {
+        ...address,
+        id: address.id || `address-${Date.now()}`
+      };
+      const next = address.id
+        ? current.map((item) => (item.id === address.id ? normalized : item))
+        : [...current, normalized];
+      return normalized.isDefault ? next.map((item) => ({ ...item, isDefault: item.id === normalized.id })) : next;
+    });
+    setAddressDrawer(null);
+  };
+
+  const pageTitle = activeTab === "overview" ? `Hi, ${firstName}` : ACCOUNT_TABS.find((tab) => tab.id === activeTab)?.label || "Account";
+  const pageSubtitle = {
+    overview: "Track orders, manage frames, and keep your style consistent.",
+    orders: "Every purchase and receipt in one place.",
+    wishlist: "Frames you love, saved for the right moment.",
+    addresses: "Save the places you call home. Faster checkout, every time.",
+    profile: "Keep your info fresh so we can serve you better."
+  }[activeTab];
+
+  const actions = activeTab === "overview" ? (
+    <Link to="/" className="customer-primary-button">Continue shopping</Link>
+  ) : activeTab === "addresses" ? (
+    <button type="button" className="customer-primary-button" onClick={() => setAddressDrawer({})}><AccountIcon name="plus" /> Add address</button>
+  ) : null;
+
+  return (
+    <AccountShell
+      currentUser={currentUser}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      actions={actions}
+      onLogout={signOut}
+    >
+      {notice ? <p className="customer-toast-note">{notice}</p> : null}
+      {ordersError ? <p className="customer-error-note">{ordersError}</p> : null}
+
+      {activeTab === "overview" ? (
+        <OverviewSection
+          activeOrders={activeOrders}
+          deliveredOrders={deliveredOrders}
+          paidOrders={paidOrders}
+          latestOrder={latestOrder}
+          orders={orders}
+          wishlistCount={wishlistProducts.length}
+          setActiveTab={setActiveTab}
+        />
+      ) : null}
+
+      {activeTab === "orders" ? (
+        <OrdersSection
+          orders={orders}
+          filteredOrders={filteredOrders}
+          orderFilter={orderFilter}
+          setOrderFilter={setOrderFilter}
+        />
+      ) : null}
+
+      {activeTab === "wishlist" ? (
+        <WishlistSection products={wishlistProducts} onRemove={removeWishlistProduct} />
+      ) : null}
+
+      {activeTab === "addresses" ? (
+        <AddressesSection
+          addresses={addresses}
+          setAddresses={setAddresses}
+          onEdit={(address) => setAddressDrawer(address)}
+          onAdd={() => setAddressDrawer({})}
+        />
+      ) : null}
+
+      {activeTab === "profile" ? (
+        <ProfileSection
+          currentUser={currentUser}
+          profileDraft={profileDraft}
+          setProfileDraft={setProfileDraft}
+          passwordDraft={passwordDraft}
+          setPasswordDraft={setPasswordDraft}
+          profileSection={profileSection}
+          setProfileSection={setProfileSection}
+          profileError={profileError}
+          passwordError={passwordError}
+          isSaving={isSaving}
+          isChangingPassword={isChangingPassword}
+          onSaveProfile={saveProfile}
+          onChangePassword={changePassword}
+        />
+      ) : null}
+
+      {addressDrawer ? (
+        <AddressDrawer
+          address={addressDrawer.id ? addressDrawer : null}
+          currentUser={currentUser}
+          onClose={() => setAddressDrawer(null)}
+          onSave={saveAddress}
+        />
+      ) : null}
+    </AccountShell>
+  );
+}
+
+function OverviewSection({ activeOrders, deliveredOrders, paidOrders, latestOrder, orders, wishlistCount, setActiveTab }) {
+  return (
+    <>
+      <div className="customer-stats-grid">
+        <CustomerStat icon="box" label="Active orders" value={String(activeOrders.length)} hint={activeOrders[0] ? getOrderLabel(activeOrders[0]) : "No active order"} />
+        <CustomerStat icon="shop" label="Delivered" value={String(deliveredOrders.length)} hint="All-time" />
+        <CustomerStat icon="heart" label="Wishlist" value={String(wishlistCount)} hint="Saved frames" />
+        <CustomerStat icon="user" label="Total spent" value={toPrice(paidOrders.reduce((sum, order) => sum + getOrderTotal(order), 0))} hint="Paid orders" />
+      </div>
+
+      <section className="customer-tracking-card">
+        <div>
+          <p>Tracking</p>
+          <h2>{latestOrder ? `${latestOrder.items?.[0]?.name || "Your order"} ${getOrderLabel(latestOrder).toLowerCase()}` : "No active order yet"}</h2>
+          <span>{latestOrder ? `${latestOrder.id} - ${formatDate(latestOrder.createdAt)}` : "When you place an order, tracking appears here."}</span>
+        </div>
+        <button type="button" onClick={() => setActiveTab("orders")}>Track order</button>
+        <OrderProgress order={latestOrder} />
+      </section>
+
+      <section className="customer-panel">
+        <header>
+          <h2>Recent orders</h2>
+          <button type="button" onClick={() => setActiveTab("orders")}>View all</button>
+        </header>
+        <div className="customer-recent-list">
+          {orders.slice(0, 3).map((order) => <RecentOrderRow key={order.id} order={order} />)}
+          {orders.length === 0 ? <p className="customer-empty">No orders yet.</p> : null}
+        </div>
+      </section>
+
+      <div className="customer-quick-grid">
+        <QuickLink icon="pin" title="Manage addresses" subtitle="Home, work and beyond" onClick={() => setActiveTab("addresses")} />
+        <QuickLink icon="heart" title="Your wishlist" subtitle={`${wishlistCount} frames saved`} onClick={() => setActiveTab("wishlist")} />
+        <QuickLink icon="user" title="Profile & preferences" subtitle="Frame size, lens specs" onClick={() => setActiveTab("profile")} />
+      </div>
+    </>
+  );
+}
+
+function CustomerStat({ icon, label, value, hint }) {
+  return (
+    <article className="customer-stat-card">
+      <AccountIcon name={icon} />
+      <p>{label}</p>
+      <strong>{value}</strong>
+      <span>{hint}</span>
+    </article>
+  );
+}
+
+function RecentOrderRow({ order }) {
+  const label = getOrderLabel(order);
+  return (
+    <article className="customer-recent-row">
+      <i><AccountIcon name="box" /></i>
+      <div>
+        <strong>{order.items?.[0]?.name || order.id}</strong>
+        <span>{order.id} - {formatDate(order.createdAt)}</span>
+      </div>
+      <AccountBadge tone={label === "Delivered" ? "success" : label === "Cancelled" ? "danger" : "gold"}>{label}</AccountBadge>
+      <em>{toPrice(getOrderTotal(order))}</em>
+    </article>
+  );
+}
+
+function OrdersSection({ orders, filteredOrders, orderFilter, setOrderFilter }) {
+  const countFor = (tab) => {
+    if (tab === "All") return orders.length;
+    if (tab === "Active") return orders.filter((order) => {
+      const label = getOrderLabel(order);
+      return label !== "Delivered" && label !== "Cancelled";
+    }).length;
+    if (tab === "Delivered") return orders.filter((order) => getOrderLabel(order) === "Delivered").length;
+    return orders.filter((order) => getOrderLabel(order) === "Cancelled").length;
+  };
+
+  return (
+    <>
+      <div className="customer-tabs">
+        {ORDER_TABS.map((tab) => (
+          <button key={tab} type="button" className={orderFilter === tab ? "is-active" : ""} onClick={() => setOrderFilter(tab)}>
+            {tab}<span>{countFor(tab)}</span>
+          </button>
+        ))}
+      </div>
+      <div className="customer-order-list">
+        {filteredOrders.map((order) => <OrderCard key={order.id} order={order} />)}
+        {filteredOrders.length === 0 ? <p className="customer-empty">No orders in this tab yet.</p> : null}
+      </div>
+    </>
+  );
+}
+
+function OrderCard({ order }) {
+  const label = getOrderLabel(order);
+  const tone = label === "Delivered" ? "success" : label === "Cancelled" ? "danger" : label === "Awaiting payment" ? "warning" : "gold";
+  const itemCount = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  return (
+    <article className="customer-order-card">
       <header>
-        <strong>{order.id}</strong>
-        <div className="order-badges">
-          <span className={`order-status status-${order.paymentStatus}`}>Payment: {order.paymentStatus}</span>
-          <span className={`order-status status-order-${order.orderStatus || "pending"}`}>
-            Order: {order.orderStatus || "pending"}
-          </span>
+        <div className="customer-order-title">
+          <i><AccountIcon name="box" /></i>
+          <div>
+            <span>{order.id}</span>
+            <h2>{(order.items || []).map((item) => item.name).join(", ") || "Order"}</h2>
+            <p>{formatDateTime(order.createdAt)} - {itemCount} item{itemCount === 1 ? "" : "s"}</p>
+          </div>
+        </div>
+        <div className="customer-order-total">
+          <AccountBadge tone={tone}>{label}</AccountBadge>
+          <strong>{toPrice(getOrderTotal(order))}</strong>
         </div>
       </header>
-      <p>
-        {new Date(order.createdAt).toLocaleString()} | NGN {Number(order.subtotal).toLocaleString()}
-      </p>
+      {label !== "Cancelled" && label !== "Delivered" ? <OrderProgress order={order} /> : null}
       <ul>
         {(order.items || []).map((item) => (
           <li key={`${order.id}-${item.id || item.productId}`}>
-            <span>
-              {item.name} x {item.quantity}
-            </span>
-            {normalizeAvailability(item.availability) === "preorder" ? (
-              <small className="order-preorder-note">
-                Preorder:{" "}
-                {String(item.preorderNote || "").trim() ||
-                  "Shipping timeline will be confirmed before dispatch."}
-              </small>
-            ) : null}
+            <span>{item.name} x {item.quantity}</span>
+            <em>{toPrice(item.lineTotal || (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0))}</em>
+            {normalizeAvailability(item.availability) === "preorder" ? <small>Preorder: {item.preorderNote || "Shipping timeline will be confirmed before dispatch."}</small> : null}
           </li>
         ))}
       </ul>
+      <footer>
+        <button type="button">View receipt</button>
+        <button type="button">Contact support</button>
+      </footer>
     </article>
   );
+}
+
+function OrderProgress({ order }) {
+  const step = order ? getOrderStep(order) : 0;
+  return (
+    <div className="customer-progress">
+      <div>
+        {["Confirmed", "Packed", "Shipped", "Delivered"].map((label, index) => (
+          <span key={label} className={step >= index + 1 ? "is-active" : ""}>{label}</span>
+        ))}
+      </div>
+      <i><b style={{ width: `${Math.max(0, step / 4) * 100}%` }} /></i>
+    </div>
+  );
+}
+
+function WishlistSection({ products, onRemove }) {
+  if (products.length === 0) {
+    return (
+      <section className="customer-empty-state">
+        <AccountIcon name="heart" />
+        <h2>Your wishlist is empty</h2>
+        <p>Tap save on frames you love, then come back when you are ready.</p>
+        <Link to="/" className="customer-primary-button">Browse frames</Link>
+      </section>
+    );
+  }
 
   return (
-    <div className="page auth-page">
-      <div className="site-shell account-shell">
-        <div className="account-header">
-          <div className="account-heading">
-            <h1>My Account</h1>
-            <p className="account-greeting">Hello, {firstName}</p>
+    <div className="customer-wishlist-grid">
+      {products.map((product) => (
+        <article key={product.id} className="customer-wishlist-card">
+          <div>
+            <ProductMedia product={product} />
+            <button type="button" onClick={() => onRemove(product.id)} aria-label={`Remove ${product.name}`}>
+              <AccountIcon name="trash" />
+            </button>
+            {normalizeAvailability(product.availability) === "preorder" ? <AccountBadge tone="warning">Preorder</AccountBadge> : null}
           </div>
-          <div className="account-actions">
-            <button
-              type="button"
-              className="account-action-button account-action-profile"
-              onClick={openProfileModal}
-            >
-              Profile
-            </button>
-            <Link
-              to="/"
-              className="account-action-button account-action-shop"
-            >
-              Back to Shop
-            </Link>
-            <button type="button" className="account-action-button account-action-logout" onClick={signOut}>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        <div className="account-grid">
-          <section className="account-card orders-card account-orders-wide">
-            <h2>Recent Order</h2>
-            {profileNotice ? <p className="form-success">{profileNotice}</p> : null}
-            {passwordNotice ? <p className="form-success">{passwordNotice}</p> : null}
-            {ordersError ? <p className="form-error">{ordersError}</p> : null}
-            {!latestOrder ? <p>No orders yet.</p> : renderOrderCard(latestOrder, "recent")}
-            {hasOrderHistory ? (
-              <button type="button" className="order-history-link" onClick={openOrderHistoryModal}>
-                View Order History
-              </button>
-            ) : null}
+          <section>
+            <h2>{product.name}</h2>
+            <strong>{toPrice(product.price)}</strong>
+            <p>{product.description || "Saved for later"}</p>
+            <Link to="/" className="customer-secondary-button"><AccountIcon name="shop" /> Add to cart</Link>
           </section>
-        </div>
-      </div>
-
-      {isOrderHistoryModalOpen ? (
-        <div className="commerce-overlay account-order-history-overlay" onClick={closeOrderHistoryModal}>
-          <section
-            className="profile-modal account-order-history-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-order-history-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button type="button" className="close-x" onClick={closeOrderHistoryModal}>
-              x
-            </button>
-            <div className="profile-form account-order-history-content">
-              <h2 id="account-order-history-title">Order History</h2>
-              <p className="account-order-history-count">Showing {orders.length} orders</p>
-              <div className="account-order-history-list">
-                {orders.map((order) => renderOrderCard(order, "history"))}
-              </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {isProfileModalOpen ? (
-        <div className="commerce-overlay account-profile-overlay" onClick={closeProfileModal}>
-          <section
-            className="profile-modal account-profile-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-profile-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button type="button" className="close-x" onClick={closeProfileModal} disabled={isSaving}>
-              x
-            </button>
-            <form className="profile-form account-profile-form" onSubmit={saveProfile}>
-              <h2 id="account-profile-title">My Profile</h2>
-              <p className="account-email">{currentUser?.email}</p>
-              <label>
-                Full name
-                <input
-                  value={profileDraft.fullName}
-                  onChange={(event) =>
-                    setProfileDraft((current) => ({ ...current, fullName: event.target.value }))
-                  }
-                  required
-                  autoFocus
-                />
-              </label>
-              <label>
-                Phone
-                <input
-                  value={profileDraft.phone}
-                  onChange={(event) =>
-                    setProfileDraft((current) => ({ ...current, phone: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Address
-                <input
-                  value={profileDraft.address}
-                  onChange={(event) =>
-                    setProfileDraft((current) => ({ ...current, address: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                City
-                <input
-                  value={profileDraft.city}
-                  onChange={(event) =>
-                    setProfileDraft((current) => ({ ...current, city: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              {profileError ? <p className="form-error">{profileError}</p> : null}
-              <div className="account-profile-actions">
-                <button type="button" className="secondary-action" onClick={openPasswordModal}>
-                  Change Password
-                </button>
-                <button type="submit" className="primary-action" disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save Profile"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      ) : null}
-
-      {isPasswordModalOpen ? (
-        <div className="commerce-overlay account-password-overlay" onClick={closePasswordModal}>
-          <section
-            className="profile-modal account-password-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-password-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button type="button" className="close-x" onClick={closePasswordModal} disabled={isChangingPassword}>
-              x
-            </button>
-            <form className="profile-form account-password-form" onSubmit={changePassword}>
-              <h2 id="account-password-title">Change Password</h2>
-              <label>
-                Current password
-                <input
-                  type="password"
-                  value={passwordDraft.currentPassword}
-                  onChange={(event) =>
-                    setPasswordDraft((current) => ({ ...current, currentPassword: event.target.value }))
-                  }
-                  autoFocus
-                />
-              </label>
-              <label>
-                New password
-                <input
-                  type="password"
-                  value={passwordDraft.newPassword}
-                  onChange={(event) =>
-                    setPasswordDraft((current) => ({ ...current, newPassword: event.target.value }))
-                  }
-                  minLength={8}
-                />
-              </label>
-              <label>
-                Confirm new password
-                <input
-                  type="password"
-                  value={passwordDraft.confirmPassword}
-                  onChange={(event) =>
-                    setPasswordDraft((current) => ({ ...current, confirmPassword: event.target.value }))
-                  }
-                  minLength={8}
-                />
-              </label>
-              {passwordError ? <p className="form-error">{passwordError}</p> : null}
-              <div className="account-password-actions">
-                <button
-                  type="button"
-                  className="secondary-action account-password-cancel"
-                  onClick={closePasswordModal}
-                  disabled={isChangingPassword}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="primary-action" disabled={isChangingPassword}>
-                  {isChangingPassword ? "Updating..." : "Update Password"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      ) : null}
+        </article>
+      ))}
     </div>
+  );
+}
+
+function AddressesSection({ addresses, setAddresses, onEdit, onAdd }) {
+  const setDefault = (id) => setAddresses((current) => current.map((address) => ({ ...address, isDefault: address.id === id })));
+  const remove = (id) => setAddresses((current) => current.filter((address) => address.id !== id));
+  return (
+    <div className="customer-address-grid">
+      {addresses.map((address) => (
+        <article key={address.id} className={`customer-address-card ${address.isDefault ? "is-default" : ""}`}>
+          <header>
+            <div>
+              <i><AccountIcon name={address.label === "Work" ? "box" : "pin"} /></i>
+              <span>{address.label || "Address"}</span>
+              {address.isDefault ? <AccountBadge tone="gold">Default</AccountBadge> : null}
+            </div>
+            <div>
+              <button type="button" onClick={() => onEdit(address)} aria-label="Edit address"><AccountIcon name="edit" /></button>
+              <button type="button" onClick={() => remove(address.id)} aria-label="Delete address"><AccountIcon name="trash" /></button>
+            </div>
+          </header>
+          <p><strong>{address.name || "Customer"}</strong></p>
+          <p>{address.street || "No street address added"}</p>
+          <p>{[address.city, address.state].filter(Boolean).join(", ") || "No city added"}</p>
+          <p>{address.phone || "No phone added"}</p>
+          {!address.isDefault ? <button type="button" onClick={() => setDefault(address.id)}>Set as default</button> : null}
+        </article>
+      ))}
+      <button type="button" className="customer-add-address" onClick={onAdd}>
+        <AccountIcon name="plus" />
+        <span>Add a new address</span>
+        <small>Home, work, anywhere</small>
+      </button>
+    </div>
+  );
+}
+
+function ProfileSection(props) {
+  const sections = [
+    { id: "personal", label: "Personal info", icon: "user" },
+    { id: "preferences", label: "Frame preferences", icon: "heart" },
+    { id: "notifications", label: "Notifications", icon: "bell" },
+    { id: "security", label: "Security", icon: "box" }
+  ];
+  return (
+    <div className="customer-profile-layout">
+      <nav>
+        {sections.map((section) => (
+          <button key={section.id} type="button" className={props.profileSection === section.id ? "is-active" : ""} onClick={() => props.setProfileSection(section.id)}>
+            <AccountIcon name={section.icon} />{section.label}
+          </button>
+        ))}
+      </nav>
+      <div>
+        {props.profileSection === "personal" ? <PersonalProfile {...props} /> : null}
+        {props.profileSection === "preferences" ? <PreferenceProfile {...props} /> : null}
+        {props.profileSection === "notifications" ? <NotificationProfile {...props} /> : null}
+        {props.profileSection === "security" ? <SecurityProfile {...props} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function ProfileCard({ title, subtitle, children }) {
+  return <section className="customer-profile-card"><h2>{title}</h2><p>{subtitle}</p>{children}</section>;
+}
+
+function Field({ label, children, hint }) {
+  return <label className="customer-field"><span>{label}</span>{children}{hint ? <small>{hint}</small> : null}</label>;
+}
+
+function PersonalProfile({ currentUser, profileDraft, setProfileDraft, profileError, isSaving, onSaveProfile }) {
+  const initial = String(profileDraft.fullName || currentUser?.email || "I").trim().charAt(0).toUpperCase() || "I";
+  return (
+    <form onSubmit={onSaveProfile}>
+      <ProfileCard title="Personal info" subtitle="Your name and contact details.">
+        <div className="customer-photo-row">
+          <i>{initial}</i>
+          <div><strong>Profile photo</strong><span>PNG or JPG. Square recommended.</span></div>
+          <button type="button">Upload</button>
+        </div>
+        <Field label="Full name"><input value={profileDraft.fullName} onChange={(event) => setProfileDraft((current) => ({ ...current, fullName: event.target.value }))} required /></Field>
+        <Field label="Email"><input value={currentUser?.email || ""} readOnly /></Field>
+        <Field label="Phone"><input value={profileDraft.phone} onChange={(event) => setProfileDraft((current) => ({ ...current, phone: event.target.value }))} required /></Field>
+        <div className="customer-form-grid">
+          <Field label="Address"><input value={profileDraft.address} onChange={(event) => setProfileDraft((current) => ({ ...current, address: event.target.value }))} required /></Field>
+          <Field label="City"><input value={profileDraft.city} onChange={(event) => setProfileDraft((current) => ({ ...current, city: event.target.value }))} required /></Field>
+        </div>
+        {profileError ? <p className="customer-error-note">{profileError}</p> : null}
+        <footer><button type="submit" className="customer-primary-button" disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</button></footer>
+      </ProfileCard>
+    </form>
+  );
+}
+
+function PreferenceProfile({ profileDraft, setProfileDraft }) {
+  return (
+    <ProfileCard title="Frame preferences" subtitle="Helps us recommend frames that fit and flatter.">
+      <Field label="Preferred frame style">
+        <div className="customer-choice-list">
+          {["Round", "Square", "Cat-eye", "Aviator", "Browline", "Oversized"].map((style) => <button key={style} type="button">{style}</button>)}
+        </div>
+      </Field>
+      <Field label="Frame size">
+        <div className="customer-segmented">
+          {["Small", "Medium", "Large"].map((size) => (
+            <button key={size} type="button" className={profileDraft.frameSize === size ? "is-active" : ""} onClick={() => setProfileDraft((current) => ({ ...current, frameSize: size }))}>{size}</button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Prescription on file" hint="We will match your script when you order prescription lenses.">
+        <textarea rows={4} value={profileDraft.prescription} onChange={(event) => setProfileDraft((current) => ({ ...current, prescription: event.target.value }))} placeholder="OD: -2.25 / OS: -2.00 - PD: 62mm" />
+      </Field>
+      <Field label="Lens preference">
+        <div className="customer-checkbox-grid">
+          {["Anti-blue light", "Polarized", "Photochromic", "Standard clear"].map((lens) => <label key={lens}><input type="checkbox" />{lens}</label>)}
+        </div>
+      </Field>
+    </ProfileCard>
+  );
+}
+
+function NotificationProfile({ profileDraft, setProfileDraft }) {
+  const toggles = [
+    ["orders", "Order updates", "Confirmation, packing, shipping and delivery alerts."],
+    ["restocks", "Restock alerts", "Tell me when wishlist items are back in stock."],
+    ["drops", "New drops", "Be the first to see new collections."],
+    ["offers", "Promotions & offers", "Exclusive member deals."],
+    ["sms", "SMS notifications", "Receive important alerts via text."]
+  ];
+  return (
+    <ProfileCard title="Notifications" subtitle="Choose what we send and when.">
+      {toggles.map(([key, label, description]) => (
+        <div key={key} className="customer-toggle-row">
+          <div><strong>{label}</strong><span>{description}</span></div>
+          <button type="button" className={profileDraft.notifications[key] ? "is-on" : ""} onClick={() => setProfileDraft((current) => ({ ...current, notifications: { ...current.notifications, [key]: !current.notifications[key] } }))}><i /></button>
+        </div>
+      ))}
+    </ProfileCard>
+  );
+}
+
+function SecurityProfile({ passwordDraft, setPasswordDraft, passwordError, isChangingPassword, onChangePassword }) {
+  return (
+    <form onSubmit={onChangePassword}>
+      <ProfileCard title="Security" subtitle="Keep your account locked down.">
+        <Field label="Current password"><input type="password" value={passwordDraft.currentPassword} onChange={(event) => setPasswordDraft((current) => ({ ...current, currentPassword: event.target.value }))} /></Field>
+        <Field label="New password"><input type="password" value={passwordDraft.newPassword} onChange={(event) => setPasswordDraft((current) => ({ ...current, newPassword: event.target.value }))} minLength={8} /></Field>
+        <Field label="Confirm new password"><input type="password" value={passwordDraft.confirmPassword} onChange={(event) => setPasswordDraft((current) => ({ ...current, confirmPassword: event.target.value }))} minLength={8} /></Field>
+        <div className="customer-toggle-row">
+          <div><strong>Two-factor authentication</strong><span>Extra protection when signing in.</span></div>
+          <button type="button"><i /></button>
+        </div>
+        {passwordError ? <p className="customer-error-note">{passwordError}</p> : null}
+        <footer><button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? "Updating..." : "Update password"}</button></footer>
+      </ProfileCard>
+    </form>
+  );
+}
+
+function AddressDrawer({ address, currentUser, onClose, onSave }) {
+  const [form, setForm] = useState(address || {
+    id: "",
+    label: "Home",
+    name: currentUser?.fullName || "",
+    street: "",
+    city: currentUser?.city || "",
+    state: "",
+    phone: currentUser?.phone || "",
+    isDefault: false
+  });
+  return (
+    <div className="customer-drawer">
+      <button type="button" className="customer-drawer-backdrop" onClick={onClose} aria-label="Close address drawer" />
+      <section>
+        <header>
+          <div><p>{address ? "Edit" : "New"}</p><h2>{address ? "Edit address" : "Add address"}</h2></div>
+          <button type="button" onClick={onClose}>x</button>
+        </header>
+        <div>
+          <Field label="Label">
+            <div className="customer-segmented">
+              {["Home", "Work", "Other"].map((label) => <button key={label} type="button" className={form.label === label ? "is-active" : ""} onClick={() => setForm((current) => ({ ...current, label }))}>{label}</button>)}
+            </div>
+          </Field>
+          <Field label="Full name"><input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
+          <Field label="Street address"><input value={form.street} onChange={(event) => setForm((current) => ({ ...current, street: event.target.value }))} /></Field>
+          <div className="customer-form-grid">
+            <Field label="City"><input value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} /></Field>
+            <Field label="State"><input value={form.state} onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} /></Field>
+          </div>
+          <Field label="Phone"><input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></Field>
+          <label className="customer-check-row"><input type="checkbox" checked={form.isDefault} onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))} />Set as default delivery address</label>
+        </div>
+        <footer>
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="button" className="customer-primary-button" onClick={() => onSave(form)}>{address ? "Save changes" : "Add address"}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function QuickLink({ icon, title, subtitle, onClick }) {
+  return (
+    <button type="button" className="customer-quick-link" onClick={onClick}>
+      <i><AccountIcon name={icon} /></i>
+      <span><strong>{title}</strong><small>{subtitle}</small></span>
+      <b>Open</b>
+    </button>
   );
 }
 

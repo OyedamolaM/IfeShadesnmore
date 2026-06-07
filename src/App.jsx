@@ -407,6 +407,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
         currentUser={currentUser}
         onLoggedOut={() => setCurrentUser(null)}
         onUserUpdated={setCurrentUser}
+        products={products}
       />
     );
   }

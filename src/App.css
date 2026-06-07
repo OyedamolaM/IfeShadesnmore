@@ -3879,6 +3879,1120 @@ select {
   width: 100%;
 }
 
+.customer-dashboard {
+  --customer-bg: #080807;
+  --customer-card: #14130f;
+  --customer-card-2: #1d1a15;
+  --customer-border: #2a261f;
+  --customer-fg: #fffaf2;
+  --customer-muted: #a79a82;
+  --customer-gold: #d7b84f;
+  --customer-danger: #ff6b6b;
+  --customer-success: #19d28f;
+  min-height: 100dvh;
+  background: var(--customer-bg);
+  color: var(--customer-fg);
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.customer-dashboard svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.customer-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  width: 16.5rem;
+  border-right: 1px solid var(--customer-border);
+  background: #050505;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+}
+
+.customer-brand {
+  height: 4rem;
+  border-bottom: 1px solid var(--customer-border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--customer-fg);
+  text-decoration: none;
+  padding: 0 1.5rem;
+}
+
+.customer-brand > span,
+.customer-owner-card i,
+.customer-photo-row i {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--customer-gold);
+  color: #17120a;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.customer-brand strong {
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 500;
+}
+
+.customer-brand strong span {
+  color: var(--customer-gold);
+}
+
+.customer-nav {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 1.5rem 0.75rem 0;
+}
+
+.customer-nav p {
+  margin: 0 0 0.75rem;
+  color: var(--customer-muted);
+  font-size: 0.625rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding: 0 0.75rem;
+}
+
+.customer-nav button {
+  min-height: 2.625rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--customer-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0 0.75rem;
+  text-align: left;
+  transition: 150ms ease;
+}
+
+.customer-nav button:hover,
+.customer-nav button.is-active {
+  border-color: color-mix(in srgb, var(--customer-gold) 30%, transparent);
+  background: color-mix(in srgb, var(--customer-gold) 8%, transparent);
+  color: var(--customer-fg);
+}
+
+.customer-nav button.is-active svg {
+  color: var(--customer-gold);
+}
+
+.customer-member-card {
+  border: 1px solid color-mix(in srgb, var(--customer-gold) 25%, transparent);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--customer-gold) 12%, transparent), transparent);
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.5rem 1rem;
+  padding: 1rem;
+}
+
+.customer-member-card p {
+  margin: 0;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-size: 1rem;
+}
+
+.customer-member-card span,
+.customer-member-card a,
+.customer-owner-card span,
+.customer-page-heading p,
+.customer-stat-card span,
+.customer-tracking-card span,
+.customer-recent-row span,
+.customer-order-title p,
+.customer-wishlist-card p,
+.customer-address-card p,
+.customer-profile-card > p,
+.customer-field small,
+.customer-toggle-row span,
+.customer-add-address small,
+.customer-quick-link small {
+  color: var(--customer-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.customer-member-card a {
+  color: var(--customer-gold);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.customer-owner-card {
+  align-self: end;
+  border-top: 1px solid var(--customer-border);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.customer-owner-card strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+.customer-owner-card button {
+  border: 0;
+  background: transparent;
+  color: var(--customer-muted);
+  cursor: pointer;
+}
+
+.customer-main {
+  min-height: 100dvh;
+  padding-left: 16.5rem;
+}
+
+.customer-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 4rem;
+  border-bottom: 1px solid var(--customer-border);
+  background: color-mix(in srgb, var(--customer-bg) 86%, transparent);
+  backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 2rem;
+}
+
+.customer-menu-button,
+.customer-bell,
+.customer-address-card header button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--customer-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--customer-fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.customer-menu-button {
+  display: none;
+}
+
+.customer-back-link {
+  color: var(--customer-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.customer-bell {
+  position: relative;
+  margin-left: auto;
+}
+
+.customer-bell i {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--customer-gold);
+}
+
+.customer-content {
+  padding: 2rem;
+}
+
+.customer-page-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.customer-page-heading h1,
+.customer-tracking-card h2,
+.customer-panel h2,
+.customer-order-card h2,
+.customer-wishlist-card h2,
+.customer-profile-card h2,
+.customer-empty-state h2 {
+  margin: 0;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.customer-page-heading h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.05;
+}
+
+.customer-page-heading p {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+
+.customer-primary-button,
+.customer-secondary-button {
+  min-height: 2.5rem;
+  border: 1px solid var(--customer-gold);
+  border-radius: 999px;
+  background: var(--customer-gold);
+  color: #17120a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0 1rem;
+}
+
+.customer-secondary-button {
+  width: 100%;
+  border-color: var(--customer-border);
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--customer-fg);
+}
+
+.customer-toast-note,
+.customer-error-note {
+  border-radius: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.875rem;
+}
+
+.customer-toast-note {
+  border: 1px solid color-mix(in srgb, var(--customer-success) 35%, transparent);
+  color: var(--customer-success);
+}
+
+.customer-error-note {
+  border: 1px solid color-mix(in srgb, var(--customer-danger) 35%, transparent);
+  color: var(--customer-danger);
+}
+
+.customer-stats-grid,
+.customer-wishlist-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.customer-stat-card,
+.customer-tracking-card,
+.customer-panel,
+.customer-quick-link,
+.customer-order-card,
+.customer-wishlist-card,
+.customer-address-card,
+.customer-add-address,
+.customer-profile-card,
+.customer-empty-state {
+  border: 1px solid var(--customer-border);
+  border-radius: 1rem;
+  background: var(--customer-card);
+}
+
+.customer-stat-card {
+  min-height: 10rem;
+  padding: 1.5rem;
+}
+
+.customer-stat-card svg {
+  color: var(--customer-gold);
+}
+
+.customer-stat-card p,
+.customer-tracking-card > div > p {
+  margin: 1rem 0 0;
+  color: var(--customer-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.customer-stat-card strong {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-size: 1.875rem;
+  font-weight: 400;
+}
+
+.customer-tracking-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding: 1.5rem;
+}
+
+.customer-tracking-card h2 {
+  margin-top: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.customer-tracking-card button,
+.customer-panel header button,
+.customer-order-card footer button,
+.customer-address-card > button,
+.customer-wishlist-card > div > button,
+.customer-profile-card footer button,
+.customer-photo-row button,
+.customer-drawer footer button {
+  border: 1px solid var(--customer-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--customer-fg);
+  cursor: pointer;
+  padding: 0.5rem 0.875rem;
+}
+
+.customer-progress {
+  grid-column: 1 / -1;
+  border: 1px solid var(--customer-border);
+  border-radius: 0.875rem;
+  background: var(--customer-bg);
+  padding: 1rem;
+}
+
+.customer-progress div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--customer-muted);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.customer-progress span.is-active {
+  color: var(--customer-gold);
+}
+
+.customer-progress > i {
+  height: 0.35rem;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--customer-card-2);
+  margin-top: 0.65rem;
+}
+
+.customer-progress b {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--customer-gold);
+}
+
+.customer-panel {
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+.customer-panel header {
+  border-bottom: 1px solid var(--customer-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+}
+
+.customer-panel h2 {
+  font-size: 1.25rem;
+}
+
+.customer-recent-list {
+  display: grid;
+}
+
+.customer-recent-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--customer-border) 60%, transparent);
+  padding: 1rem 1.5rem;
+}
+
+.customer-recent-row:last-child {
+  border-bottom: 0;
+}
+
+.customer-recent-row i,
+.customer-order-title i,
+.customer-quick-link i,
+.customer-address-card header i {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--customer-card-2);
+  color: var(--customer-gold);
+  font-style: normal;
+}
+
+.customer-recent-row strong,
+.customer-quick-link strong {
+  display: block;
+  font-size: 0.875rem;
+}
+
+.customer-recent-row em,
+.customer-order-total strong,
+.customer-wishlist-card strong {
+  color: var(--customer-gold);
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-style: normal;
+}
+
+.customer-badge {
+  width: max-content;
+  border: 1px solid var(--customer-border);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.6875rem;
+}
+
+.customer-badge-gold { border-color: color-mix(in srgb, var(--customer-gold) 40%, transparent); color: var(--customer-gold); }
+.customer-badge-success { border-color: color-mix(in srgb, var(--customer-success) 40%, transparent); color: var(--customer-success); }
+.customer-badge-warning { border-color: color-mix(in srgb, #f0b429 40%, transparent); color: #f0b429; }
+.customer-badge-danger { border-color: color-mix(in srgb, var(--customer-danger) 40%, transparent); color: var(--customer-danger); }
+
+.customer-quick-grid,
+.customer-address-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.customer-quick-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  color: var(--customer-fg);
+  cursor: pointer;
+  padding: 1.25rem;
+  text-align: left;
+}
+
+.customer-quick-link b {
+  color: var(--customer-gold);
+  font-size: 0.75rem;
+}
+
+.customer-tabs {
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid var(--customer-border);
+  border-radius: 999px;
+  background: var(--customer-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+}
+
+.customer-tabs button {
+  min-height: 2.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--customer-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0 1rem;
+}
+
+.customer-tabs button.is-active {
+  background: var(--customer-gold);
+  color: #17120a;
+}
+
+.customer-tabs span {
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+  padding: 0.05rem 0.4rem;
+  font-size: 0.625rem;
+}
+
+.customer-order-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.customer-order-card {
+  padding: 1.25rem;
+}
+
+.customer-order-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.customer-order-title {
+  display: flex;
+  gap: 1rem;
+}
+
+.customer-order-title span {
+  color: var(--customer-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.customer-order-title h2 {
+  margin-top: 0.25rem;
+  font-size: 1.125rem;
+}
+
+.customer-order-total {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+}
+
+.customer-order-card ul {
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid var(--customer-border);
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 1rem 0 0;
+}
+
+.customer-order-card li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  color: var(--customer-muted);
+  font-size: 0.875rem;
+}
+
+.customer-order-card li small {
+  grid-column: 1 / -1;
+  color: #f0b429;
+}
+
+.customer-order-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.customer-wishlist-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.customer-wishlist-card {
+  overflow: hidden;
+}
+
+.customer-wishlist-card > div {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--customer-card-2);
+}
+
+.customer-wishlist-card img,
+.customer-wishlist-card .product-art {
+  width: 100%;
+  height: 100%;
+}
+
+.customer-wishlist-card > div > button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.customer-wishlist-card .customer-badge {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  background: var(--customer-card);
+}
+
+.customer-wishlist-card section {
+  padding: 1rem;
+}
+
+.customer-wishlist-card h2 {
+  font-size: 1rem;
+}
+
+.customer-wishlist-card section > strong {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.customer-wishlist-card p {
+  min-height: 2.1rem;
+  margin: 0.35rem 0 1rem;
+}
+
+.customer-empty-state {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 4rem 1.5rem;
+  text-align: center;
+}
+
+.customer-empty-state > svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--customer-gold);
+}
+
+.customer-empty-state p,
+.customer-empty {
+  color: var(--customer-muted);
+}
+
+.customer-address-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+.customer-address-card,
+.customer-add-address {
+  min-height: 13rem;
+  padding: 1.25rem;
+}
+
+.customer-address-card.is-default {
+  border-color: color-mix(in srgb, var(--customer-gold) 45%, transparent);
+}
+
+.customer-address-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.customer-address-card header > div {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.customer-address-card p {
+  margin: 0.25rem 0;
+}
+
+.customer-address-card > button {
+  color: var(--customer-gold);
+  margin-top: 1rem;
+}
+
+.customer-add-address {
+  color: var(--customer-fg);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  border-style: dashed;
+}
+
+.customer-add-address svg {
+  color: var(--customer-gold);
+}
+
+.customer-profile-layout {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.customer-profile-layout > nav {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+}
+
+.customer-profile-layout > nav button {
+  min-height: 2.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--customer-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  padding: 0 0.75rem;
+}
+
+.customer-profile-layout > nav button.is-active,
+.customer-profile-layout > nav button:hover {
+  border-color: color-mix(in srgb, var(--customer-gold) 35%, transparent);
+  background: var(--customer-card);
+  color: var(--customer-fg);
+}
+
+.customer-profile-card {
+  padding: 1.5rem;
+}
+
+.customer-profile-card > h2 {
+  font-size: 1.35rem;
+}
+
+.customer-profile-card > p {
+  margin: 0.25rem 0 1.5rem;
+}
+
+.customer-field {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.customer-field > span {
+  color: var(--customer-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.customer-field input,
+.customer-field textarea,
+.customer-field select {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--customer-border);
+  border-radius: 0.75rem;
+  background: var(--customer-bg);
+  color: var(--customer-fg);
+  outline: 0;
+  padding: 0.75rem 1rem;
+}
+
+.customer-field textarea {
+  resize: vertical;
+}
+
+.customer-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.customer-photo-row,
+.customer-toggle-row,
+.customer-check-row {
+  border: 1px solid var(--customer-border);
+  border-radius: 0.875rem;
+  background: var(--customer-bg);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.customer-photo-row i {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.75rem;
+}
+
+.customer-photo-row div {
+  flex: 1;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.customer-photo-row span {
+  color: var(--customer-muted);
+  font-size: 0.75rem;
+}
+
+.customer-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.customer-choice-list button,
+.customer-segmented button,
+.customer-checkbox-grid label {
+  border: 1px solid var(--customer-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--customer-fg);
+  cursor: pointer;
+  padding: 0.55rem 0.85rem;
+}
+
+.customer-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.customer-segmented button {
+  border-radius: 0.65rem;
+}
+
+.customer-segmented button.is-active {
+  border-color: var(--customer-gold);
+  background: color-mix(in srgb, var(--customer-gold) 10%, transparent);
+  color: var(--customer-gold);
+}
+
+.customer-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.customer-checkbox-grid label,
+.customer-check-row {
+  border-radius: 0.75rem;
+}
+
+.customer-checkbox-grid input,
+.customer-check-row input {
+  accent-color: var(--customer-gold);
+}
+
+.customer-toggle-row {
+  justify-content: space-between;
+}
+
+.customer-toggle-row div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.customer-toggle-row button {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--customer-card-2);
+  cursor: pointer;
+}
+
+.customer-toggle-row button i {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--customer-bg);
+  transition: 150ms ease;
+}
+
+.customer-toggle-row button.is-on {
+  background: var(--customer-gold);
+}
+
+.customer-toggle-row button.is-on i {
+  left: 1.375rem;
+}
+
+.customer-profile-card footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.customer-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+}
+
+.customer-drawer-backdrop {
+  flex: 1;
+  border: 0;
+  background: color-mix(in srgb, var(--customer-bg) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.customer-drawer section {
+  width: min(34rem, 100vw);
+  background: var(--customer-card);
+  border-left: 1px solid var(--customer-border);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.customer-drawer header,
+.customer-drawer footer {
+  border-bottom: 1px solid var(--customer-border);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+}
+
+.customer-drawer footer {
+  border-top: 1px solid var(--customer-border);
+  border-bottom: 0;
+  justify-content: flex-end;
+}
+
+.customer-drawer header p {
+  margin: 0;
+  color: var(--customer-gold);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.customer-drawer header h2 {
+  margin: 0.25rem 0 0;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 400;
+}
+
+.customer-drawer header button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--customer-border);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--customer-fg);
+}
+
+.customer-drawer section > div {
+  overflow: auto;
+  padding: 1.5rem;
+}
+
+@media (max-width: 1180px) {
+  .customer-stats-grid,
+  .customer-wishlist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .customer-quick-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .customer-sidebar {
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+  }
+  .customer-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .customer-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    border: 0;
+    background: color-mix(in srgb, var(--customer-bg) 75%, transparent);
+  }
+  .customer-main {
+    padding-left: 0;
+  }
+  .customer-menu-button {
+    display: grid;
+  }
+  .customer-topbar {
+    padding: 0 1rem;
+  }
+  .customer-content {
+    padding: 1rem;
+  }
+  .customer-page-heading,
+  .customer-order-card header,
+  .customer-tracking-card {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+  }
+  .customer-profile-layout,
+  .customer-address-grid,
+  .customer-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .customer-profile-layout > nav {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+  .customer-profile-layout > nav button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .customer-stats-grid,
+  .customer-wishlist-grid,
+  .customer-checkbox-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .customer-recent-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .customer-recent-row .customer-badge,
+  .customer-recent-row em {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .customer-tabs {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .customer-tabs button {
+    flex: 0 0 auto;
+  }
+  .customer-progress div {
+    letter-spacing: 0.08em;
+  }
+}
+
 .account-order-history-overlay {
   z-index: 30;
 }
