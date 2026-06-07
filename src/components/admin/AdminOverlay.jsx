@@ -4,7 +4,6 @@ import { toPrice } from "../../utils/format";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
 import {
   AUDIENCE_OPTIONS,
-  BULLET_ICON_TYPES,
   DEFAULT_SETTINGS,
   PRODUCT_AVAILABILITY_OPTIONS
 } from "../../constants/storefront";
@@ -29,7 +28,6 @@ const ADMIN_TABS = [
   { id: "orders", label: "Orders", icon: "orders" },
   { id: "customers", label: "Customers", icon: "customers" },
   { id: "subscribers", label: "Subscribers", icon: "subscribers" },
-  { id: "blogs", label: "Blogs", icon: "blogs" },
   { id: "products", label: "Products", icon: "products" },
   { id: "settings", label: "Settings", icon: "settings" }
 ];
@@ -40,12 +38,26 @@ const ADMIN_THEME_OPTIONS = [
   { id: "v3", label: "Solar" }
 ];
 
-const ORDER_STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+const ORDER_STATUS_OPTIONS = ["processing", "shipped", "delivered", "cancelled"];
 const ORDER_FILTERS = [
-  { id: "orders", label: "Orders" },
+  { id: "all", label: "All" },
   { id: "pending", label: "Pending" },
-  { id: "failed", label: "Failed" }
+  { id: "failed", label: "Failed" },
+  { id: "processing", label: "Processing" },
+  { id: "shipped", label: "Shipped" },
+  { id: "delivered", label: "Delivered" }
 ];
+
+const ADMIN_PAGE_COPY = {
+  overview: ["Overview", "Welcome back, Ife. Here's what's happening with your store today."],
+  orders: ["Orders", "Manage fulfillment, payments and delivery in one place."],
+  customers: ["Customers", "People who shop with you. Tap a row for full history."],
+  subscribers: ["Subscribers", "Your newsletter audience. Ready to ship the next drop."],
+  products: ["Products", "Your catalog. Add, edit, or restock in seconds."],
+  settings: ["Store settings", "Control your brand text, homepage content and account preferences."]
+};
+
+const REVENUE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const EMPTY_BLOG_DRAFT = {
   id: "",
   title: "",
@@ -75,7 +87,7 @@ const EMPTY_ORDER_DRAFT = {
   city: "",
   paymentMethod: "transfer",
   paymentStatus: "pending",
-  orderStatus: "pending",
+  orderStatus: "processing",
   items: [{ productId: "", quantity: 1 }]
 };
 
@@ -228,6 +240,18 @@ function AdminIcon({ name }) {
     );
   }
 
+  if (name === "trash") {
+    return (
+      <svg {...sharedProps}>
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M19 6l-1 14H6L5 6" />
+        <path d="M10 11v5" />
+        <path d="M14 11v5" />
+      </svg>
+    );
+  }
+
   return null;
 }
 
@@ -248,6 +272,75 @@ function formatAudienceLabel(value) {
 function formatAvailabilityLabel(value) {
   const option = PRODUCT_AVAILABILITY_OPTIONS.find((entry) => entry.value === value);
   return option ? option.label : "In Stock";
+}
+
+function AdminBadge({ children, tone = "neutral" }) {
+  return <span className={`la-badge la-badge-${tone}`}>{children}</span>;
+}
+
+function StatCard({ label, value, delta, trend = "up" }) {
+  return (
+    <article className="la-stat-card">
+      <p>{label}</p>
+      <strong>{value}</strong>
+      {delta ? <span className={trend === "up" ? "is-up" : ""}>{delta}</span> : null}
+    </article>
+  );
+}
+
+function toneForStatus(value) {
+  const status = String(value || "").toLowerCase();
+  if (["paid", "delivered", "in_stock"].includes(status)) return "success";
+  if (["failed", "cancelled", "out_of_stock"].includes(status)) return "danger";
+  if (["pending", "processing", "shipped", "preorder"].includes(status)) return "gold";
+  return "neutral";
+}
+
+function formatOrderDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "-");
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function initialsFor(value) {
+  const text = String(value || "Owner").trim();
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return text.slice(0, 2).toUpperCase();
+}
+
+function orderCustomerName(order) {
+  return order?.fullName || order?.email || "Customer";
+}
+
+function normalizeOrderStatus(order) {
+  return String(order?.orderStatus || "pending").toLowerCase();
+}
+
+function isPaidOrder(order) {
+  return String(order?.paymentStatus || "").toLowerCase() === "paid";
+}
+
+function matchesOrderFilter(order, filter) {
+  const paymentStatus = String(order?.paymentStatus || "pending").toLowerCase();
+  const orderStatus = normalizeOrderStatus(order);
+  if (filter === "all") return paymentStatus === "paid";
+  if (filter === "pending") return paymentStatus === "pending";
+  if (filter === "failed") return paymentStatus === "failed";
+  return paymentStatus === "paid" && orderStatus === filter;
+}
+
+function availabilityTone(availability) {
+  const value = String(availability || "in_stock");
+  if (value === "out_of_stock") return "danger";
+  if (value === "preorder") return "warning";
+  return "success";
 }
 
 function AdminOverlay({
@@ -287,7 +380,11 @@ function AdminOverlay({
   const [modalMessage, setModalMessage] = useState("");
   const [modalError, setModalError] = useState("");
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
-  const [orderFilter, setOrderFilter] = useState("orders");
+  const [orderFilter, setOrderFilter] = useState("all");
+  const [expandedOrderId, setExpandedOrderId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilter, setProductFilter] = useState("all");
+  const [settingsSection, setSettingsSection] = useState("shipping");
   const [orderStatusNotice, setOrderStatusNotice] = useState("");
   const [orderStatusError, setOrderStatusError] = useState("");
   const [customerActionNotice, setCustomerActionNotice] = useState("");
@@ -297,6 +394,7 @@ function AdminOverlay({
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isThemeOpen, setIsThemeOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  const [adminToasts, setAdminToasts] = useState([]);
 
   const selectedAudiences = useMemo(
     () => normalizeAudienceSelections(productDraft.audiences),
@@ -306,6 +404,20 @@ function AdminOverlay({
   const activeThemeMeta = ADMIN_THEME_OPTIONS.find((themeOption) => themeOption.id === adminTheme) || ADMIN_THEME_OPTIONS[0];
   const adminName = currentUser?.fullName || currentUser?.email || "Owner";
   const adminInitial = String(adminName || "I").trim().charAt(0).toUpperCase() || "I";
+
+  const pushAdminToast = (message, tone = "error") => {
+    const text = String(message || "").trim();
+    if (!text) return;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setAdminToasts((current) => [...current.slice(-3), { id, tone, message: text }]);
+    window.setTimeout(() => {
+      setAdminToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 5200);
+  };
+
+  const dismissAdminToast = (id) => {
+    setAdminToasts((current) => current.filter((toast) => toast.id !== id));
+  };
 
   useEffect(() => {
     setAdminTheme(getStoredThemeVariant());
@@ -365,39 +477,113 @@ function AdminOverlay({
     };
   }, []);
 
+  useEffect(() => {
+    if (dataError) pushAdminToast(dataError, "error");
+  }, [dataError]);
+
+  useEffect(() => {
+    if (orderStatusError) pushAdminToast(orderStatusError, "error");
+  }, [orderStatusError]);
+
+  useEffect(() => {
+    if (customerActionError) pushAdminToast(customerActionError, "error");
+  }, [customerActionError]);
+
+  useEffect(() => {
+    if (modalError) pushAdminToast(modalError, "error");
+  }, [modalError]);
+
   const totalRevenue = useMemo(
     () =>
       orders
-        .filter((order) => order.paymentStatus === "paid")
-        .reduce((sum, order) => sum + (Number(order.subtotal) || 0), 0),
+        .filter(isPaidOrder)
+        .reduce((sum, order) => sum + (Number(order.total ?? order.subtotal) || 0), 0),
     [orders]
   );
 
   const paidOrders = useMemo(
-    () => orders.filter((order) => order.paymentStatus === "paid"),
+    () => orders.filter(isPaidOrder),
     [orders]
   );
 
   const pendingOrders = useMemo(
-    () =>
-      orders.filter((order) =>
-        order.paymentStatus === "pending" || String(order.orderStatus || "pending") === "pending"
-      ).length,
+    () => orders.filter((order) => String(order.paymentStatus || "pending").toLowerCase() === "pending").length,
     [orders]
   );
 
   const filteredOrders = useMemo(() => {
-    if (orderFilter === "orders") return orders.filter((order) => order.paymentStatus === "paid");
-    if (orderFilter === "failed") return orders.filter((order) => order.paymentStatus === "failed");
-    return orders.filter(
-      (order) => order.paymentStatus === "pending" || String(order.orderStatus || "pending") === "pending"
-    );
+    return orders.filter((order) => matchesOrderFilter(order, orderFilter));
   }, [orderFilter, orders]);
 
+  const revenueSeries = useMemo(() => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+
+    return REVENUE_DAYS.map((day, index) => {
+      const target = new Date(start);
+      target.setDate(start.getDate() + index);
+      const value = paidOrders
+        .filter((order) => {
+          const created = new Date(order.createdAt);
+          return (
+            !Number.isNaN(created.getTime()) &&
+            created.getFullYear() === target.getFullYear() &&
+            created.getMonth() === target.getMonth() &&
+            created.getDate() === target.getDate()
+          );
+        })
+        .reduce((sum, order) => sum + (Number(order.subtotal) || 0), 0);
+      return { day, value };
+    });
+  }, [paidOrders]);
+
+  const maxRevenue = useMemo(
+    () => Math.max(1, ...revenueSeries.map((entry) => entry.value)),
+    [revenueSeries]
+  );
+
+  const topProducts = useMemo(() => {
+    const summary = new Map();
+    paidOrders.forEach((order) => {
+      (order.items || []).forEach((item) => {
+        const key = item.productId || item.name;
+        const current = summary.get(key) || {
+          id: key,
+          name: item.name || "Product",
+          quantity: 0,
+          revenue: 0
+        };
+        current.quantity += Number(item.quantity) || 0;
+        current.revenue += Number(item.lineTotal) || 0;
+        summary.set(key, current);
+      });
+    });
+
+    const realTop = [...summary.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 4);
+    return realTop;
+  }, [paidOrders]);
+
+  const visibleProducts = useMemo(() => {
+    const search = productSearch.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch = !search || String(product.name || "").toLowerCase().includes(search);
+      const availability = String(product.availability || "in_stock");
+      const matchesFilter = productFilter === "all" || availability === productFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [productFilter, productSearch, products]);
+
   const handleOrderStatusSave = async (orderId) => {
-    const nextStatus = orderStatusDrafts[orderId] || "pending";
+    const nextStatus = orderStatusDrafts[orderId] || "processing";
     setOrderStatusNotice("");
     setOrderStatusError("");
+    const targetOrder = orders.find((order) => order.id === orderId);
+    if (!isPaidOrder(targetOrder)) {
+      setOrderStatusError("Only paid orders can be moved through fulfillment.");
+      return;
+    }
 
     try {
       const payload = await updateOrderStatus(orderId, nextStatus);
@@ -458,12 +644,11 @@ function AdminOverlay({
   };
 
   const getPageAction = () => {
+    if (activeTab === "overview") return { label: "Add product", modal: "product" };
     if (activeTab === "orders") return { label: "Create Order", modal: "order" };
     if (activeTab === "customers") return { label: "Create Customer", modal: "customer" };
     if (activeTab === "subscribers") return { label: "Add Subscriber", modal: "subscriber" };
-    if (activeTab === "blogs") return { label: "Write Blog", modal: "blog" };
-    if (activeTab === "products") return { label: "Add Product", modal: "product" };
-    if (activeTab === "settings") return { label: "Edit Settings", modal: "settings" };
+    if (activeTab === "products") return { label: "New product", modal: "product" };
     return null;
   };
 
@@ -694,19 +879,37 @@ function AdminOverlay({
     onProductDraftChange("audience", next[0]);
   };
 
-  const updateSettingsBullet = (group, index, field, value) => {
-    const fallback =
-      group === "heroPromiseItems"
-        ? DEFAULT_SETTINGS.heroPromiseItems
-        : DEFAULT_SETTINGS.featureItems;
-    const currentItems = Array.isArray(settingsDraft[group]) && settingsDraft[group].length > 0
-      ? settingsDraft[group]
-      : fallback;
-
-    const nextItems = currentItems.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, [field]: value } : item
+  const updateShippingTier = (index, field, value) => {
+    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const nextTiers = currentTiers.map((tier, tierIndex) =>
+      tierIndex === index
+        ? {
+            ...tier,
+            [field]: field === "fee" ? Math.max(0, Math.round(Number(value) || 0)) : field === "isActive" ? Boolean(value) : value
+          }
+        : tier
     );
-    onSettingsDraftChange(group, nextItems);
+    onSettingsDraftChange("shippingTiers", nextTiers);
+  };
+
+  const addShippingTier = () => {
+    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    onSettingsDraftChange("shippingTiers", [
+      ...currentTiers,
+      {
+        id: `shipping-${Date.now()}`,
+        name: "New shipping tier",
+        description: "",
+        fee: 0,
+        isActive: true
+      }
+    ]);
+  };
+
+  const removeShippingTier = (index) => {
+    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const nextTiers = currentTiers.filter((_, tierIndex) => tierIndex !== index);
+    onSettingsDraftChange("shippingTiers", nextTiers);
   };
 
   const handleSettingsModalSubmit = async (event) => {
@@ -722,17 +925,17 @@ function AdminOverlay({
   };
 
   return (
-    <div className={`page admin-page admin-theme-${adminTheme} ${isNavOpen ? "admin-nav-open" : ""}`}>
-      {isNavOpen ? <button type="button" className="admin-nav-backdrop" aria-label="Close navigation" onClick={() => setIsNavOpen(false)} /> : null}
-      <aside className={`admin-sidebar ${isNavOpen ? "is-open" : ""}`} aria-label="Admin navigation">
-        <div className="admin-sidebar-brand">
-          <img className="admin-brand-logo" src="/brand/ife-logo-circle.png" alt="" />
-          <span className="admin-brand-text">
-            IfeShades<span>n</span>More
-          </span>
-        </div>
+    <div className={`la-admin la-theme-${adminTheme} ${isNavOpen ? "is-nav-open" : ""}`}>
+      {isNavOpen ? (
+        <button type="button" className="la-nav-backdrop" aria-label="Close navigation" onClick={() => setIsNavOpen(false)} />
+      ) : null}
 
-        <nav className="admin-tabs" aria-label="Admin sections">
+      <aside className={`la-sidebar ${isNavOpen ? "is-open" : ""}`} aria-label="Admin navigation">
+        <div className="la-brand">
+          <span className="la-brand-mark">I</span>
+          <span>IfeShades<span>n</span>More</span>
+        </div>
+        <nav className="la-nav" aria-label="Admin sections">
           <p>Admin</p>
           {ADMIN_TABS.map((tab) => (
             <button
@@ -744,68 +947,41 @@ function AdminOverlay({
                 setIsNavOpen(false);
               }}
             >
-              <span>
-                <AdminIcon name={tab.icon} />
-              </span>
+              <AdminIcon name={tab.icon} />
               {tab.label}
             </button>
           ))}
         </nav>
-
-        <div className="admin-sidebar-user">
-          <span className="admin-profile-avatar">
-            <img src="/brand/ife-logo-circle.png" alt="" />
-          </span>
+        <div className="la-owner-card">
+          <span>{adminInitial}</span>
           <div>
             <strong>{adminName}</strong>
-            <small>Store owner</small>
+            <small>Owner</small>
           </div>
-          <button type="button" className="admin-sidebar-logout-button" onClick={onLogout}>
-            Logout
+          <button type="button" onClick={onLogout} title="Logout">
+            <AdminIcon name="profile" />
           </button>
         </div>
       </aside>
 
-      <div className="admin-main">
-        <header className="admin-topbar">
-          <button
-            type="button"
-            className="admin-menu-button"
-            onClick={() => setIsNavOpen(true)}
-            aria-label="Open admin navigation"
-          >
-            <span className="admin-menu-lines" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+      <div className="la-main">
+        <header className="la-topbar">
+          <button type="button" className="la-icon-button la-menu-button" onClick={() => setIsNavOpen(true)} aria-label="Open admin navigation">
+            <AdminIcon name="menu" />
           </button>
-          <strong className="admin-mobile-title">{activeTabMeta.label}</strong>
-          <div className="admin-search-shell">
-            <span className="admin-search-icon">
-              <AdminIcon name="search" />
-            </span>
-            <span aria-hidden="true">⌕</span>
+          <div className="la-search">
+            <AdminIcon name="search" />
             <input placeholder="Search orders, products, customers..." type="search" />
+            <kbd>⌘K</kbd>
           </div>
-          <div className="admin-topbar-actions">
-            <div className={`admin-theme-picker ${isThemeOpen ? "is-open" : ""}`} aria-label="Admin theme selector">
-              <button
-                type="button"
-                className="admin-theme-toggle"
-                onClick={() => setIsThemeOpen((current) => !current)}
-                aria-expanded={isThemeOpen}
-                aria-label={`Theme: ${activeThemeMeta.label}`}
-              >
-                <span className="admin-theme-orbit" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
+          <div className="la-topbar-actions">
+            <div className={`la-theme-picker ${isThemeOpen ? "is-open" : ""}`}>
+              <button type="button" className="la-theme-button" onClick={() => setIsThemeOpen((current) => !current)}>
+                <AdminIcon name="theme" />
                 <span>{activeThemeMeta.label}</span>
                 <AdminIcon name="chevron" />
               </button>
-              <div className="admin-theme-menu" aria-hidden={!isThemeOpen}>
+              <div className="la-theme-menu">
                 {ADMIN_THEME_OPTIONS.map((themeOption) => (
                   <button
                     key={themeOption.id}
@@ -815,952 +991,466 @@ function AdminOverlay({
                       setAdminTheme(themeOption.id);
                       setIsThemeOpen(false);
                     }}
-                    aria-pressed={adminTheme === themeOption.id}
                   >
                     {themeOption.label}
                   </button>
                 ))}
               </div>
             </div>
-            <button type="button" className="secondary-action admin-storefront-text-button" onClick={onOpenStorefront}>
-              Storefront
-            </button>
-            <button type="button" className="admin-storefront-icon-button" onClick={onOpenStorefront} aria-label="Open storefront">
+            <button type="button" className="la-storefront-link" onClick={onOpenStorefront}>
               <AdminIcon name="storefront" />
+              <span>View storefront</span>
             </button>
-            <button type="button" className="admin-bell-button" aria-label="Notifications">
+            <button type="button" className="la-icon-button" aria-label="Notifications">
               <AdminIcon name="bell" />
-              <span />
+              <i />
             </button>
           </div>
         </header>
 
-        <main className="site-shell admin-shell">
+        <main className="la-content">
+          <div className="la-page-heading">
+            <div>
+              <h1>{ADMIN_PAGE_COPY[activeTab]?.[0] || activeTabMeta.label}</h1>
+              <p>{ADMIN_PAGE_COPY[activeTab]?.[1] || ""}</p>
+            </div>
+            {getPageAction() ? (
+              <button type="button" className="la-primary-button" onClick={handlePageAction}>
+                {getPageAction().label}
+              </button>
+            ) : null}
+          </div>
+
+          {isLoadingData ? <p className="la-notice">Loading admin data...</p> : null}
+          {orderStatusNotice ? <p className="la-success">{orderStatusNotice}</p> : null}
+          {customerActionNotice ? <p className="la-success">{customerActionNotice}</p> : null}
+          {modalMessage ? <p className="la-success">{modalMessage}</p> : null}
+          {adminMessage ? <p className="la-success">{adminMessage}</p> : null}
+
           {activeTab === "overview" ? (
-            <section className="admin-kpi-grid">
-              <article className="admin-kpi-card">
-                <p>Total Orders</p>
-                <h2>{paidOrders.length}</h2>
-                <span>Paid orders only</span>
-              </article>
-              <article className="admin-kpi-card">
-                <p>Pending</p>
-                <h2>{pendingOrders}</h2>
-                <span>Needs attention</span>
-              </article>
-              <article className="admin-kpi-card">
-                <p>Paid Revenue</p>
-                <h2>{toPrice(totalRevenue)}</h2>
-                <span>Confirmed payments</span>
-              </article>
-              <article className="admin-kpi-card">
-                <p>Customers</p>
-                <h2>{customers.length}</h2>
-                <span>Registered accounts</span>
-              </article>
-            </section>
+            <>
+              <section className="la-stats-grid">
+                <StatCard label="Paid Orders" value={String(paidOrders.length)} delta="Ready for fulfillment" />
+                <StatCard label="Pending Payments" value={String(pendingOrders)} delta="Awaiting payment" trend="down" />
+                <StatCard label="Paid Revenue" value={toPrice(totalRevenue)} delta="Confirmed payments" />
+                <StatCard label="Customers" value={String(customers.length)} delta="Registered accounts" />
+              </section>
+
+              <section className="la-overview-grid">
+                <article className="la-card la-revenue-card">
+                  <header>
+                    <div>
+                      <p>Revenue</p>
+                      <h2>Last 7 days</h2>
+                    </div>
+                    <AdminBadge tone="gold">Live</AdminBadge>
+                  </header>
+                  <div className="la-bar-chart">
+                    {revenueSeries.map((entry) => (
+                      <div key={entry.day}>
+                        <span style={{ height: `${Math.max(8, (entry.value / maxRevenue) * 100)}%` }} />
+                        <small>{entry.day}</small>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="la-card la-top-sellers">
+                  <p>Top sellers</p>
+                  <ul>
+                    {topProducts.map((product, index) => (
+                      <li key={product.id || product.name}>
+                        <span>{index + 1}</span>
+                        <div>
+                          <strong>{product.name}</strong>
+                          <small>{product.quantity} sold</small>
+                        </div>
+                        <em>{toPrice(product.revenue)}</em>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              </section>
+
+              <section className="la-card la-table-card">
+                <header>
+                  <h2>Recent orders</h2>
+                  <button type="button" onClick={() => setActiveTab("orders")}>View all</button>
+                </header>
+                <div className="la-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Order</th>
+                        <th>Customer</th>
+                        <th>Date</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paidOrders.slice(0, 5).map((order) => (
+                        <tr key={order.id}>
+                          <td className="la-mono">{order.id}</td>
+                          <td>{orderCustomerName(order)}</td>
+                          <td>{formatOrderDate(order.createdAt)}</td>
+                          <td><AdminBadge tone={toneForStatus(order.paymentStatus)}>{order.paymentStatus}</AdminBadge></td>
+                          <td>{isPaidOrder(order) ? <AdminBadge tone={toneForStatus(order.orderStatus)}>{order.orderStatus || "processing"}</AdminBadge> : "-"}</td>
+                          <td>{toPrice(order.total ?? order.subtotal)}</td>
+                        </tr>
+                      ))}
+                      {paidOrders.length === 0 ? <tr><td colSpan={6}>No paid orders yet.</td></tr> : null}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
           ) : null}
 
-          {isLoadingData ? <p className="admin-hint">Loading admin data...</p> : null}
-          {dataError ? <p className="form-error">{dataError}</p> : null}
-          {orderStatusNotice ? <p className="form-success">{orderStatusNotice}</p> : null}
-          {orderStatusError ? <p className="form-error">{orderStatusError}</p> : null}
-          {customerActionNotice ? <p className="form-success">{customerActionNotice}</p> : null}
-          {customerActionError ? <p className="form-error">{customerActionError}</p> : null}
-          {modalMessage ? <p className="form-success">{modalMessage}</p> : null}
-          {adminMessage ? <p className="form-success">{adminMessage}</p> : null}
-
-          <div className="admin-sections">
-          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "order" ? "is-open" : ""}`} onSubmit={handleCreateOrder}>
-            <header className="admin-section-header">
-              <h2>Create Order</h2>
-              <p>Create an order manually from existing products.</p>
-              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close order creator">
-                x
-              </button>
-            </header>
-            {modalError && activeModal === "order" ? <p className="form-error">{modalError}</p> : null}
-            <label>
-              Existing customer
-              <select
-                value={orderDraft.customerId}
-                onChange={(event) => {
-                  const customerId = event.target.value;
-                  const customer = customers.find((entry) => String(entry.id) === String(customerId));
-                  setOrderDraft((current) => ({
-                    ...current,
-                    customerId,
-                    fullName: customer?.fullName || "",
-                    email: customer?.email || "",
-                    phone: customer?.phone || current.phone,
-                    address: customer?.address || current.address,
-                    city: customer?.city || current.city
-                  }));
-                }}
-              >
-                <option value="">New or guest customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.fullName || customer.email}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Customer name
-              <input
-                value={orderDraft.fullName}
-                onChange={(event) => setOrderDraftField("fullName", event.target.value)}
-                disabled={Boolean(orderDraft.customerId)}
-              />
-            </label>
-            <label>
-              Customer email
-              <input
-                type="email"
-                value={orderDraft.email}
-                onChange={(event) => setOrderDraftField("email", event.target.value)}
-                disabled={Boolean(orderDraft.customerId)}
-              />
-            </label>
-            <label>
-              Phone
-              <input value={orderDraft.phone} onChange={(event) => setOrderDraftField("phone", event.target.value)} required />
-            </label>
-            <label>
-              Address
-              <input value={orderDraft.address} onChange={(event) => setOrderDraftField("address", event.target.value)} required />
-            </label>
-            <label>
-              City
-              <input value={orderDraft.city} onChange={(event) => setOrderDraftField("city", event.target.value)} required />
-            </label>
-            <div className="admin-section-grid admin-compact-grid">
-              <label>
-                Payment method
-                <select value={orderDraft.paymentMethod} onChange={(event) => setOrderDraftField("paymentMethod", event.target.value)}>
-                  <option value="transfer">Transfer</option>
-                  <option value="card">Card</option>
-                </select>
-              </label>
-              <label>
-                Payment status
-                <select value={orderDraft.paymentStatus} onChange={(event) => setOrderDraftField("paymentStatus", event.target.value)}>
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="failed">Failed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </label>
-              <label>
-                Order status
-                <select value={orderDraft.orderStatus} onChange={(event) => setOrderDraftField("orderStatus", event.target.value)}>
-                  {ORDER_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="admin-bullet-editor">
-              <h3>Order items</h3>
-              {orderDraft.items.map((item, index) => (
-                <div className="admin-bullet-row" key={`order-item-${index}`}>
-                  <select value={item.productId} onChange={(event) => setOrderDraftItem(index, "productId", event.target.value)} required>
-                    <option value="">Select product</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} - {toPrice(product.price)}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="1"
-                    max="99"
-                    value={item.quantity}
-                    onChange={(event) => setOrderDraftItem(index, "quantity", event.target.value)}
-                    required
-                  />
-                  <button type="button" className="secondary-action danger-action" onClick={() => removeOrderDraftItem(index)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button type="button" className="secondary-action" onClick={addOrderDraftItem}>
-                Add Item
-              </button>
-            </div>
-            <div className="admin-inline-actions">
-              <button type="submit" className="primary-action">Create Order</button>
-              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
-            </div>
-          </form>
-
-          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "customer" ? "is-open" : ""}`} onSubmit={handleCreateCustomer}>
-            <header className="admin-section-header">
-              <h2>Create Customer</h2>
-              <p>Add a customer record for manual orders and future checkout history.</p>
-              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close customer creator">
-                x
-              </button>
-            </header>
-            {modalError && activeModal === "customer" ? <p className="form-error">{modalError}</p> : null}
-            <label>
-              Full name
-              <input value={customerDraft.fullName} onChange={(event) => setCustomerDraft((current) => ({ ...current, fullName: event.target.value }))} required />
-            </label>
-            <label>
-              Email
-              <input type="email" value={customerDraft.email} onChange={(event) => setCustomerDraft((current) => ({ ...current, email: event.target.value }))} required />
-            </label>
-            <label>
-              Phone
-              <input value={customerDraft.phone} onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: event.target.value }))} required />
-            </label>
-            <label>
-              Address
-              <input value={customerDraft.address} onChange={(event) => setCustomerDraft((current) => ({ ...current, address: event.target.value }))} />
-            </label>
-            <label>
-              City
-              <input value={customerDraft.city} onChange={(event) => setCustomerDraft((current) => ({ ...current, city: event.target.value }))} />
-            </label>
-            <div className="admin-inline-actions">
-              <button type="submit" className="primary-action">Create Customer</button>
-              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
-            </div>
-          </form>
-
-          <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "subscriber" ? "is-open" : ""}`} onSubmit={handleCreateSubscriber}>
-            <header className="admin-section-header">
-              <h2>Add Subscriber</h2>
-              <p>Add an email to the newsletter list.</p>
-              <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close subscriber creator">
-                x
-              </button>
-            </header>
-            {modalError && activeModal === "subscriber" ? <p className="form-error">{modalError}</p> : null}
-            <label>
-              Email
-              <input type="email" value={subscriberDraft.email} onChange={(event) => setSubscriberDraft((current) => ({ ...current, email: event.target.value }))} required />
-            </label>
-            <label>
-              Source
-              <input value={subscriberDraft.source} onChange={(event) => setSubscriberDraft((current) => ({ ...current, source: event.target.value }))} />
-            </label>
-            <div className="admin-inline-actions">
-              <button type="submit" className="primary-action">Add Subscriber</button>
-              <button type="button" className="secondary-action" onClick={closeModal}>Cancel</button>
-            </div>
-          </form>
-
           {activeTab === "orders" ? (
-            <section className="admin-section-card admin-table-card">
-              <header className="admin-section-header">
-                <div>
-                  <h2>Orders</h2>
-                  <p>Manage fulfillment status, payment details, and delivery information.</p>
-                </div>
-                <button type="button" className="primary-action" onClick={() => openModal("order")}>
-                  Create Order
-                </button>
-              </header>
-
-              <div className="admin-order-tabs" role="tablist" aria-label="Order filters">
-                {ORDER_FILTERS.map((filter) => (
-                  <button
-                    key={filter.id}
-                    type="button"
-                    className={orderFilter === filter.id ? "is-active" : ""}
-                    onClick={() => setOrderFilter(filter.id)}
-                    role="tab"
-                    aria-selected={orderFilter === filter.id}
-                  >
-                    {filter.label}
-                    <span>
-                      {filter.id === "orders"
-                          ? paidOrders.length
-                          : filter.id === "failed"
-                            ? orders.filter((order) => order.paymentStatus === "failed").length
-                            : pendingOrders}
-                    </span>
-                  </button>
-                ))}
+            <section>
+              <div className="la-tabs">
+                {ORDER_FILTERS.map((filter) => {
+                  const count = orders.filter((order) => matchesOrderFilter(order, filter.id)).length;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={orderFilter === filter.id ? "is-active" : ""}
+                      onClick={() => setOrderFilter(filter.id)}
+                    >
+                      {filter.label}
+                      <span>{count}</span>
+                    </button>
+                  );
+                })}
               </div>
-
-              <div className="admin-order-list">
-                {filteredOrders.length === 0 ? <p className="admin-hint">No orders in this tab yet.</p> : null}
-                {filteredOrders.map((order) => (
-                  <article className="admin-order-card" key={order.id}>
-                    <div className="admin-order-main">
-                      <div>
-                        <h3>{order.id}</h3>
-                        <p>
-                          {new Date(order.createdAt).toLocaleString()} · {toPrice(order.subtotal)}
-                        </p>
-                      </div>
-                      <div className="admin-status-row">
-                        <span className={`order-status status-${order.paymentStatus}`}>
-                          Payment: {order.paymentStatus}
-                        </span>
-                        <div className="admin-order-status-control">
-                          <label>
-                            Order status
-                            <select
-                              value={orderStatusDrafts[order.id] || order.orderStatus || "pending"}
-                              onChange={(event) =>
-                                setOrderStatusDrafts((current) => ({
-                                  ...current,
-                                  [order.id]: event.target.value
-                                }))
-                              }
-                            >
-                              {ORDER_STATUS_OPTIONS.map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <button
-                            type="button"
-                            className="secondary-action"
-                            onClick={() => handleOrderStatusSave(order.id)}
-                          >
-                            Save
-                          </button>
+              <div className="la-order-list">
+                {filteredOrders.length === 0 ? <p className="la-notice">No orders in this tab yet.</p> : null}
+                {filteredOrders.map((order) => {
+                  const isOpen = expandedOrderId === order.id;
+                  return (
+                    <article className="la-order-row" key={order.id}>
+                      <button type="button" className="la-order-summary" onClick={() => setExpandedOrderId(isOpen ? "" : order.id)}>
+                        <span className={`la-row-toggle ${isOpen ? "is-open" : ""}`}><AdminIcon name="chevron" /></span>
+                        <div>
+                          <strong>{order.id}</strong>
+                          <small>{formatOrderDate(order.createdAt)} · {orderCustomerName(order)}</small>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="admin-order-meta-grid">
-                      <div>
-                        <h4>Delivery</h4>
-                        <p>{order.fullName}</p>
-                        <p>{order.phone}</p>
-                        <p>
-                          {order.address}, {order.city}
-                        </p>
-                      </div>
-                      <div>
-                        <h4>Payment</h4>
-                        <p>Method: {order.paymentMethod}</p>
-                        <p>Channel: {order.paymentChannel || "-"}</p>
-                        <p>Reference: {order.paymentReference}</p>
-                      </div>
-                    </div>
-
-                    <div className="admin-order-items">
-                      <h4>Items</h4>
-                      <ul>
-                        {(order.items || []).map((item) => (
-                          <li key={`${order.id}-${item.id || item.productId}`}>
-                            <span>
-                              {item.name} x {item.quantity}
-                            </span>
-                            <strong>{toPrice(item.lineTotal)}</strong>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </article>
-                ))}
+                        <span className="la-order-badges">
+                          <AdminBadge tone={toneForStatus(order.paymentStatus)}>Payment: {order.paymentStatus}</AdminBadge>
+                          {isPaidOrder(order) ? <AdminBadge tone={toneForStatus(order.orderStatus)}>{order.orderStatus || "processing"}</AdminBadge> : null}
+                        </span>
+                        <em>{toPrice(order.total ?? order.subtotal)}</em>
+                      </button>
+                      {isOpen ? (
+                        <div className="la-order-details">
+                          <section>
+                            <h3>Delivery</h3>
+                            <p>{orderCustomerName(order)}</p>
+                            <p>{order.phone || "-"}</p>
+                            <p>{order.address ? `${order.address}, ${order.city || ""}` : order.city || "-"}</p>
+                          </section>
+                          <section>
+                            <h3>Payment</h3>
+                            <p>Method: {order.paymentMethod}</p>
+                            <p>Channel: {order.paymentChannel || "-"}</p>
+                            <p>Ref: {order.paymentReference || "-"}</p>
+                            <p>Items: {toPrice(order.subtotal)}</p>
+                            <p>Shipping: {toPrice(order.shippingFee || 0)} {order.shippingTierName ? `(${order.shippingTierName})` : ""}</p>
+                          </section>
+                          <section>
+                            <h3>Items</h3>
+                            {(order.items || []).map((item) => (
+                              <p key={`${order.id}-${item.id || item.productId || item.name}`}>
+                                <span>{item.name}</span>
+                                <span>x{item.quantity}</span>
+                              </p>
+                            ))}
+                          </section>
+                          <footer>
+                            <label>
+                              <span>Update status</span>
+                              <select
+                                value={orderStatusDrafts[order.id] || order.orderStatus || "processing"}
+                                onChange={(event) => setOrderStatusDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
+                                disabled={!isPaidOrder(order)}
+                              >
+                                {ORDER_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                              </select>
+                            </label>
+                            <button type="button" className="la-primary-button" onClick={() => handleOrderStatusSave(order.id)}>
+                              Save changes
+                            </button>
+                          </footer>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           ) : null}
 
           {activeTab === "customers" ? (
-            <section className="admin-section-card admin-table-card">
-              <header className="admin-section-header">
-                <div>
-                  <h2>Customers</h2>
-                  <p>People registered as customer accounts.</p>
-                </div>
-                <button type="button" className="primary-action" onClick={() => openModal("customer")}>
-                  Create Customer
-                </button>
-              </header>
-
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th>City</th>
-                      <th>Orders</th>
-                      <th>Total Spent</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customers.length === 0 ? (
+            <section>
+              <div className="la-search la-page-search">
+                <AdminIcon name="search" />
+                <input placeholder="Search by name, email, phone..." />
+              </div>
+              <div className="la-card la-table-card">
+                <div className="la-table-wrap">
+                  <table>
+                    <thead>
                       <tr>
-                        <td colSpan={7}>No customers yet.</td>
+                        <th>Customer</th>
+                        <th>Contact</th>
+                        <th>City</th>
+                        <th>Orders</th>
+                        <th>Spent</th>
+                        <th>Joined</th>
+                        <th />
                       </tr>
-                    ) : (
-                      customers.map((customer) => (
+                    </thead>
+                    <tbody>
+                      {customers.map((customer) => (
                         <tr key={customer.id}>
-                          <td>{customer.fullName || "-"}</td>
-                          <td>{customer.email}</td>
-                          <td>{customer.phone || "-"}</td>
+                          <td><span className="la-customer"><i>{initialsFor(customer.fullName || customer.email)}</i><strong>{customer.fullName || customer.email}</strong></span></td>
+                          <td><span>{customer.email}</span><small>{customer.phone || "-"}</small></td>
                           <td>{customer.city || "-"}</td>
-                          <td>{customer.orderCount}</td>
-                          <td>{toPrice(customer.totalSpent)}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="secondary-action danger-action"
-                              onClick={() => handleDeleteCustomer(customer)}
-                            >
-                              Delete
-                            </button>
-                          </td>
+                          <td>{customer.orderCount || 0}</td>
+                          <td>{toPrice(customer.totalSpent || 0)}</td>
+                          <td>{formatOrderDate(customer.createdAt)}</td>
+                          <td><button type="button" className="la-danger-text" onClick={() => handleDeleteCustomer(customer)}>Delete</button></td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ))}
+                      {customers.length === 0 ? <tr><td colSpan={7}>No customers yet.</td></tr> : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
           ) : null}
 
           {activeTab === "subscribers" ? (
-            <section className="admin-section-card admin-table-card">
-              <header className="admin-section-header">
-                <div>
-                  <h2>Subscribers</h2>
-                  <p>Email list from your "Stay Updated" form.</p>
-                </div>
-                <button type="button" className="primary-action" onClick={() => openModal("subscriber")}>
-                  Add Subscriber
-                </button>
-              </header>
-
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Email</th>
-                      <th>Source</th>
-                      <th>Subscribed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subscriptions.length === 0 ? (
-                      <tr>
-                        <td colSpan={3}>No subscribers yet.</td>
-                      </tr>
-                    ) : (
-                      subscriptions.map((subscription) => (
+            <section>
+              <div className="la-subscriber-stats">
+                <StatCard label="Total subscribers" value={String(subscriptions.length)} delta="Newsletter list" />
+                <StatCard label="Avg. open rate" value="42%" delta="Campaign benchmark" />
+                <StatCard label="Last campaign" value={`${subscriptions.length} ready`} delta="Audience size" />
+              </div>
+              <div className="la-card la-table-card">
+                <div className="la-table-wrap">
+                  <table>
+                    <thead><tr><th>Email</th><th>Source</th><th>Joined</th></tr></thead>
+                    <tbody>
+                      {subscriptions.map((subscription) => (
                         <tr key={subscription.id}>
                           <td>{subscription.email}</td>
                           <td>{subscription.source}</td>
-                          <td>{new Date(subscription.createdAt).toLocaleString()}</td>
+                          <td>{formatOrderDate(subscription.createdAt)}</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ))}
+                      {subscriptions.length === 0 ? <tr><td colSpan={3}>No subscribers yet.</td></tr> : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
           ) : null}
 
-          {activeTab === "blogs" ? (
-            <section className="admin-section-grid">
-              <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "blog" ? "is-open" : ""}`} onSubmit={handleBlogSubmit}>
-                <header className="admin-section-header">
-                  <h2>{isEditingBlog ? "Edit Blog Post" : "Write Blog Post"}</h2>
-                  <p>Create journal entries that appear in the storefront editorial swiper.</p>
-                  <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close blog editor">
-                    x
-                  </button>
-                </header>
-                <label>
-                  Title
-                  <input
-                    value={blogDraft.title}
-                    onChange={(event) => setBlogDraft((current) => ({ ...current, title: event.target.value }))}
-                    required
-                  />
-                </label>
-                <label>
-                  Excerpt
-                  <input
-                    maxLength={260}
-                    value={blogDraft.excerpt}
-                    onChange={(event) => setBlogDraft((current) => ({ ...current, excerpt: event.target.value }))}
-                    placeholder="Short teaser for the editorial swiper"
-                  />
-                </label>
-                <label>
-                  Content
-                  <textarea
-                    rows={8}
-                    value={blogDraft.content}
-                    onChange={(event) => setBlogDraft((current) => ({ ...current, content: event.target.value }))}
-                    placeholder="Write the full blog post. Separate paragraphs with a blank line."
-                    required
-                  />
-                </label>
-                <label className="admin-image-upload-field">
-                  Blog picture
-                  {blogDraft.image ? (
-                    <span className="admin-image-preview">
-                      <img src={blogDraft.image} alt="" />
-                    </span>
-                  ) : null}
-                  <input type="file" accept="image/*" onChange={handleBlogImageUpload} />
-                  <span className="admin-hint">
-                    {isBlogImageUploading ? "Saving picture..." : "Choose the image that will appear on the blog page and editorial section."}
-                  </span>
-                </label>
-                <label>
-                  Author
-                  <input
-                    value={blogDraft.author}
-                    onChange={(event) => setBlogDraft((current) => ({ ...current, author: event.target.value }))}
-                  />
-                </label>
-                <label className="admin-audience-option">
-                  <input
-                    type="checkbox"
-                    checked={blogDraft.isPublished}
-                    onChange={(event) =>
-                      setBlogDraft((current) => ({ ...current, isPublished: event.target.checked }))
-                    }
-                  />
-                  <span>Publish on storefront</span>
-                </label>
-                {blogMessage ? <p className={blogMessage.includes("Could not") ? "form-error" : "form-success"}>{blogMessage}</p> : null}
-                <div className="admin-inline-actions">
-                  <button type="submit" className="primary-action">
-                    {isEditingBlog ? "Update Blog" : "Save Blog"}
-                  </button>
-                  {isEditingBlog ? (
-                    <button type="button" className="secondary-action" onClick={resetBlogDraft}>
-                      Cancel
-                    </button>
-                  ) : null}
-                </div>
-              </form>
-
-              <section className="admin-section-card admin-list-card admin-blog-card">
-                <header className="admin-section-header">
-                  <div>
-                    <h2>Current Blog Posts</h2>
-                    <p>Published posts rotate in the editorial section and link to blog pages.</p>
-                  </div>
-                  <button type="button" className="primary-action" onClick={openAddBlogModal}>
-                    Write Blog
-                  </button>
-                </header>
-                <ul className="admin-blog-list">
-                  {blogs.length === 0 ? (
-                    <li className="admin-blog-empty">
-                      <strong>No blog posts yet.</strong>
-                      <span>Write your first post to start filling the storefront editorial section.</span>
-                    </li>
-                  ) : null}
-                  {blogs.map((blog) => (
-                    <li key={blog.id} className="admin-blog-item">
-                      {blog.image ? (
-                        <div className="admin-blog-thumb">
-                          <img src={blog.image} alt="" />
-                        </div>
-                      ) : null}
-                      <div className="admin-blog-copy">
-                        <span className="admin-blog-status">{blog.isPublished ? "Published" : "Draft"} | {blog.author || "IfeShadesnMore"}</span>
-                        <strong>{blog.title}</strong>
-                        <p>{blog.excerpt || "No excerpt yet."}</p>
-                      </div>
-                      <div className="admin-list-actions">
-                        <button type="button" className="secondary-action" onClick={() => startEditBlog(blog)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-action danger-action"
-                          onClick={() => handleDeleteBlog(blog)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </section>
-          ) : null}
-
           {activeTab === "products" ? (
-            <section className="admin-section-grid">
-              <form className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "product" ? "is-open" : ""}`} onSubmit={handleProductModalSubmit}>
-                <header className="admin-section-header">
-                  <h2>{isEditing ? "Edit Product" : "Add Product"}</h2>
-                  <p>Create and update products in each collection.</p>
-                  <button type="button" className="admin-modal-close" onClick={closeProductModal} aria-label="Close product editor">
-                    x
+            <section>
+              <div className="la-products-toolbar">
+                <div className="la-search">
+                  <AdminIcon name="search" />
+                  <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products..." />
+                </div>
+                <div className="la-filter-pills">
+                  {[["all", "All"], ["in_stock", "In stock"], ["preorder", "Preorder"], ["out_of_stock", "Out"]].map(([value, label]) => (
+                    <button key={value} type="button" className={productFilter === value ? "is-active" : ""} onClick={() => setProductFilter(value)}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="la-product-grid">
+                {visibleProducts.map((product) => (
+                  <article key={product.id} className="la-product-card">
+                    <div className="la-product-media">
+                      <ProductMedia product={product} />
+                      <AdminBadge tone={availabilityTone(product.availability)}>{formatAvailabilityLabel(product.availability || "in_stock")}</AdminBadge>
+                    </div>
+                    <div className="la-product-copy">
+                      <div><h3>{product.name}</h3><span>{toPrice(product.price)}</span></div>
+                      <p>{product.section} · {formatAvailabilityLabel(product.availability || "in_stock")}</p>
+                      <div>{normalizeAudienceSelections(product.audiences || [product.audience]).slice(0, 3).map((audience) => <AdminBadge key={audience}>{formatAudienceLabel(audience)}</AdminBadge>)}</div>
+                      <footer>
+                        <button type="button" onClick={() => openEditProductModal(product)}>Edit</button>
+                        <button type="button" className="is-danger" onClick={() => onRemoveProduct(product.id)} aria-label={`Delete ${product.name}`}>
+                          <AdminIcon name="trash" />
+                        </button>
+                      </footer>
+                    </div>
+                  </article>
+                ))}
+                {visibleProducts.length === 0 ? <p className="la-notice">No products match this filter.</p> : null}
+              </div>
+            </section>
+          ) : null}
+
+          {activeTab === "settings" ? (
+            <section className="la-settings-layout">
+              <nav className="la-settings-nav" aria-label="Settings sections">
+                {[["shipping", "Shipping", "orders"], ["notifications", "Notifications", "bell"], ["security", "Security", "settings"]].map(([id, label, icon]) => (
+                  <button key={id} type="button" className={settingsSection === id ? "is-active" : ""} onClick={() => setSettingsSection(id)}>
+                    <AdminIcon name={icon} />{label}
                   </button>
-                </header>
-                <label>
-                  Product name
-                  <input
-                    value={productDraft.name}
-                    onChange={(event) => onProductDraftChange("name", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Price (NGN)
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={productDraft.price}
-                    onChange={(event) => onProductDraftChange("price", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Placement
-                  <select
-                    value={productDraft.section}
-                    onChange={(event) => onProductDraftChange("section", event.target.value)}
-                  >
-                    <option value="category">Top category cards</option>
-                    <option value="bestseller">Best sellers row</option>
-                  </select>
-                </label>
-                <label>
-                  Availability
-                  <select
-                    value={productDraft.availability || "in_stock"}
-                    onChange={(event) => onProductDraftChange("availability", event.target.value)}
-                  >
-                    {PRODUCT_AVAILABILITY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {String(productDraft.availability || "in_stock") === "preorder" ? (
-                  <label>
-                    Preorder note
-                    <input
-                      placeholder="Available on preorder. Ships in 3-7 working days."
-                      value={productDraft.preorderNote || ""}
-                      onChange={(event) => onProductDraftChange("preorderNote", event.target.value)}
-                    />
-                  </label>
+                ))}
+              </nav>
+              <form className="la-settings-panels" onSubmit={onSaveSettings}>
+                {settingsSection === "notifications" ? (
+                  <section className="la-card la-settings-card">
+                    <h2>Notifications</h2><p>Choose what hits your inbox.</p>
+                    {["New order email", "Payment received", "Low stock alert", "Weekly summary"].map((label, index) => <div className="la-toggle-row" key={label}><span>{label}</span><i className={index < 3 ? "is-on" : ""} /></div>)}
+                  </section>
                 ) : null}
-                <label>
-                  Audience sections (multi-select)
-                  <div className="admin-audience-multi">
-                    {AUDIENCE_OPTIONS.map((option) => (
-                      <label key={option.value} className="admin-audience-option">
-                        <input
-                          type="checkbox"
-                          checked={selectedAudiences.includes(option.value)}
-                          onChange={(event) => toggleAudienceSelection(option.value, event.target.checked)}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </label>
-                <label>
-                  Product description
-                  <input
-                    placeholder="Short product details"
-                    value={productDraft.description}
-                    onChange={(event) => onProductDraftChange("description", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Product detail bullets (one per line)
-                  <textarea
-                    rows={4}
-                    placeholder={"Blue light filter compatible\nUnisex fit\nFree cleaning cloth included"}
-                    value={productDraft.detailBulletsText || ""}
-                    onChange={(event) => onProductDraftChange("detailBulletsText", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Fallback frame style
-                  <select
-                    value={productDraft.variant}
-                    onChange={(event) => onProductDraftChange("variant", event.target.value)}
-                  >
-                    <option value="round">Round</option>
-                    <option value="tortoise">Tortoise</option>
-                    <option value="cat">Cat-Eye</option>
-                    <option value="butterfly">Butterfly</option>
-                    <option value="clear">Clear</option>
-                    <option value="square">Square</option>
-                    <option value="aviator">Aviator</option>
-                  </select>
-                </label>
-                <label className="admin-image-upload-field">
-                  Product picture
-                  {productDraft.image ? (
-                    <span className="admin-image-preview">
-                      <img src={productDraft.image} alt="" />
-                    </span>
-                  ) : null}
-                  <input type="file" accept="image/*" onChange={onProductUpload} />
-                  <span className="admin-hint">Choose the product image customers will see on the storefront.</span>
-                </label>
-
-                <div className="admin-inline-actions">
-                  <button type="submit" className="primary-action">
-                    {isEditing ? "Update Product" : "Add Product"}
-                  </button>
-                  {isEditing ? (
-                    <button type="button" className="secondary-action" onClick={closeProductModal}>
-                      Cancel
-                    </button>
-                  ) : null}
-                </div>
-              </form>
-
-              <section className="admin-section-card admin-list-card admin-products-card">
-                <header className="admin-section-header">
-                  <div>
-                    <h2>Current Products</h2>
-                    <p>Tap edit to modify product details quickly.</p>
-                  </div>
-                  <button type="button" className="primary-action" onClick={openAddProductModal}>
-                    Add Product
-                  </button>
-                </header>
-
-                <ul className="admin-product-list">
-                  {products.map((product) => (
-                    <li key={product.id}>
-                      <div className="mini-media">
-                        <ProductMedia product={product} />
-                      </div>
-                      <div>
-                        <strong>{product.name}</strong>
-                        <span>
-                          {toPrice(product.price)} | {product.section} |{" "}
-                          {normalizeAudienceSelections(product.audiences || [product.audience])
-                            .map((entry) => formatAudienceLabel(entry))
-                            .join(", ")}
-                        </span>
-                        <span>
-                          Availability: {formatAvailabilityLabel(product.availability || "in_stock")}
-                          {String(product.availability || "") === "preorder" && product.preorderNote
-                            ? ` | ${product.preorderNote}`
-                            : ""}
-                        </span>
-                      </div>
-                      <div className="admin-list-actions">
-                        <button type="button" className="secondary-action" onClick={() => openEditProductModal(product)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-action danger-action"
-                          onClick={() => onRemoveProduct(product.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </section>
-          ) : null}
-
-          {activeTab === "settings" ? (
-            <section className={`admin-section-card admin-form-card admin-modal-card ${activeModal === "settings" ? "is-open" : ""}`}>
-              <header className="admin-section-header">
-                <h2>Store Settings</h2>
-                <p>Update brand text and hero section content.</p>
-                <button type="button" className="admin-modal-close" onClick={closeModal} aria-label="Close settings editor">
-                  x
-                </button>
-              </header>
-
-              <form onSubmit={handleSettingsModalSubmit} className="admin-settings-form">
-                <label>
-                  Brand name
-                  <input
-                    value={settingsDraft.brandName}
-                    onChange={(event) => onSettingsDraftChange("brandName", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Brand tagline
-                  <input
-                    value={settingsDraft.brandTagline}
-                    onChange={(event) => onSettingsDraftChange("brandTagline", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Hero small text
-                  <input
-                    placeholder="Leave blank for current month, e.g. June Drop"
-                    value={settingsDraft.heroKicker || ""}
-                    onChange={(event) => onSettingsDraftChange("heroKicker", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Hero title
-                  <input
-                    value={settingsDraft.heroTitle}
-                    onChange={(event) => onSettingsDraftChange("heroTitle", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Hero subtitle
-                  <input
-                    value={settingsDraft.heroSubtitle}
-                    onChange={(event) => onSettingsDraftChange("heroSubtitle", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Hero button label
-                  <input
-                    value={settingsDraft.heroButtonLabel}
-                    onChange={(event) => onSettingsDraftChange("heroButtonLabel", event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Hero image URL
-                  <input
-                    placeholder="https://..."
-                    value={settingsDraft.heroImage}
-                    onChange={(event) => onSettingsDraftChange("heroImage", event.target.value)}
-                  />
-                </label>
-                <div className="admin-bullet-editor">
-                  <h3>Hero benefit bullets</h3>
-                  {(Array.isArray(settingsDraft.heroPromiseItems) && settingsDraft.heroPromiseItems.length > 0
-                    ? settingsDraft.heroPromiseItems
-                    : DEFAULT_SETTINGS.heroPromiseItems
-                  ).map((item, index) => (
-                    <div className="admin-bullet-row" key={`hero-bullet-${index}`}>
-                      <label>
-                        Icon
-                        <select
-                          value={item.type}
-                          onChange={(event) =>
-                            updateSettingsBullet("heroPromiseItems", index, "type", event.target.value)
-                          }
-                        >
-                          {BULLET_ICON_TYPES.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Title
-                        <input
-                          value={item.title}
-                          onChange={(event) =>
-                            updateSettingsBullet("heroPromiseItems", index, "title", event.target.value)
-                          }
-                          required
-                        />
-                      </label>
-                      <label>
-                        Subtitle
-                        <input
-                          value={item.description}
-                          onChange={(event) =>
-                            updateSettingsBullet("heroPromiseItems", index, "description", event.target.value)
-                          }
-                        />
-                      </label>
+                {settingsSection === "shipping" ? (
+                  <section className="la-card la-settings-card">
+                    <h2>Shipping tiers</h2><p>Create checkout shipping options and fees.</p>
+                    <div className="la-benefit-list">
+                      {(Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : []).map((tier, index) => (
+                        <div key={tier.id || `shipping-tier-${index}`} className="la-shipping-tier-row">
+                          <label>Name<input value={tier.name} onChange={(event) => updateShippingTier(index, "name", event.target.value)} required /></label>
+                          <label>Description<input value={tier.description || ""} onChange={(event) => updateShippingTier(index, "description", event.target.value)} /></label>
+                          <label>Fee<input type="number" min="0" step="100" value={tier.fee} onChange={(event) => updateShippingTier(index, "fee", event.target.value)} required /></label>
+                          <div className="la-toggle-row">
+                            <span>Active</span>
+                            <button type="button" className={tier.isActive !== false ? "is-on" : ""} onClick={() => updateShippingTier(index, "isActive", tier.isActive === false)} aria-label={`Toggle ${tier.name}`}>
+                              <i className={tier.isActive !== false ? "is-on" : ""} />
+                            </button>
+                          </div>
+                          <button type="button" className="la-danger-text" onClick={() => removeShippingTier(index)}>Remove</button>
+                        </div>
+                      ))}
+                      {(!Array.isArray(settingsDraft.shippingTiers) || settingsDraft.shippingTiers.length === 0) ? (
+                        <p className="la-notice">No shipping tiers yet.</p>
+                      ) : null}
                     </div>
-                  ))}
-                </div>
-                <div className="admin-bullet-editor">
-                  <h3>Why choose us bullets</h3>
-                  {(Array.isArray(settingsDraft.featureItems) && settingsDraft.featureItems.length > 0
-                    ? settingsDraft.featureItems
-                    : DEFAULT_SETTINGS.featureItems
-                  ).map((item, index) => (
-                    <div className="admin-bullet-row" key={`feature-bullet-${index}`}>
-                      <label>
-                        Icon
-                        <select
-                          value={item.type}
-                          onChange={(event) =>
-                            updateSettingsBullet("featureItems", index, "type", event.target.value)
-                          }
-                        >
-                          {BULLET_ICON_TYPES.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Title
-                        <input
-                          value={item.title}
-                          onChange={(event) =>
-                            updateSettingsBullet("featureItems", index, "title", event.target.value)
-                          }
-                          required
-                        />
-                      </label>
-                      <label>
-                        Subtitle
-                        <input
-                          value={item.description}
-                          onChange={(event) =>
-                            updateSettingsBullet("featureItems", index, "description", event.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-                  ))}
-                </div>
-                <label>
-                  Or upload hero image
-                  <input type="file" accept="image/*" onChange={onHeroUpload} />
-                </label>
-                <button type="submit" className="primary-action">
-                  Save Settings
-                </button>
+                    <button type="button" className="la-primary-button" onClick={addShippingTier}>Add shipping tier</button>
+                  </section>
+                ) : null}
+                {settingsSection === "security" ? (
+                  <section className="la-card la-settings-card">
+                    <h2>Security</h2><p>Keep your account locked down.</p>
+                    <label>Current password<input type="password" value="password" readOnly /></label>
+                    <label>New password<input type="password" /></label>
+                    <label>Confirm password<input type="password" /></label>
+                    <div className="la-toggle-row"><span>Two-factor authentication</span><i /></div>
+                  </section>
+                ) : null}
+                <div className="la-settings-save"><button type="submit" className="la-primary-button">Save changes</button></div>
               </form>
             </section>
           ) : null}
-          {activeTab === "settings" ? (
-            <section className="admin-section-card admin-list-card">
-              <header className="admin-section-header">
-                <h2>Store Settings</h2>
-                <p>Open the settings editor to update brand, hero, and storefront text.</p>
-                <button type="button" className="primary-action" onClick={() => setActiveModal("settings")}>
-                  Edit Settings
-                </button>
-              </header>
-            </section>
-          ) : null}
-          </div>
         </main>
       </div>
-      {activeModal ? <button type="button" className="admin-modal-backdrop" aria-label="Close modal" onClick={closeModal} /> : null}
+
+      {activeModal === "order" ? (
+        <form className="la-modal-card is-open" onSubmit={handleCreateOrder}>
+          <header>
+            <div><h2>Create Order</h2><p>Create an order manually from existing products.</p></div>
+            <button type="button" onClick={closeModal} aria-label="Close order creator">x</button>
+          </header>
+          <label>Existing customer<select value={orderDraft.customerId} onChange={(event) => {
+            const customerId = event.target.value;
+            const customer = customers.find((entry) => String(entry.id) === String(customerId));
+            setOrderDraft((current) => ({ ...current, customerId, fullName: customer?.fullName || "", email: customer?.email || "", phone: customer?.phone || current.phone, address: customer?.address || current.address, city: customer?.city || current.city }));
+          }}><option value="">New or guest customer</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.fullName || customer.email}</option>)}</select></label>
+          <div className="la-form-grid">
+            <label>Customer name<input value={orderDraft.fullName} onChange={(event) => setOrderDraftField("fullName", event.target.value)} disabled={Boolean(orderDraft.customerId)} /></label>
+            <label>Customer email<input type="email" value={orderDraft.email} onChange={(event) => setOrderDraftField("email", event.target.value)} disabled={Boolean(orderDraft.customerId)} /></label>
+            <label>Phone<input value={orderDraft.phone} onChange={(event) => setOrderDraftField("phone", event.target.value)} required /></label>
+            <label>City<input value={orderDraft.city} onChange={(event) => setOrderDraftField("city", event.target.value)} required /></label>
+          </div>
+          <label>Address<input value={orderDraft.address} onChange={(event) => setOrderDraftField("address", event.target.value)} required /></label>
+          <div className="la-form-grid">
+            <label>Payment method<select value={orderDraft.paymentMethod} onChange={(event) => setOrderDraftField("paymentMethod", event.target.value)}><option value="transfer">Transfer</option><option value="card">Card</option></select></label>
+            <label>Payment status<select value={orderDraft.paymentStatus} onChange={(event) => setOrderDraftField("paymentStatus", event.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label>
+            <label>Fulfillment status<select value={orderDraft.orderStatus} onChange={(event) => setOrderDraftField("orderStatus", event.target.value)}>{ORDER_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+          </div>
+          <div className="la-repeat-list">
+            <h3>Order items</h3>
+            {orderDraft.items.map((item, index) => (
+              <div key={`order-item-${index}`}>
+                <select value={item.productId} onChange={(event) => setOrderDraftItem(index, "productId", event.target.value)} required><option value="">Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} - {toPrice(product.price)}</option>)}</select>
+                <input type="number" min="1" max="99" value={item.quantity} onChange={(event) => setOrderDraftItem(index, "quantity", event.target.value)} required />
+                <button type="button" onClick={() => removeOrderDraftItem(index)}>Remove</button>
+              </div>
+            ))}
+            <button type="button" onClick={addOrderDraftItem}>Add item</button>
+          </div>
+          <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button">Create order</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal === "customer" ? (
+        <form className="la-modal-card is-open" onSubmit={handleCreateCustomer}>
+          <header><div><h2>Create Customer</h2><p>Add a customer record for manual orders and future checkout history.</p></div><button type="button" onClick={closeModal}>x</button></header>
+          <label>Full name<input value={customerDraft.fullName} onChange={(event) => setCustomerDraft((current) => ({ ...current, fullName: event.target.value }))} required /></label>
+          <label>Email<input type="email" value={customerDraft.email} onChange={(event) => setCustomerDraft((current) => ({ ...current, email: event.target.value }))} required /></label>
+          <div className="la-form-grid"><label>Phone<input value={customerDraft.phone} onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: event.target.value }))} required /></label><label>City<input value={customerDraft.city} onChange={(event) => setCustomerDraft((current) => ({ ...current, city: event.target.value }))} /></label></div>
+          <label>Address<input value={customerDraft.address} onChange={(event) => setCustomerDraft((current) => ({ ...current, address: event.target.value }))} /></label>
+          <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button">Create customer</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal === "subscriber" ? (
+        <form className="la-modal-card is-open" onSubmit={handleCreateSubscriber}>
+          <header><div><h2>Add Subscriber</h2><p>Add an email to the newsletter list.</p></div><button type="button" onClick={closeModal}>x</button></header>
+          <label>Email<input type="email" value={subscriberDraft.email} onChange={(event) => setSubscriberDraft((current) => ({ ...current, email: event.target.value }))} required /></label>
+          <label>Source<input value={subscriberDraft.source} onChange={(event) => setSubscriberDraft((current) => ({ ...current, source: event.target.value }))} /></label>
+          <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button">Add subscriber</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal === "product" ? (
+        <form className="la-product-drawer is-open" onSubmit={handleProductModalSubmit}>
+          <header><div><p>{isEditing ? "Edit" : "New"}</p><h2>{isEditing ? productDraft.name || "Product" : "Add product"}</h2></div><button type="button" onClick={closeProductModal}>x</button></header>
+          <div className="la-drawer-body">
+            <label className="la-upload-card">Product image{productDraft.image ? <span><img src={productDraft.image} alt="" /></span> : <span><AdminIcon name="products" /></span>}<input type="file" accept="image/*" onChange={onProductUpload} /><small>PNG or JPG, 1:1 ratio recommended.</small></label>
+            <div className="la-form-grid">
+              <label>Product name<input value={productDraft.name} onChange={(event) => onProductDraftChange("name", event.target.value)} required /></label>
+              <label>Price (NGN)<input type="number" min="0" step="1" value={productDraft.price} onChange={(event) => onProductDraftChange("price", event.target.value)} required /></label>
+            </div>
+            <label>Placement<div className="la-choice-grid">{[["category", "Top category"], ["bestseller", "Featured"]].map(([value, label]) => <button key={value} type="button" className={productDraft.section === value ? "is-active" : ""} onClick={() => onProductDraftChange("section", value)}>{label}</button>)}</div></label>
+            <label>Availability<div className="la-choice-grid">{PRODUCT_AVAILABILITY_OPTIONS.map((option) => <button key={option.value} type="button" className={(productDraft.availability || "in_stock") === option.value ? "is-active" : ""} onClick={() => onProductDraftChange("availability", option.value)}>{option.label}</button>)}</div></label>
+            {String(productDraft.availability || "in_stock") === "preorder" ? <label>Preorder note<input value={productDraft.preorderNote || ""} onChange={(event) => onProductDraftChange("preorderNote", event.target.value)} /></label> : null}
+            <label>Audience tags<div className="la-audience-tags">{AUDIENCE_OPTIONS.map((option) => <button key={option.value} type="button" className={selectedAudiences.includes(option.value) ? "is-active" : ""} onClick={() => toggleAudienceSelection(option.value, !selectedAudiences.includes(option.value))}>{option.label}</button>)}</div></label>
+            <label>Description<input value={productDraft.description} onChange={(event) => onProductDraftChange("description", event.target.value)} /></label>
+            <label>Product detail bullets<textarea rows={4} value={productDraft.detailBulletsText || ""} onChange={(event) => onProductDraftChange("detailBulletsText", event.target.value)} /></label>
+            <label>Fallback frame style<select value={productDraft.variant} onChange={(event) => onProductDraftChange("variant", event.target.value)}><option value="round">Round</option><option value="tortoise">Tortoise</option><option value="cat">Cat-Eye</option><option value="butterfly">Butterfly</option><option value="clear">Clear</option><option value="square">Square</option><option value="aviator">Aviator</option></select></label>
+          </div>
+          <footer><button type="button" onClick={closeProductModal}>Cancel</button><button type="submit" className="la-primary-button">{isEditing ? "Save changes" : "Create product"}</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal ? <button type="button" className="la-modal-backdrop" aria-label="Close modal" onClick={closeModal} /> : null}
+      {adminToasts.length > 0 ? (
+        <div className="la-toast-stack" aria-live="polite" aria-atomic="false">
+          {adminToasts.map((toast) => (
+            <div key={toast.id} className={`la-toast la-toast-${toast.tone}`}>
+              <span>{toast.message}</span>
+              <button type="button" onClick={() => dismissAdminToast(toast.id)} aria-label="Dismiss notification">
+                x
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+
+
 }
 
 export default AdminOverlay;

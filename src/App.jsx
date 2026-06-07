@@ -4,7 +4,6 @@ import AdminOverlay from "./components/admin/AdminOverlay";
 import {
   DEFAULT_HERO_ROTATION_IMAGES,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
-  DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS,
   EMPTY_PRODUCT
 } from "./constants/storefront";
@@ -84,12 +83,12 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
   const location = useLocation();
   const needsStorefront = shouldLoadStorefront(screen);
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => needsStorefront && !initialStorefront);
   const [loadError, setLoadError] = useState("");
   const [products, setProducts] = useState(() =>
     Array.isArray(initialStorefront?.products)
       ? initialStorefront.products.map(normalizeProduct)
-      : DEFAULT_PRODUCTS.map(normalizeProduct)
+      : []
   );
   const [settings, setSettings] = useState(() =>
     initialStorefront?.settings ? { ...DEFAULT_SETTINGS, ...initialStorefront.settings } : DEFAULT_SETTINGS
@@ -277,7 +276,10 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
           : DEFAULT_SETTINGS.heroPromiseItems,
         featureItems: Array.isArray(settingsDraft.featureItems)
           ? settingsDraft.featureItems
-          : DEFAULT_SETTINGS.featureItems
+          : DEFAULT_SETTINGS.featureItems,
+        shippingTiers: Array.isArray(settingsDraft.shippingTiers)
+          ? settingsDraft.shippingTiers
+          : []
       });
       setSettings(payload.settings);
       setSettingsDraft(payload.settings);
@@ -341,6 +343,14 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
 
   if (redirectTarget) {
     return <LoadingView />;
+  }
+
+  if (needsStorefront && isLoading) {
+    return <LoadingView />;
+  }
+
+  if (needsStorefront && loadError) {
+    return <ErrorView message={loadError} onRetry={loadStore} />;
   }
 
   if (screen === "admin" && isAdminStorefrontOpen) {

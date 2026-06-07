@@ -70,6 +70,7 @@ async function ensurePostgresSchema(client) {
       hero_image TEXT NOT NULL,
       hero_promise_items TEXT DEFAULT '[]',
       feature_items TEXT DEFAULT '[]',
+      shipping_tiers TEXT DEFAULT '[]',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -102,9 +103,12 @@ async function ensurePostgresSchema(client) {
       payment_reference TEXT NOT NULL UNIQUE,
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','cancelled')),
-      order_status TEXT NOT NULL DEFAULT 'pending',
+      order_status TEXT NOT NULL DEFAULT 'processing',
       admin_notified_at TIMESTAMPTZ DEFAULT NULL,
       customer_notified_at TIMESTAMPTZ DEFAULT NULL,
+      shipping_tier_id TEXT DEFAULT '',
+      shipping_tier_name TEXT DEFAULT '',
+      shipping_fee INTEGER NOT NULL DEFAULT 0,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -141,11 +145,20 @@ async function ensurePostgresSchema(client) {
   `);
 
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
-  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_id TEXT DEFAULT '';`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_name TEXT DEFAULT '';`);
+  await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee INTEGER NOT NULL DEFAULT 0;`);
+  await client.query(`
+    UPDATE orders
+    SET order_status = 'processing'
+    WHERE order_status IN ('pending', 'failed');
+  `);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS shipping_tiers TEXT DEFAULT '[]';`);
   await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
@@ -224,9 +237,9 @@ async function main() {
         `
           INSERT INTO settings (
             id, brand_name, brand_tagline, hero_title, hero_subtitle, hero_button_label, hero_image,
-            hero_promise_items, feature_items, updated_at
+            hero_promise_items, feature_items, shipping_tiers, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             brand_name = EXCLUDED.brand_name,
             brand_tagline = EXCLUDED.brand_tagline,
@@ -236,6 +249,7 @@ async function main() {
             hero_image = EXCLUDED.hero_image,
             hero_promise_items = EXCLUDED.hero_promise_items,
             feature_items = EXCLUDED.feature_items,
+            shipping_tiers = EXCLUDED.shipping_tiers,
             updated_at = EXCLUDED.updated_at
         `,
         [
@@ -248,6 +262,7 @@ async function main() {
           row.hero_image,
           row.hero_promise_items || "[]",
           row.feature_items || "[]",
+          row.shipping_tiers || "[]",
           toIsoOrNull(row.updated_at)
         ]
       );
@@ -297,9 +312,9 @@ async function main() {
       await client.query(
         `
           INSERT INTO orders (
-            id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_channel, payment_status, order_status, admin_notified_at, customer_notified_at, subtotal, currency, created_at, updated_at
+            id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_channel, payment_status, order_status, admin_notified_at, customer_notified_at, shipping_tier_id, shipping_tier_name, shipping_fee, subtotal, currency, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14::timestamptz, $15, $16, COALESCE($17::timestamptz, CURRENT_TIMESTAMP), COALESCE($18::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14::timestamptz, $15, $16, $17, $18, $19, COALESCE($20::timestamptz, CURRENT_TIMESTAMP), COALESCE($21::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
             email = EXCLUDED.email,
@@ -314,6 +329,9 @@ async function main() {
             order_status = EXCLUDED.order_status,
             admin_notified_at = EXCLUDED.admin_notified_at,
             customer_notified_at = EXCLUDED.customer_notified_at,
+            shipping_tier_id = EXCLUDED.shipping_tier_id,
+            shipping_tier_name = EXCLUDED.shipping_tier_name,
+            shipping_fee = EXCLUDED.shipping_fee,
             subtotal = EXCLUDED.subtotal,
             currency = EXCLUDED.currency,
             updated_at = EXCLUDED.updated_at
@@ -330,9 +348,12 @@ async function main() {
           row.payment_reference,
           row.payment_channel || "",
           row.payment_status || "pending",
-          row.order_status || "pending",
+          ["pending", "failed"].includes(row.order_status) ? "processing" : row.order_status || "processing",
           toIsoOrNull(row.admin_notified_at),
           toIsoOrNull(row.customer_notified_at),
+          row.shipping_tier_id || "",
+          row.shipping_tier_name || "",
+          Number(row.shipping_fee) || 0,
           Number(row.subtotal) || 0,
           row.currency || "NGN",
           toIsoOrNull(row.created_at),

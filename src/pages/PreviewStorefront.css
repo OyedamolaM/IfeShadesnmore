@@ -111,37 +111,14 @@
   transform: rotate(18deg);
 }
 
-.preview-theme-toggle > span {
-  position: relative;
+.preview-theme-toggle svg {
   width: 1.15rem;
   height: 1.15rem;
-  display: block;
-}
-
-.preview-theme-toggle i {
-  position: absolute;
-  width: 0.58rem;
-  height: 0.58rem;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.preview-theme-toggle i:nth-child(1) {
-  left: 0;
-  top: 0.1rem;
-  opacity: 0.92;
-}
-
-.preview-theme-toggle i:nth-child(2) {
-  right: 0;
-  top: 0;
-  background: var(--preview-accent);
-}
-
-.preview-theme-toggle i:nth-child(3) {
-  left: 0.35rem;
-  bottom: 0;
-  opacity: 0.55;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .preview-style-switcher-inner button {

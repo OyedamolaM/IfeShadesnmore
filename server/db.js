@@ -39,6 +39,15 @@ const SQLITE_DB_PATH = configuredSqlitePath
   ? path.resolve(configuredSqlitePath)
   : path.join(DEFAULT_SQLITE_DATA_DIR, "ife-store.db");
 const SQLITE_DATA_DIR = path.dirname(SQLITE_DB_PATH);
+const LEGACY_FALLBACK_PRODUCT_IDS = [
+  "women-category",
+  "men-category",
+  "sunglasses-category",
+  "classic-round",
+  "modern-cat-eye",
+  "vintage-square",
+  "aviator-sunglasses"
+];
 
 let sqliteDb = null;
 let pgPool = null;
@@ -292,6 +301,32 @@ function parseSettingsItems(value, fallback) {
   return normalized.length > 0 ? normalized : fallbackArray;
 }
 
+function parseShippingTiers(value) {
+  if (!value) return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(String(value));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const normalized = parsed
+    .map((tier, index) => {
+      if (!tier || typeof tier !== "object") return null;
+      const id = String(tier.id || `shipping-${index + 1}`).trim();
+      const name = String(tier.name || "").trim();
+      const description = String(tier.description || "").trim();
+      const fee = Math.max(0, Math.round(Number(tier.fee) || 0));
+      if (!id || !name) return null;
+      return { id, name, description, fee, isActive: tier.isActive !== false };
+    })
+    .filter(Boolean);
+
+  return normalized;
+}
+
 async function runMigrationsSqlite() {
   sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -321,6 +356,7 @@ async function runMigrationsSqlite() {
       hero_image TEXT NOT NULL,
       hero_promise_items TEXT DEFAULT '[]',
       feature_items TEXT DEFAULT '[]',
+      shipping_tiers TEXT DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -365,9 +401,12 @@ async function runMigrationsSqlite() {
       payment_reference TEXT NOT NULL UNIQUE,
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL CHECK(payment_status IN ('pending','paid','failed','cancelled')) DEFAULT 'pending',
-      order_status TEXT NOT NULL DEFAULT 'pending',
+      order_status TEXT NOT NULL DEFAULT 'processing',
       admin_notified_at TEXT DEFAULT NULL,
       customer_notified_at TEXT DEFAULT NULL,
+      shipping_tier_id TEXT DEFAULT '',
+      shipping_tier_name TEXT DEFAULT '',
+      shipping_fee INTEGER NOT NULL DEFAULT 0,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -408,7 +447,7 @@ async function runMigrationsSqlite() {
 
   const orderColumns = sqliteDb.prepare("PRAGMA table_info(orders)").all();
   if (!orderColumns.some((column) => column.name === "order_status")) {
-    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN order_status TEXT NOT NULL DEFAULT 'pending'`);
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN order_status TEXT NOT NULL DEFAULT 'processing'`);
   }
   if (!orderColumns.some((column) => column.name === "admin_notified_at")) {
     sqliteDb.exec(`ALTER TABLE orders ADD COLUMN admin_notified_at TEXT DEFAULT NULL`);
@@ -439,6 +478,24 @@ async function runMigrationsSqlite() {
   if (!settingsColumns.some((column) => column.name === "feature_items")) {
     sqliteDb.exec(`ALTER TABLE settings ADD COLUMN feature_items TEXT DEFAULT '[]'`);
   }
+  if (!settingsColumns.some((column) => column.name === "shipping_tiers")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN shipping_tiers TEXT DEFAULT '[]'`);
+  }
+
+  if (!orderColumns.some((column) => column.name === "shipping_tier_id")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN shipping_tier_id TEXT DEFAULT ''`);
+  }
+  if (!orderColumns.some((column) => column.name === "shipping_tier_name")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN shipping_tier_name TEXT DEFAULT ''`);
+  }
+  if (!orderColumns.some((column) => column.name === "shipping_fee")) {
+    sqliteDb.exec(`ALTER TABLE orders ADD COLUMN shipping_fee INTEGER NOT NULL DEFAULT 0`);
+  }
+  sqliteDb.exec(`
+    UPDATE orders
+    SET order_status = 'processing'
+    WHERE order_status IN ('pending', 'failed')
+  `);
 
   const productColumns = sqliteDb.prepare("PRAGMA table_info(products)").all();
   if (!productColumns.some((column) => column.name === "availability")) {
@@ -500,6 +557,7 @@ async function runMigrationsPostgres() {
       hero_image TEXT NOT NULL,
       hero_promise_items TEXT DEFAULT '[]',
       feature_items TEXT DEFAULT '[]',
+      shipping_tiers TEXT DEFAULT '[]',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -544,9 +602,12 @@ async function runMigrationsPostgres() {
       payment_reference TEXT NOT NULL UNIQUE,
       payment_channel TEXT DEFAULT '',
       payment_status TEXT NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','cancelled')),
-      order_status TEXT NOT NULL DEFAULT 'pending',
+      order_status TEXT NOT NULL DEFAULT 'processing',
       admin_notified_at TIMESTAMPTZ DEFAULT NULL,
       customer_notified_at TIMESTAMPTZ DEFAULT NULL,
+      shipping_tier_id TEXT DEFAULT '',
+      shipping_tier_name TEXT DEFAULT '',
+      shipping_fee INTEGER NOT NULL DEFAULT 0,
       subtotal INTEGER NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -586,12 +647,21 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'password';`);
   await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != '';`);
-  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'pending';`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_promise_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_kicker TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS shipping_tiers TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_id TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_name TEXT DEFAULT '';`);
+  await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee INTEGER NOT NULL DEFAULT 0;`);
+  await pgPool.query(`
+    UPDATE orders
+    SET order_status = 'processing'
+    WHERE order_status IN ('pending', 'failed');
+  `);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
@@ -610,9 +680,9 @@ async function seedSettingsIfEmpty() {
     `
       INSERT INTO settings (
         id, brand_name, brand_tagline, hero_kicker, hero_title, hero_subtitle, hero_button_label, hero_image,
-        hero_promise_items, feature_items
+        hero_promise_items, feature_items, shipping_tiers
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       1,
@@ -624,14 +694,14 @@ async function seedSettingsIfEmpty() {
       DEFAULT_SETTINGS.heroButtonLabel,
       DEFAULT_SETTINGS.heroImage,
       JSON.stringify(DEFAULT_SETTINGS.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
-      JSON.stringify(DEFAULT_SETTINGS.featureItems || DEFAULT_FEATURE_ITEMS)
+      JSON.stringify(DEFAULT_SETTINGS.featureItems || DEFAULT_FEATURE_ITEMS),
+      JSON.stringify(Array.isArray(DEFAULT_SETTINGS.shippingTiers) ? DEFAULT_SETTINGS.shippingTiers : [])
     ]
   );
 }
 
 async function seedProductsIfEmpty() {
   const shouldSeedDefaults =
-    IS_VERCEL ||
     String(process.env.SEED_DEFAULT_PRODUCTS || "")
       .trim()
       .toLowerCase() === "true";
@@ -666,6 +736,35 @@ async function seedProductsIfEmpty() {
   }
 }
 
+async function cleanupFallbackStorefrontData() {
+  const fallbackProductIds = LEGACY_FALLBACK_PRODUCT_IDS;
+  if (fallbackProductIds.length > 0) {
+    await execute(
+      `DELETE FROM products WHERE id IN (${fallbackProductIds.map(() => "?").join(", ")})`,
+      fallbackProductIds
+    );
+  }
+
+  const settingsRow = await queryOne("SELECT shipping_tiers FROM settings WHERE id = 1");
+  if (!settingsRow) return;
+
+  let tiers;
+  try {
+    tiers = JSON.parse(String(settingsRow.shipping_tiers || "[]"));
+  } catch {
+    tiers = [];
+  }
+  const legacyTierIds = new Set(["lagos-standard", "nationwide-standard"]);
+  const isLegacyFallbackOnly =
+    Array.isArray(tiers) &&
+    tiers.length > 0 &&
+    tiers.every((tier) => legacyTierIds.has(String(tier?.id || "")));
+
+  if (isLegacyFallbackOnly) {
+    await execute("UPDATE settings SET shipping_tiers = '[]', updated_at = CURRENT_TIMESTAMP WHERE id = 1");
+  }
+}
+
 async function backfillSunglassesAudience() {
   await execute(
     `
@@ -696,6 +795,7 @@ export async function initDatabase() {
   }
   await seedSettingsIfEmpty();
   await seedProductsIfEmpty();
+  await cleanupFallbackStorefrontData();
   await backfillSunglassesAudience();
 }
 
@@ -752,7 +852,8 @@ export function mapSettingsRow(row) {
     heroButtonLabel: row.hero_button_label,
     heroImage: row.hero_image,
     heroPromiseItems: parseSettingsItems(row.hero_promise_items, DEFAULT_HERO_PROMISE_ITEMS),
-    featureItems: parseSettingsItems(row.feature_items, DEFAULT_FEATURE_ITEMS)
+    featureItems: parseSettingsItems(row.feature_items, DEFAULT_FEATURE_ITEMS),
+    shippingTiers: parseShippingTiers(row.shipping_tiers)
   };
 }
 

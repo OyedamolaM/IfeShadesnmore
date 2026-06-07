@@ -35,7 +35,6 @@ import {
   DEFAULT_FEATURE_ITEMS,
   DEFAULT_HERO_PROMISE_ITEMS,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
-  DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS
 } from "./defaults.js";
 
@@ -164,7 +163,7 @@ export async function getStorefrontPayload() {
     if (!storefrontFallbackWarningLogged) {
       storefrontFallbackWarningLogged = true;
       console.warn(
-        "Storefront database unavailable; rendering default storefront data.",
+        "Storefront database unavailable; rendering empty storefront data.",
         error?.message || error
       );
     }
@@ -181,7 +180,7 @@ export async function getProductBySlugId(slugId) {
     const row = await queryOne(`${PUBLIC_PRODUCT_SELECT} WHERE id = ?`, [decodedId]);
     return row ? mapProductRow(row) : null;
   } catch {
-    return DEFAULT_PRODUCTS.find((product) => product.id === decodedId) || null;
+    return null;
   }
 }
 
@@ -221,7 +220,7 @@ export async function getCurrentUserFromFetchRequest(request) {
 function getFallbackStorefrontPayload() {
   return {
     settings: DEFAULT_SETTINGS,
-    products: DEFAULT_PRODUCTS,
+    products: [],
     blogs: [PLACEHOLDER_BLOG]
   };
 }
@@ -534,6 +533,13 @@ const bulletItemSchema = z.object({
   title: z.string().min(1).max(80),
   description: z.string().max(120).optional().default("")
 });
+const shippingTierSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().min(1).max(120),
+  description: z.string().max(180).optional().default(""),
+  fee: z.coerce.number().int().nonnegative(),
+  isActive: z.boolean().optional().default(true)
+});
 const settingsSchema = z.object({
   brandName: z.string().min(1).max(120),
   brandTagline: z.string().min(1).max(80),
@@ -543,7 +549,8 @@ const settingsSchema = z.object({
   heroButtonLabel: z.string().min(1).max(80),
   heroImage: z.string().min(1).max(5_000_000),
   heroPromiseItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_HERO_PROMISE_ITEMS),
-  featureItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_FEATURE_ITEMS)
+  featureItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_FEATURE_ITEMS),
+  shippingTiers: z.array(shippingTierSchema).max(12).optional().default([])
 });
 const productSchema = z.object({
   id: z.string().min(1).max(120).optional(),
@@ -572,6 +579,7 @@ const blogSchema = z.object({
 const checkoutSchema = z.object({
   items: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1).max(99) })).min(1),
   paymentMethod: z.enum(["card", "transfer"]),
+  shippingTierId: z.string().min(1).max(80),
   customer: z
     .object({
       firstName: z.string().max(60).optional().default(""),
@@ -593,7 +601,7 @@ const checkoutSchema = z.object({
       { message: "First and last name are required.", path: ["firstName"] }
     )
 });
-const orderStatusSchema = z.object({ orderStatus: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]) });
+const orderStatusSchema = z.object({ orderStatus: z.enum(["processing", "shipped", "delivered", "cancelled"]) });
 const adminCustomerSchema = z.object({
   fullName: z.string().min(1).max(120),
   email: z.string().email(),
@@ -610,7 +618,7 @@ const adminOrderSchema = z.object({
   city: z.string().min(1).max(120),
   paymentMethod: z.enum(["card", "transfer"]).optional().default("transfer"),
   paymentStatus: z.enum(["pending", "paid", "failed", "cancelled"]).optional().default("pending"),
-  orderStatus: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]).optional().default("pending"),
+  orderStatus: z.enum(["processing", "shipped", "delivered", "cancelled"]).optional().default("processing"),
   items: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1).max(99) })).min(1)
 }).refine((value) => Boolean(value.customerId) || Boolean(normalizeEmail(value.email)), {
   message: "Select a customer or enter an email address.",
@@ -833,11 +841,22 @@ function mapOrderRow(row) {
     orderStatus: row.order_status || "pending",
     adminNotifiedAt: row.admin_notified_at || null,
     customerNotifiedAt: row.customer_notified_at || null,
+    shippingTierId: row.shipping_tier_id || "",
+    shippingTierName: row.shipping_tier_name || "",
+    shippingFee: Number(row.shipping_fee) || 0,
     subtotal: Number(row.subtotal) || 0,
+    total: (Number(row.subtotal) || 0) + (Number(row.shipping_fee) || 0),
     currency: row.currency || "NGN",
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+async function getActiveShippingTier(tierId) {
+  const settingsRow = await queryOne("SELECT * FROM settings WHERE id = 1");
+  const settings = settingsRow ? mapSettingsRow(settingsRow) : { shippingTiers: [] };
+  const tiers = Array.isArray(settings.shippingTiers) ? settings.shippingTiers : [];
+  return tiers.find((tier) => tier.id === tierId && tier.isActive !== false) || null;
 }
 
 async function withOrderItems(rows) {
@@ -913,7 +932,7 @@ async function createAdminOrder(request) {
 
   await withTransaction(async (tx) => {
     await tx.execute(
-      "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, order_status, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, order_status, shipping_fee, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         orderId,
         customerRow.id,
@@ -926,6 +945,7 @@ async function createAdminOrder(request) {
         reference,
         payload.paymentStatus,
         payload.orderStatus,
+        0,
         subtotal
       ]
     );
@@ -958,6 +978,9 @@ async function updateOrderStatus(request, id) {
   if (!parsed.success) return json({ error: "Invalid order status payload." }, 400);
   const order = await queryOne("SELECT * FROM orders WHERE id = ?", [id]);
   if (!order) return json({ error: "Order not found." }, 404);
+  if (String(order.payment_status || "").toLowerCase() !== "paid") {
+    return json({ error: "Only paid orders can be moved through fulfillment." }, 400);
+  }
   await execute("UPDATE orders SET order_status = ?, updated_at = datetime('now') WHERE id = ?", [parsed.data.orderStatus, id]);
   const refreshed = await queryOne("SELECT * FROM orders WHERE id = ?", [id]);
   return json({ order: { ...mapOrderRow(refreshed), items: await getOrderItems(id) } });
@@ -1001,6 +1024,10 @@ async function initializeCheckout(request) {
   const validItems = computedItems.filter(Boolean);
   const subtotal = validItems.reduce((sum, item) => sum + item.lineTotal, 0);
   if (subtotal <= 0) return json({ error: "Invalid checkout amount." }, 400);
+  const shippingTier = await getActiveShippingTier(payload.shippingTierId);
+  if (!shippingTier) return json({ error: "Please select a valid shipping option." }, 400);
+  const shippingFee = Number(shippingTier.fee) || 0;
+  const total = subtotal + shippingFee;
   const orderId = createOrderId();
   const reference = createPaymentReference();
   const customer = payload.customer;
@@ -1009,8 +1036,8 @@ async function initializeCheckout(request) {
   const customerPhone = String(customer.phone || "").trim();
   await withTransaction(async (tx) => {
     await tx.execute(
-      "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
-      [orderId, auth.user.id, customerEmail || auth.user.email, customerFullName, customerPhone, customer.address.trim(), customer.city.trim(), payload.paymentMethod, reference, subtotal]
+      "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, order_status, shipping_tier_id, shipping_tier_name, shipping_fee, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'processing', ?, ?, ?, ?)",
+      [orderId, auth.user.id, customerEmail || auth.user.email, customerFullName, customerPhone, customer.address.trim(), customer.city.trim(), payload.paymentMethod, reference, shippingTier.id, shippingTier.name, shippingFee, subtotal]
     );
     for (const item of validItems) {
       await tx.execute(
@@ -1022,7 +1049,7 @@ async function initializeCheckout(request) {
   try {
     const checkout = await initializeTransaction({
       email: customerEmail || auth.user.email,
-      amountInKobo: subtotal * 100,
+      amountInKobo: total * 100,
       reference,
       callbackUrl: `${FRONTEND_URL}/payment/callback`,
       channels: payload.paymentMethod === "transfer" ? ["bank_transfer", "bank"] : ["card"],
@@ -1051,7 +1078,8 @@ async function verifyCheckout(request, reference) {
   try {
     const payment = await verifyTransaction(reference);
     const paystackStatus = String(payment.status || "").toLowerCase();
-    const isPaid = paystackStatus === "success" && Number(payment.amount || 0) === Number(orderRow.subtotal || 0) * 100;
+    const expectedAmount = (Number(orderRow.subtotal || 0) + Number(orderRow.shipping_fee || 0)) * 100;
+    const isPaid = paystackStatus === "success" && Number(payment.amount || 0) === expectedAmount;
     await execute("UPDATE orders SET payment_status = ?, payment_channel = ?, updated_at = datetime('now') WHERE id = ?", [
       isPaid ? "paid" : "failed",
       payment.channel || "",
@@ -1088,8 +1116,8 @@ async function paystackWebhook(request) {
     const reference = event?.data?.reference;
     const amountKobo = Number(event?.data?.amount || 0);
     if (reference) {
-      const order = await queryOne("SELECT id, subtotal FROM orders WHERE payment_reference = ?", [reference]);
-      if (order && amountKobo === Number(order.subtotal || 0) * 100) {
+      const order = await queryOne("SELECT id, subtotal, shipping_fee FROM orders WHERE payment_reference = ?", [reference]);
+      if (order && amountKobo === (Number(order.subtotal || 0) + Number(order.shipping_fee || 0)) * 100) {
         await execute(
           "UPDATE orders SET payment_status = 'paid', payment_channel = ?, order_status = CASE WHEN order_status = 'pending' THEN 'processing' ELSE order_status END, updated_at = datetime('now') WHERE id = ?",
           [event?.data?.channel || "", order.id]
@@ -1109,7 +1137,7 @@ async function updateSettings(request) {
   if (!parsed.success) return json({ error: "Invalid settings payload." }, 400);
   const payload = parsed.data;
   await execute(
-    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_kicker = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, updated_at = datetime('now') WHERE id = 1",
+    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_kicker = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, shipping_tiers = ?, updated_at = datetime('now') WHERE id = 1",
     [
       payload.brandName.trim(),
       payload.brandTagline.trim(),
@@ -1119,7 +1147,8 @@ async function updateSettings(request) {
       payload.heroButtonLabel.trim(),
       payload.heroImage.trim(),
       JSON.stringify(payload.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
-      JSON.stringify(payload.featureItems || DEFAULT_FEATURE_ITEMS)
+      JSON.stringify(payload.featureItems || DEFAULT_FEATURE_ITEMS),
+      JSON.stringify(Array.isArray(payload.shippingTiers) ? payload.shippingTiers : [])
     ]
   );
   const row = await queryOne("SELECT * FROM settings WHERE id = 1");
@@ -1257,7 +1286,7 @@ async function getCustomers(request) {
   const auth = await requireUser(request, "admin");
   if (auth.response) return auth.response;
   const rows = await queryAll(
-    "SELECT u.id, u.email, u.full_name, u.phone, u.address, u.city, u.created_at, u.updated_at, COUNT(o.id) AS order_count, COALESCE(SUM(o.subtotal), 0) AS total_spent FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.role = 'customer' GROUP BY u.id ORDER BY u.created_at DESC"
+    "SELECT u.id, u.email, u.full_name, u.phone, u.address, u.city, u.created_at, u.updated_at, COUNT(o.id) AS order_count, COALESCE(SUM(o.subtotal + COALESCE(o.shipping_fee, 0)), 0) AS total_spent FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.role = 'customer' GROUP BY u.id ORDER BY u.created_at DESC"
   );
   return json({
     customers: rows.map((row) => ({

@@ -6,6 +6,17 @@ const PREVIEW_OPTIONS = [
   { id: "v3", label: "03", title: "Solar" }
 ];
 
+function ThemeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3a9 9 0 1 0 9 9c0-.6-.49-1-1.09-1h-1.56a2.1 2.1 0 0 1-2.1-2.1V7.34A4.34 4.34 0 0 0 11.91 3H12Z" />
+      <path d="M7.5 11.5h.01" />
+      <path d="M9.5 7.8h.01" />
+      <path d="M13.8 6.8h.01" />
+    </svg>
+  );
+}
+
 function PreviewStyleSwitcher({ value, onChange, title = "Preview style selector", compactLabel = "Theme" }) {
   const [isOpen, setIsOpen] = useState(false);
   const activeOption = PREVIEW_OPTIONS.find((option) => option.id === value) || PREVIEW_OPTIONS[0];
@@ -20,11 +31,7 @@ function PreviewStyleSwitcher({ value, onChange, title = "Preview style selector
         aria-label={`${compactLabel}: ${activeOption.title}`}
         title={`${compactLabel}: ${activeOption.title}`}
       >
-        <span aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
+        <ThemeIcon />
       </button>
       <div className="preview-style-switcher-inner" role="tablist" aria-hidden={!isOpen}>
         {PREVIEW_OPTIONS.map((option) => {

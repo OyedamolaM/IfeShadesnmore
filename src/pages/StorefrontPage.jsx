@@ -42,7 +42,8 @@ function createCheckoutForm(user) {
     phone: user?.phone || "",
     address: user?.address || "",
     city: user?.city || "",
-    paymentMethod: "card"
+    paymentMethod: "card",
+    shippingTierId: ""
   };
 }
 
@@ -200,6 +201,22 @@ function StorefrontPage({
     () => cartItems.reduce((total, item) => total + item.lineTotal, 0),
     [cartItems]
   );
+  const activeShippingTiers = useMemo(
+    () => (Array.isArray(settings?.shippingTiers) ? settings.shippingTiers : []).filter((tier) => tier?.isActive !== false),
+    [settings?.shippingTiers]
+  );
+  const selectedShippingTier = useMemo(
+    () => activeShippingTiers.find((tier) => tier.id === checkoutForm.shippingTierId) || activeShippingTiers[0] || null,
+    [activeShippingTiers, checkoutForm.shippingTierId]
+  );
+  const shippingFee = Number(selectedShippingTier?.fee) || 0;
+  const checkoutTotal = cartSubtotal + shippingFee;
+
+  useEffect(() => {
+    if (!showCheckout || activeShippingTiers.length === 0) return;
+    if (checkoutForm.shippingTierId && activeShippingTiers.some((tier) => tier.id === checkoutForm.shippingTierId)) return;
+    setCheckoutForm((current) => ({ ...current, shippingTierId: activeShippingTiers[0].id }));
+  }, [activeShippingTiers, checkoutForm.shippingTierId, showCheckout]);
 
   useEffect(() => {
     const availableProductIds = new Set(
@@ -370,6 +387,10 @@ function StorefrontPage({
       setCheckoutError("Phone or email is required.");
       return;
     }
+    if (!selectedShippingTier) {
+      setCheckoutError("Please select a shipping option.");
+      return;
+    }
 
     setCheckoutError("");
     setCheckoutNotice("Redirecting to secure payment...");
@@ -382,6 +403,7 @@ function StorefrontPage({
           quantity: item.quantity
         })),
         paymentMethod: checkoutForm.paymentMethod,
+        shippingTierId: selectedShippingTier.id,
         customer: {
           firstName: checkoutForm.firstName.trim(),
           lastName: checkoutForm.lastName.trim(),
@@ -634,6 +656,10 @@ function StorefrontPage({
             onClose={() => setShowCheckout(false)}
             items={cartItems}
             subtotal={cartSubtotal}
+            shippingTiers={activeShippingTiers}
+            selectedShippingTierId={selectedShippingTier?.id || ""}
+            shippingFee={shippingFee}
+            total={checkoutTotal}
             form={checkoutForm}
             onFieldChange={(field, value) => {
               setCheckoutForm((current) => ({ ...current, [field]: value }));

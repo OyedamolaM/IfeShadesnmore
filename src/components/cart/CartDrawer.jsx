@@ -84,7 +84,7 @@ function CartDrawer({
           <p>
             Subtotal <strong>{toPrice(subtotal)}</strong>
           </p>
-          <p className="cart-shipping-note">Prices exclude shipping fee. Delivery fee is calculated at processing.</p>
+          <p className="cart-shipping-note">Shipping fee is selected and added during checkout.</p>
           <button type="button" className="primary-action" disabled={items.length === 0} onClick={onOpenCheckout}>
             Proceed to Checkout
           </button>

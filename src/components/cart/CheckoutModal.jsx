@@ -20,6 +20,10 @@ function CheckoutModal({
   onClose,
   items,
   subtotal,
+  shippingTiers = [],
+  selectedShippingTierId,
+  shippingFee = 0,
+  total = subtotal,
   form,
   onFieldChange,
   onSubmit,
@@ -114,6 +118,26 @@ function CheckoutModal({
               />
             </label>
             <label>
+              Shipping
+              <select
+                value={selectedShippingTierId || form.shippingTierId || ""}
+                onChange={(event) => onFieldChange("shippingTierId", event.target.value)}
+                disabled={isSubmitting}
+                required
+              >
+                {shippingTiers.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.name} - {toPrice(tier.fee)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description ? (
+              <p className="checkout-hint">
+                {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description}
+              </p>
+            ) : null}
+            <label>
               Payment method
               <select
                 value={form.paymentMethod}
@@ -154,10 +178,16 @@ function CheckoutModal({
               ))}
             </ul>
             <p>
-              Total <strong>{toPrice(subtotal)}</strong>
+              Items <strong>{toPrice(subtotal)}</strong>
+            </p>
+            <p>
+              Shipping <strong>{toPrice(shippingFee)}</strong>
+            </p>
+            <p>
+              Total <strong>{toPrice(total)}</strong>
             </p>
             <p className="checkout-shipping-note">
-              Product prices exclude shipping fee. Delivery fee is confirmed after checkout.
+              Shipping is included in the payment total.
             </p>
           </div>
         </div>

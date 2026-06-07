@@ -5,62 +5,6 @@ import { trackEvent } from "../../utils/analytics";
 
 const MIN_SEARCH_LENGTH = 3;
 
-const CATEGORY_PLACEHOLDER_IMAGE = "/hero/UnisexGlasses.jpg";
-const SUNGLASSES_SWITCH_MS = 5000;
-const SUNGLASSES_VARIANT_IMAGES = ["/hero/Sunglasses.jpg", "/hero/sunglasses2.jpg"];
-
-const SHOP_CATEGORY_CARDS = [
-  {
-    id: "shop-women",
-    title: "Women's Glasses",
-    ctaLabel: "Shop Women's",
-    sectionId: "women-section",
-    image: "/hero/Female-glasses.jpg",
-    alt: "Women's glasses collection"
-  },
-  {
-    id: "shop-men",
-    title: "Men's Glasses",
-    ctaLabel: "Shop Men's",
-    sectionId: "men-section",
-    image: "/hero/male-glasses.jpg",
-    alt: "Men's glasses collection"
-  },
-  {
-    id: "shop-sunglasses",
-    title: "Sunglasses",
-    ctaLabel: "Shop Sunglasses",
-    sectionId: "sunglasses-section",
-    image: "/hero/Sunglasses.jpg",
-    switchImages: SUNGLASSES_VARIANT_IMAGES,
-    alt: "Sunglasses collection"
-  },
-  {
-    id: "shop-unisex",
-    title: "Unisex Glasses",
-    ctaLabel: "Shop Unisex",
-    sectionId: "unisex-section",
-    image: "/hero/UnisexGlasses.jpg",
-    alt: "Unisex glasses collection"
-  },
-  {
-    id: "shop-antiblue",
-    title: "Anti Blue Light",
-    ctaLabel: "Shop Anti-Blue Light",
-    sectionId: "anti-blue-light-section",
-    image: "/hero/Antiblueglasses.jpg",
-    alt: "Anti-blue and anti-glare glasses collection"
-  },
-  {
-    id: "shop-prescription",
-    title: "Prescriptions",
-    ctaLabel: "Shop Prescription",
-    sectionId: "prescription-section",
-    image: "/hero/Prescriptionlenses.jpg",
-    alt: "Prescription glasses collection"
-  }
-];
-
 const COLLECTION_CARDS = [
   {
     audience: "women",
@@ -194,10 +138,6 @@ function canDisplayOnStorefront(product) {
   return normalizeAvailability(product?.availability) !== "out_of_stock";
 }
 
-function scrollToSection(sectionId) {
-  document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 function groupProductsByAudience(items) {
   const grouped = COLLECTION_CARDS.reduce((acc, card) => {
     acc[card.audience] = [];
@@ -234,9 +174,7 @@ function ArrivalsSection({
   themeVariant = "v1"
 }) {
   const [expandedSections, setExpandedSections] = useState({});
-  const [categoryInfoNotice, setCategoryInfoNotice] = useState({ id: "", message: "" });
   const [openProductActionsId, setOpenProductActionsId] = useState("");
-  const [sunglassesImageIndex, setSunglassesImageIndex] = useState(0);
   const [isMobileView, setIsMobileView] = useState(false);
   const rawQuery = String(searchQuery || "").trim().toLowerCase();
   const query = rawQuery.length >= MIN_SEARCH_LENGTH ? rawQuery : "";
@@ -263,22 +201,6 @@ function ArrivalsSection({
   useEffect(() => {
     trackEvent("view_shop_collection_section", {
       section_name: "shop_collection"
-    });
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const interval = window.setInterval(() => {
-      setSunglassesImageIndex((current) => (current + 1) % SUNGLASSES_VARIANT_IMAGES.length);
-    }, SUNGLASSES_SWITCH_MS);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    SUNGLASSES_VARIANT_IMAGES.forEach((src) => {
-      const image = new window.Image();
-      image.src = src;
     });
   }, []);
 
@@ -315,71 +237,12 @@ function ArrivalsSection({
     return sortedCollectionCards.filter((card) => (visibleProductsByAudience[card.audience] || []).length > 0);
   }, [allProductsByAudience, isSearching, sortedCollectionCards, visibleProductsByAudience]);
 
-  const categoryCards = useMemo(() => {
-    const bySectionId = COLLECTION_CARDS.reduce((acc, card) => {
-      acc[card.sectionId] = card;
-      return acc;
-    }, {});
-
-    return SHOP_CATEGORY_CARDS.map((card) => {
-      const linkedCollection = bySectionId[card.sectionId];
-      const audience = linkedCollection?.audience;
-      const productCount = audience ? (allProductsByAudience[audience] || []).length : 0;
-      const comingSoon = Boolean(linkedCollection?.comingSoon);
-      const isAvailable = productCount > 0;
-      return {
-        ...card,
-        productCount,
-        isAvailable,
-        comingSoon
-      };
-    });
-  }, [allProductsByAudience]);
-
-  useEffect(() => {
-    if (!categoryInfoNotice.id) return undefined;
-    const timer = window.setTimeout(() => {
-      setCategoryInfoNotice({ id: "", message: "" });
-    }, 2600);
-    return () => window.clearTimeout(timer);
-  }, [categoryInfoNotice]);
-
   const toggleSection = (audience) => {
     setExpandedSections((current) => ({ ...current, [audience]: !current[audience] }));
   };
 
   const toggleProductActions = (productId) => {
     setOpenProductActionsId((current) => (current === productId ? "" : productId));
-  };
-
-  const onCategoryCardAction = (card) => {
-    if (card.isAvailable) {
-      scrollToSection(card.sectionId);
-      return;
-    }
-
-    if (card.comingSoon) {
-      setCategoryInfoNotice({
-        id: card.id,
-        message: "Products not yet arrived, but your fashion lense can be converted for a service fee."
-      });
-      return;
-    }
-
-    setCategoryInfoNotice({
-      id: card.id,
-      message: "Products are being restocked. Please check back soon."
-    });
-  };
-
-  const onViewAllCategories = () => {
-    const firstAvailableCard = categoryCards.find((card) => card.isAvailable);
-    if (firstAvailableCard) {
-      scrollToSection(firstAvailableCard.sectionId);
-      return;
-    }
-
-    document.getElementById("shop")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
@@ -396,90 +259,6 @@ function ArrivalsSection({
         </div>
         {isSearchTooShort ? (
           <p className="search-hint">Type at least {MIN_SEARCH_LENGTH} characters to search.</p>
-        ) : null}
-
-        {!isSearching ? (
-          <section className="featured-category-showcase" aria-labelledby="featured-category-heading">
-            <div className="featured-category-heading">
-              <div>
-                
-                <h2 id="featured-category-heading">Featured categories</h2>
-              </div>
-              <button type="button" onClick={onViewAllCategories}>
-                View all
-              </button>
-            </div>
-            <div className="category-grid">
-              {categoryCards.map((card, index) => {
-                const aboveTheFoldCount = isMobileView ? 3 : 4;
-                const isHighPriority = index < aboveTheFoldCount;
-                const switchImages =
-                  Array.isArray(card.switchImages) && card.switchImages.length > 0
-                    ? card.switchImages
-                    : [card.image];
-                const imageSrc =
-                  card.sectionId === "sunglasses-section"
-                    ? switchImages[sunglassesImageIndex % switchImages.length]
-                    : switchImages[0];
-                return (
-                  <article
-                    className={index % 2 === 1 ? "category-card is-offset" : "category-card"}
-                    key={card.id}
-                  >
-                    <button
-                      type="button"
-                      className="category-media media-button"
-                      onClick={() => onCategoryCardAction(card)}
-                    >
-                      <span>Category</span>
-                      <img
-                        src={imageSrc}
-                        alt={card.alt}
-                        loading={isHighPriority ? "eager" : "lazy"}
-                        fetchpriority={isHighPriority ? "high" : "low"}
-                        decoding="async"
-                        onError={(event) => {
-                          if (event.currentTarget.src.endsWith(CATEGORY_PLACEHOLDER_IMAGE)) return;
-                          event.currentTarget.src = CATEGORY_PLACEHOLDER_IMAGE;
-                        }}
-                      />
-                    </button>
-                    <div className="category-card-meta">
-                      <div>
-                        <h3>
-                          <button
-                            type="button"
-                            className="product-name-button"
-                            onClick={() => onCategoryCardAction(card)}
-                          >
-                            {card.title}
-                          </button>
-                        </h3>
-                        <p>
-                          {card.comingSoon
-                            ? "Coming soon"
-                            : card.isAvailable
-                            ? card.ctaLabel
-                            : "Restocking soon"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="category-add-button"
-                        aria-label={card.isAvailable ? `Open ${card.title}` : `${card.title} status`}
-                        onClick={() => onCategoryCardAction(card)}
-                      >
-                        +
-                      </button>
-                    </div>
-                    {categoryInfoNotice.id === card.id ? (
-                      <p className="category-info-note">{categoryInfoNotice.message}</p>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
         ) : null}
 
         {visibleCollectionCards.map((card) => {
