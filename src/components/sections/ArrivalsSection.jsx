@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 import { trackEvent } from "../../utils/analytics";
@@ -178,6 +178,7 @@ function ArrivalsSection({
   const [expandedSections, setExpandedSections] = useState({});
   const [openProductActionsId, setOpenProductActionsId] = useState("");
   const [isMobileView, setIsMobileView] = useState(false);
+  const sectionRef = useRef(null);
   const rawQuery = String(searchQuery || "").trim().toLowerCase();
   const query = rawQuery.length >= MIN_SEARCH_LENGTH ? rawQuery : "";
   const isSearching = query.length > 0;
@@ -199,6 +200,21 @@ function ArrivalsSection({
     mediaQuery.addListener(handleChange);
     return () => mediaQuery.removeListener(handleChange);
   }, []);
+
+  useEffect(() => {
+    if (!openProductActionsId || typeof document === "undefined") return undefined;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const openMenu = sectionRef.current?.querySelector(".collection-action-menu.is-open");
+      if (openMenu?.contains(target)) return;
+      setOpenProductActionsId("");
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [openProductActionsId]);
 
   useEffect(() => {
     trackEvent("view_shop_collection_section", {
@@ -248,7 +264,7 @@ function ArrivalsSection({
   };
 
   return (
-    <section className={`shop-sections themed-product-section themed-product-${themeVariant}`} id="shop">
+    <section ref={sectionRef} className={`shop-sections themed-product-section themed-product-${themeVariant}`} id="shop">
       <div className="container">
         <div className="shop-toolbar">
           <input

@@ -61,7 +61,7 @@ const ADMIN_PAGE_COPY = {
   settings: ["Store settings", "Control your brand text, homepage content and account preferences."]
 };
 
-const REVENUE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const REVENUE_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const EMPTY_BLOG_DRAFT = {
   id: "",
   title: "",
@@ -529,7 +529,7 @@ function AdminOverlay({
   const revenueSeries = useMemo(() => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    start.setDate(today.getDate() - today.getDay());
     start.setHours(0, 0, 0, 0);
 
     return REVENUE_DAYS.map((day, index) => {
