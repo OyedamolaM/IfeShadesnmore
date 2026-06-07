@@ -84,7 +84,8 @@ const EMPTY_SUBSCRIBER_DRAFT = {
 };
 const EMPTY_NEWSLETTER_DRAFT = {
   subject: "",
-  message: ""
+  message: "",
+  campaignType: "general"
 };
 const EMPTY_ORDER_DRAFT = {
   customerId: "",
@@ -820,6 +821,7 @@ function AdminOverlay({
       const result = await sendNewsletter({
         subject: newsletterDraft.subject,
         message: newsletterDraft.message,
+        campaignType: newsletterDraft.campaignType,
         excludedSubscriptionIds: newsletterExcludedIds
       });
       setNewsletterDraft(EMPTY_NEWSLETTER_DRAFT);
@@ -1542,6 +1544,12 @@ function AdminOverlay({
         <form className="la-modal-card is-open la-newsletter-modal" onSubmit={handleSendNewsletter}>
           <header><div><h2>Send Newsletter</h2><p>Email your active subscriber list.</p></div><button type="button" onClick={closeModal}>x</button></header>
           <label>Subject<input value={newsletterDraft.subject} onChange={(event) => setNewsletterDraft((current) => ({ ...current, subject: event.target.value }))} required /></label>
+          <label>Campaign type<select value={newsletterDraft.campaignType} onChange={(event) => setNewsletterDraft((current) => ({ ...current, campaignType: event.target.value }))}>
+            <option value="general">General update</option>
+            <option value="drops">New drops</option>
+            <option value="restocks">Restock alert</option>
+            <option value="offers">Promotional offer</option>
+          </select></label>
           <label>Message<textarea rows={8} value={newsletterDraft.message} onChange={(event) => setNewsletterDraft((current) => ({ ...current, message: event.target.value }))} required /></label>
           <section className="la-newsletter-exclusions">
             <h3>Exclude from this send</h3>

@@ -6,7 +6,7 @@ import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
 import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
 import { CART_STORAGE_KEY } from "../constants/storefront";
-import { createSubscription, initializeCheckout } from "../utils/api";
+import { createSubscription, fetchAccountDashboard, initializeCheckout } from "../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../utils/themePreference";
 
 const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
@@ -42,6 +42,7 @@ function createCheckoutForm(user) {
     phone: user?.phone || "",
     address: user?.address || "",
     city: user?.city || "",
+    addressId: "",
     paymentMethod: "card",
     shippingTierId: ""
   };
@@ -108,6 +109,7 @@ function StorefrontPage({
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
+  const [accountAddresses, setAccountAddresses] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [email, setEmail] = useState("");
@@ -335,7 +337,7 @@ function StorefrontPage({
     }
   };
 
-  const openCheckout = () => {
+  const openCheckout = async () => {
     if (!orderingEnabled) {
       setCheckoutNotice("Ordering is disabled in admin preview mode.");
       setCheckoutError("");
@@ -351,15 +353,25 @@ function StorefrontPage({
 
     setCheckoutError("");
     setCheckoutNotice("");
+    let savedAddresses = accountAddresses;
+    try {
+      const accountPayload = await fetchAccountDashboard();
+      savedAddresses = Array.isArray(accountPayload.addresses) ? accountPayload.addresses : [];
+      setAccountAddresses(savedAddresses);
+    } catch {
+      savedAddresses = accountAddresses;
+    }
+    const defaultAddress = savedAddresses.find((address) => address.isDefault) || savedAddresses[0] || null;
     const nameParts = splitFullName(currentUser.fullName || "");
     setCheckoutForm((current) => ({
       ...current,
       firstName: current.firstName || nameParts.firstName,
       lastName: current.lastName || nameParts.lastName,
       email: current.email || currentUser.email || "",
-      phone: current.phone || currentUser.phone || "",
-      address: current.address || currentUser.address || "",
-      city: current.city || currentUser.city || ""
+      phone: current.phone || defaultAddress?.phone || currentUser.phone || "",
+      address: current.address || defaultAddress?.street || currentUser.address || "",
+      city: current.city || defaultAddress?.city || currentUser.city || "",
+      addressId: current.addressId || (defaultAddress?.id ? String(defaultAddress.id) : "")
     }));
     setShowCheckout(true);
   };
@@ -404,6 +416,7 @@ function StorefrontPage({
         })),
         paymentMethod: checkoutForm.paymentMethod,
         shippingTierId: selectedShippingTier.id,
+        addressId: checkoutForm.addressId || undefined,
         customer: {
           firstName: checkoutForm.firstName.trim(),
           lastName: checkoutForm.lastName.trim(),
@@ -661,7 +674,22 @@ function StorefrontPage({
             shippingFee={shippingFee}
             total={checkoutTotal}
             form={checkoutForm}
+            savedAddresses={accountAddresses}
             onFieldChange={(field, value) => {
+              if (field === "addressId") {
+                const selectedAddress = accountAddresses.find((address) => String(address.id) === String(value));
+                setCheckoutForm((current) => ({
+                  ...current,
+                  addressId: value,
+                  ...(selectedAddress ? {
+                    phone: selectedAddress.phone || current.phone,
+                    address: selectedAddress.street || current.address,
+                    city: selectedAddress.city || current.city
+                  } : {})
+                }));
+                setCheckoutError("");
+                return;
+              }
               setCheckoutForm((current) => ({ ...current, [field]: value }));
               setCheckoutError("");
             }}

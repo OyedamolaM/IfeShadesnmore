@@ -25,6 +25,7 @@ function CheckoutModal({
   shippingFee = 0,
   total = subtotal,
   form,
+  savedAddresses = [],
   onFieldChange,
   onSubmit,
   checkoutError,
@@ -95,6 +96,23 @@ function CheckoutModal({
               />
             </label>
             <p className="checkout-hint">Phone or email is required for order updates.</p>
+            {savedAddresses.length > 0 ? (
+              <label>
+                Saved address
+                <select
+                  value={form.addressId || ""}
+                  onChange={(event) => onFieldChange("addressId", event.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="">Enter a new address</option>
+                  {savedAddresses.map((address) => (
+                    <option key={address.id} value={address.id}>
+                      {address.label || "Address"} - {address.street}, {address.city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>
               <span>
                 Shipping address <span className="required-mark">*</span>

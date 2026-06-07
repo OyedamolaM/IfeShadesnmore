@@ -123,6 +123,55 @@ export function fetchMyOrders() {
   return request("/api/orders/my");
 }
 
+export function fetchAccountDashboard() {
+  return request("/api/account/dashboard");
+}
+
+export function updateAccountPreferences(payload) {
+  return request("/api/account/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createAccountAddress(payload) {
+  return request("/api/account/addresses", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAccountAddress(addressId, payload) {
+  return request(`/api/account/addresses/${encodeURIComponent(addressId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteAccountAddress(addressId) {
+  return request(`/api/account/addresses/${encodeURIComponent(addressId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function setDefaultAccountAddress(addressId) {
+  return request(`/api/account/addresses/${encodeURIComponent(addressId)}/default`, {
+    method: "PATCH"
+  });
+}
+
+export function addWishlistItem(productId) {
+  return request(`/api/account/wishlist/${encodeURIComponent(productId)}`, {
+    method: "POST"
+  });
+}
+
+export function removeWishlistItem(productId) {
+  return request(`/api/account/wishlist/${encodeURIComponent(productId)}`, {
+    method: "DELETE"
+  });
+}
+
 export function fetchAllOrders() {
   return request("/api/orders");
 }

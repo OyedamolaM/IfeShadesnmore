@@ -31,6 +31,10 @@ function sqliteRows(db, sql, params = []) {
   return db.prepare(sql).all(...params);
 }
 
+function sqliteTableExists(db, tableName) {
+  return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName));
+}
+
 async function setSequence(client, table, column) {
   await client.query(
     `
@@ -56,6 +60,8 @@ async function ensurePostgresSchema(client) {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      account_preferences TEXT DEFAULT '{}',
+      notification_preferences TEXT DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -138,6 +144,27 @@ async function ensurePostgresSchema(client) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS account_addresses (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      label TEXT NOT NULL DEFAULT 'Home',
+      name TEXT NOT NULL DEFAULT '',
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      is_default BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS wishlist_items (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, product_id)
+    );
+
     CREATE TABLE IF NOT EXISTS email_verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -149,6 +176,8 @@ async function ensurePostgresSchema(client) {
   `);
 
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_preferences TEXT DEFAULT '{}';`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_preferences TEXT DEFAULT '{}';`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
   await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ DEFAULT NULL;`);
@@ -196,6 +225,12 @@ async function main() {
   const orders = sqliteRows(sqlite, "SELECT * FROM orders ORDER BY created_at ASC");
   const orderItems = sqliteRows(sqlite, "SELECT * FROM order_items ORDER BY id ASC");
   const subscriptions = sqliteRows(sqlite, "SELECT * FROM subscriptions ORDER BY id ASC");
+  const accountAddresses = sqliteTableExists(sqlite, "account_addresses")
+    ? sqliteRows(sqlite, "SELECT * FROM account_addresses ORDER BY id ASC")
+    : [];
+  const wishlistItems = sqliteTableExists(sqlite, "wishlist_items")
+    ? sqliteRows(sqlite, "SELECT * FROM wishlist_items ORDER BY created_at ASC")
+    : [];
   const verificationTokens = sqliteRows(
     sqlite,
     "SELECT * FROM email_verification_tokens ORDER BY id ASC"
@@ -210,9 +245,9 @@ async function main() {
       await client.query(
         `
           INSERT INTO users (
-            id, email, password_hash, role, is_email_verified, full_name, phone, address, city, created_at, updated_at
+            id, email, password_hash, role, is_email_verified, full_name, phone, address, city, account_preferences, notification_preferences, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::timestamptz, CURRENT_TIMESTAMP), COALESCE($11::timestamptz, CURRENT_TIMESTAMP))
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, CURRENT_TIMESTAMP), COALESCE($13::timestamptz, CURRENT_TIMESTAMP))
           ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             password_hash = EXCLUDED.password_hash,
@@ -222,6 +257,8 @@ async function main() {
             phone = EXCLUDED.phone,
             address = EXCLUDED.address,
             city = EXCLUDED.city,
+            account_preferences = EXCLUDED.account_preferences,
+            notification_preferences = EXCLUDED.notification_preferences,
             updated_at = EXCLUDED.updated_at
         `,
         [
@@ -234,6 +271,8 @@ async function main() {
           row.phone || "",
           row.address || "",
           row.city || "",
+          row.account_preferences || "{}",
+          row.notification_preferences || "{}",
           toIsoOrNull(row.created_at),
           toIsoOrNull(row.updated_at)
         ]
@@ -436,6 +475,56 @@ async function main() {
       );
     }
 
+    for (const row of accountAddresses) {
+      await client.query(
+        `
+          INSERT INTO account_addresses (
+            id, user_id, label, name, street, city, state, phone, is_default, created_at, updated_at
+          )
+          VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            COALESCE($10::timestamptz, CURRENT_TIMESTAMP),
+            COALESCE($11::timestamptz, CURRENT_TIMESTAMP)
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            user_id = EXCLUDED.user_id,
+            label = EXCLUDED.label,
+            name = EXCLUDED.name,
+            street = EXCLUDED.street,
+            city = EXCLUDED.city,
+            state = EXCLUDED.state,
+            phone = EXCLUDED.phone,
+            is_default = EXCLUDED.is_default,
+            updated_at = EXCLUDED.updated_at
+        `,
+        [
+          Number(row.id),
+          Number(row.user_id),
+          row.label || "Home",
+          row.name || "",
+          row.street || "",
+          row.city || "",
+          row.state || "",
+          row.phone || "",
+          parseBoolean(row.is_default, false),
+          toIsoOrNull(row.created_at),
+          toIsoOrNull(row.updated_at)
+        ]
+      );
+    }
+
+    for (const row of wishlistItems) {
+      await client.query(
+        `
+          INSERT INTO wishlist_items (user_id, product_id, created_at)
+          VALUES ($1, $2, COALESCE($3::timestamptz, CURRENT_TIMESTAMP))
+          ON CONFLICT (user_id, product_id) DO UPDATE SET
+            created_at = EXCLUDED.created_at
+        `,
+        [Number(row.user_id), row.product_id, toIsoOrNull(row.created_at)]
+      );
+    }
+
     for (const row of verificationTokens) {
       await client.query(
         `
@@ -469,6 +558,7 @@ async function main() {
     await setSequence(client, "users", "id");
     await setSequence(client, "order_items", "id");
     await setSequence(client, "subscriptions", "id");
+    await setSequence(client, "account_addresses", "id");
     await setSequence(client, "email_verification_tokens", "id");
 
     await client.query("COMMIT");

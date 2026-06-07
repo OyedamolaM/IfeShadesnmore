@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import ProductMedia from "../components/product/ProductMedia";
-import { fetchMyOrders, logout, updatePassword, updateProfile } from "../utils/api";
+import {
+  addWishlistItem,
+  createAccountAddress,
+  deleteAccountAddress,
+  fetchAccountDashboard,
+  logout,
+  removeWishlistItem,
+  setDefaultAccountAddress,
+  updateAccountAddress,
+  updateAccountPreferences,
+  updatePassword,
+  updateProfile
+} from "../utils/api";
 import { toPrice } from "../utils/format";
 
 const ACCOUNT_TABS = [
@@ -13,8 +25,6 @@ const ACCOUNT_TABS = [
 ];
 
 const ORDER_TABS = ["All", "Active", "Delivered", "Cancelled"];
-const WISHLIST_STORAGE_KEY = "ife_shadesnmore_customer_wishlist_v1";
-
 function AccountIcon({ name }) {
   const shared = {
     viewBox: "0 0 24 24",
@@ -87,7 +97,7 @@ function AccountBadge({ tone = "neutral", children }) {
   return <span className={`customer-badge customer-badge-${tone}`}>{children}</span>;
 }
 
-function AccountShell({ currentUser, activeTab, setActiveTab, title, subtitle, actions, children, onLogout }) {
+function AccountShell({ currentUser, activeTab, setActiveTab, title, subtitle, actions, children, onLogout, membership }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const fullName = currentUser?.fullName || currentUser?.email || "Customer";
   const initial = String(fullName).trim().charAt(0).toUpperCase() || "I";
@@ -118,8 +128,8 @@ function AccountShell({ currentUser, activeTab, setActiveTab, title, subtitle, a
           ))}
         </nav>
         <div className="customer-member-card">
-          <p>Gold member</p>
-          <span>Free shipping on every order and early access to new drops.</span>
+          <p>{membership?.label || "New member"}</p>
+          <span>{membership?.description || "Place your first paid order to start earning Gold status."}</span>
           <Link to="/"><AccountIcon name="shop" /> Continue shopping</Link>
         </div>
         <div className="customer-owner-card">
@@ -168,32 +178,21 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
   const [notice, setNotice] = useState("");
   const [profileError, setProfileError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [accountError, setAccountError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [profileSection, setProfileSection] = useState("personal");
   const [orderFilter, setOrderFilter] = useState("All");
   const [addressDrawer, setAddressDrawer] = useState(null);
-  const [wishlistIds, setWishlistIds] = useState(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(WISHLIST_STORAGE_KEY) || "[]");
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    } catch {
-      return [];
-    }
+  const [addresses, setAddresses] = useState([]);
+  const [wishlistProducts, setWishlistProducts] = useState([]);
+  const [membership, setMembership] = useState({
+    tier: "new",
+    label: "New member",
+    description: "Place your first paid order to start earning Gold status.",
+    paidOrderCount: 0,
+    totalSpent: 0
   });
-  const [addresses, setAddresses] = useState(() => [
-    {
-      id: "default",
-      label: "Home",
-      name: currentUser?.fullName || "",
-      street: currentUser?.address || "",
-      city: currentUser?.city || "",
-      state: "",
-      phone: currentUser?.phone || "",
-      isDefault: true
-    }
-  ].filter((address) => address.name || address.street || address.phone));
   const [profileDraft, setProfileDraft] = useState({
     fullName: currentUser?.fullName || "",
     phone: currentUser?.phone || "",
@@ -201,11 +200,14 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
     city: currentUser?.city || "",
     frameSize: "Medium",
     prescription: "",
+    frameStyles: [],
+    lensPreferences: [],
     notifications: {
       orders: true,
       restocks: true,
       drops: true,
       offers: false,
+      email: true,
       sms: false
     }
   });
@@ -226,28 +228,36 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
   }, [currentUser]);
 
   useEffect(() => {
-    fetchMyOrders()
-      .then((payload) => setOrders(Array.isArray(payload.orders) ? payload.orders : []))
-      .catch((requestError) => setOrdersError(requestError.message || "Could not fetch orders."));
+    fetchAccountDashboard()
+      .then((payload) => {
+        setOrders(Array.isArray(payload.orders) ? payload.orders : []);
+        setAddresses(Array.isArray(payload.addresses) ? payload.addresses : []);
+        setWishlistProducts(Array.isArray(payload.wishlist) ? payload.wishlist : []);
+        setMembership(payload.membership || membership);
+        setProfileDraft((current) => ({
+          ...current,
+          frameSize: payload.preferences?.frameSize || current.frameSize,
+          prescription: payload.preferences?.prescription || "",
+          frameStyles: Array.isArray(payload.preferences?.frameStyles) ? payload.preferences.frameStyles : [],
+          lensPreferences: Array.isArray(payload.preferences?.lensPreferences) ? payload.preferences.lensPreferences : [],
+          notifications: {
+            ...current.notifications,
+            ...(payload.notifications || {})
+          }
+        }));
+      })
+      .catch((requestError) => setOrdersError(requestError.message || "Could not fetch account dashboard."));
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlistIds));
-  }, [wishlistIds]);
 
   const firstName = String(currentUser?.fullName || "").trim().split(/\s+/)[0] || "there";
   const paidOrders = useMemo(() => orders.filter((order) => String(order.paymentStatus || "").toLowerCase() === "paid"), [orders]);
   const deliveredOrders = useMemo(() => orders.filter((order) => String(order.orderStatus || "").toLowerCase() === "delivered"), [orders]);
   const activeOrders = useMemo(() => orders.filter((order) => ["Processing", "Shipped", "Awaiting payment"].includes(getOrderLabel(order))), [orders]);
   const latestOrder = orders[0] || null;
-  const wishlistProducts = useMemo(() => {
-    const visible = products.filter((product) => normalizeAvailability(product.availability) !== "out_of_stock");
-    const selected = wishlistIds
-      .map((id) => products.find((product) => String(product.id) === String(id)))
-      .filter(Boolean);
-    return selected.length > 0 ? selected : visible.slice(0, 4);
-  }, [products, wishlistIds]);
+  const recommendedProducts = useMemo(
+    () => products.filter((product) => normalizeAvailability(product.availability) !== "out_of_stock").slice(0, 4),
+    [products]
+  );
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -317,22 +327,87 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
     }
   };
 
-  const removeWishlistProduct = (productId) => {
-    setWishlistIds((current) => current.filter((id) => String(id) !== String(productId)));
+  const addRecommendedWishlistProduct = async (productId) => {
+    setAccountError("");
+    try {
+      const payload = await addWishlistItem(productId);
+      setWishlistProducts(Array.isArray(payload.wishlist) ? payload.wishlist : []);
+      setNotice("Wishlist updated.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not update wishlist.");
+    }
   };
 
-  const saveAddress = (address) => {
-    setAddresses((current) => {
-      const normalized = {
-        ...address,
-        id: address.id || `address-${Date.now()}`
-      };
-      const next = address.id
-        ? current.map((item) => (item.id === address.id ? normalized : item))
-        : [...current, normalized];
-      return normalized.isDefault ? next.map((item) => ({ ...item, isDefault: item.id === normalized.id })) : next;
-    });
-    setAddressDrawer(null);
+  const removeWishlistProduct = async (productId) => {
+    setAccountError("");
+    try {
+      const payload = await removeWishlistItem(productId);
+      setWishlistProducts(Array.isArray(payload.wishlist) ? payload.wishlist : []);
+      setNotice("Wishlist updated.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not update wishlist.");
+    }
+  };
+
+  const saveAddress = async (address) => {
+    setAccountError("");
+    try {
+      const payload = address.id
+        ? await updateAccountAddress(address.id, address)
+        : await createAccountAddress(address);
+      setAddresses(Array.isArray(payload.addresses) ? payload.addresses : []);
+      setAddressDrawer(null);
+      setNotice("Address saved.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not save address.");
+    }
+  };
+
+  const removeAddress = async (addressId) => {
+    setAccountError("");
+    try {
+      const payload = await deleteAccountAddress(addressId);
+      setAddresses(Array.isArray(payload.addresses) ? payload.addresses : []);
+      setNotice("Address removed.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not remove address.");
+    }
+  };
+
+  const markDefaultAddress = async (addressId) => {
+    setAccountError("");
+    try {
+      const payload = await setDefaultAccountAddress(addressId);
+      setAddresses(Array.isArray(payload.addresses) ? payload.addresses : []);
+      setNotice("Default address updated.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not update address.");
+    }
+  };
+
+  const saveAccountPreferences = async () => {
+    setAccountError("");
+    setNotice("");
+    try {
+      const payload = await updateAccountPreferences({
+        frameSize: profileDraft.frameSize,
+        prescription: profileDraft.prescription,
+        frameStyles: profileDraft.frameStyles,
+        lensPreferences: profileDraft.lensPreferences,
+        notifications: profileDraft.notifications
+      });
+      setProfileDraft((current) => ({
+        ...current,
+        ...(payload.preferences || {}),
+        notifications: {
+          ...current.notifications,
+          ...(payload.notifications || {})
+        }
+      }));
+      setNotice("Preferences saved.");
+    } catch (requestError) {
+      setAccountError(requestError.message || "Could not save preferences.");
+    }
   };
 
   const pageTitle = activeTab === "overview" ? `Hi, ${firstName}` : ACCOUNT_TABS.find((tab) => tab.id === activeTab)?.label || "Account";
@@ -359,9 +434,11 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
       subtitle={pageSubtitle}
       actions={actions}
       onLogout={signOut}
+      membership={membership}
     >
       {notice ? <p className="customer-toast-note">{notice}</p> : null}
       {ordersError ? <p className="customer-error-note">{ordersError}</p> : null}
+      {accountError ? <p className="customer-error-note">{accountError}</p> : null}
 
       {activeTab === "overview" ? (
         <OverviewSection
@@ -371,6 +448,7 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
           latestOrder={latestOrder}
           orders={orders}
           wishlistCount={wishlistProducts.length}
+          membership={membership}
           setActiveTab={setActiveTab}
         />
       ) : null}
@@ -385,13 +463,19 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
       ) : null}
 
       {activeTab === "wishlist" ? (
-        <WishlistSection products={wishlistProducts} onRemove={removeWishlistProduct} />
+        <WishlistSection
+          products={wishlistProducts}
+          recommendedProducts={recommendedProducts}
+          onAdd={addRecommendedWishlistProduct}
+          onRemove={removeWishlistProduct}
+        />
       ) : null}
 
       {activeTab === "addresses" ? (
         <AddressesSection
           addresses={addresses}
-          setAddresses={setAddresses}
+          onSetDefault={markDefaultAddress}
+          onRemove={removeAddress}
           onEdit={(address) => setAddressDrawer(address)}
           onAdd={() => setAddressDrawer({})}
         />
@@ -411,6 +495,7 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
           isSaving={isSaving}
           isChangingPassword={isChangingPassword}
           onSaveProfile={saveProfile}
+          onSavePreferences={saveAccountPreferences}
           onChangePassword={changePassword}
         />
       ) : null}
@@ -427,7 +512,7 @@ function AccountPage({ currentUser, onLoggedOut, onUserUpdated, products = [] })
   );
 }
 
-function OverviewSection({ activeOrders, deliveredOrders, paidOrders, latestOrder, orders, wishlistCount, setActiveTab }) {
+function OverviewSection({ activeOrders, deliveredOrders, paidOrders, latestOrder, orders, wishlistCount, membership, setActiveTab }) {
   return (
     <>
       <div className="customer-stats-grid">
@@ -436,6 +521,15 @@ function OverviewSection({ activeOrders, deliveredOrders, paidOrders, latestOrde
         <CustomerStat icon="heart" label="Wishlist" value={String(wishlistCount)} hint="Saved frames" />
         <CustomerStat icon="user" label="Total spent" value={toPrice(paidOrders.reduce((sum, order) => sum + getOrderTotal(order), 0))} hint="Paid orders" />
       </div>
+
+      <section className={`customer-membership-card is-${membership.tier || "new"}`}>
+        <div>
+          <p>Membership</p>
+          <h2>{membership.label}</h2>
+          <span>{membership.description}</span>
+        </div>
+        <strong>{membership.paidOrderCount || 0} paid order{Number(membership.paidOrderCount || 0) === 1 ? "" : "s"}</strong>
+      </section>
 
       <section className="customer-tracking-card">
         <div>
@@ -573,15 +667,35 @@ function OrderProgress({ order }) {
   );
 }
 
-function WishlistSection({ products, onRemove }) {
+function WishlistSection({ products, recommendedProducts, onAdd, onRemove }) {
   if (products.length === 0) {
     return (
-      <section className="customer-empty-state">
-        <AccountIcon name="heart" />
-        <h2>Your wishlist is empty</h2>
-        <p>Tap save on frames you love, then come back when you are ready.</p>
-        <Link to="/" className="customer-primary-button">Browse frames</Link>
-      </section>
+      <>
+        <section className="customer-empty-state">
+          <AccountIcon name="heart" />
+          <h2>Your wishlist is empty</h2>
+          <p>Save frames here and they will stay tied to your account.</p>
+          <Link to="/" className="customer-primary-button">Browse frames</Link>
+        </section>
+        {recommendedProducts.length > 0 ? (
+          <section className="customer-panel customer-recommendations">
+            <header><h2>Recommended to save</h2></header>
+            <div className="customer-wishlist-grid">
+              {recommendedProducts.map((product) => (
+                <article key={product.id} className="customer-wishlist-card">
+                  <div><ProductMedia product={product} /></div>
+                  <section>
+                    <h2>{product.name}</h2>
+                    <strong>{toPrice(product.price)}</strong>
+                    <p>{product.description || "Save for later"}</p>
+                    <button type="button" className="customer-secondary-button" onClick={() => onAdd(product.id)}><AccountIcon name="heart" /> Save frame</button>
+                  </section>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </>
     );
   }
 
@@ -608,9 +722,7 @@ function WishlistSection({ products, onRemove }) {
   );
 }
 
-function AddressesSection({ addresses, setAddresses, onEdit, onAdd }) {
-  const setDefault = (id) => setAddresses((current) => current.map((address) => ({ ...address, isDefault: address.id === id })));
-  const remove = (id) => setAddresses((current) => current.filter((address) => address.id !== id));
+function AddressesSection({ addresses, onSetDefault, onRemove, onEdit, onAdd }) {
   return (
     <div className="customer-address-grid">
       {addresses.map((address) => (
@@ -623,14 +735,14 @@ function AddressesSection({ addresses, setAddresses, onEdit, onAdd }) {
             </div>
             <div>
               <button type="button" onClick={() => onEdit(address)} aria-label="Edit address"><AccountIcon name="edit" /></button>
-              <button type="button" onClick={() => remove(address.id)} aria-label="Delete address"><AccountIcon name="trash" /></button>
+              <button type="button" onClick={() => onRemove(address.id)} aria-label="Delete address"><AccountIcon name="trash" /></button>
             </div>
           </header>
           <p><strong>{address.name || "Customer"}</strong></p>
           <p>{address.street || "No street address added"}</p>
           <p>{[address.city, address.state].filter(Boolean).join(", ") || "No city added"}</p>
           <p>{address.phone || "No phone added"}</p>
-          {!address.isDefault ? <button type="button" onClick={() => setDefault(address.id)}>Set as default</button> : null}
+          {!address.isDefault ? <button type="button" onClick={() => onSetDefault(address.id)}>Set as default</button> : null}
         </article>
       ))}
       <button type="button" className="customer-add-address" onClick={onAdd}>
@@ -700,12 +812,21 @@ function PersonalProfile({ currentUser, profileDraft, setProfileDraft, profileEr
   );
 }
 
-function PreferenceProfile({ profileDraft, setProfileDraft }) {
+function PreferenceProfile({ profileDraft, setProfileDraft, onSavePreferences }) {
+  const toggleArrayValue = (field, value) => {
+    setProfileDraft((current) => {
+      const values = Array.isArray(current[field]) ? current[field] : [];
+      const next = values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+      return { ...current, [field]: next };
+    });
+  };
   return (
     <ProfileCard title="Frame preferences" subtitle="Helps us recommend frames that fit and flatter.">
       <Field label="Preferred frame style">
         <div className="customer-choice-list">
-          {["Round", "Square", "Cat-eye", "Aviator", "Browline", "Oversized"].map((style) => <button key={style} type="button">{style}</button>)}
+          {["Round", "Square", "Cat-eye", "Aviator", "Browline", "Oversized"].map((style) => (
+            <button key={style} type="button" className={profileDraft.frameStyles.includes(style) ? "is-active" : ""} onClick={() => toggleArrayValue("frameStyles", style)}>{style}</button>
+          ))}
         </div>
       </Field>
       <Field label="Frame size">
@@ -720,19 +841,23 @@ function PreferenceProfile({ profileDraft, setProfileDraft }) {
       </Field>
       <Field label="Lens preference">
         <div className="customer-checkbox-grid">
-          {["Anti-blue light", "Polarized", "Photochromic", "Standard clear"].map((lens) => <label key={lens}><input type="checkbox" />{lens}</label>)}
+          {["Anti-blue light", "Polarized", "Photochromic", "Standard clear"].map((lens) => (
+            <label key={lens}><input type="checkbox" checked={profileDraft.lensPreferences.includes(lens)} onChange={() => toggleArrayValue("lensPreferences", lens)} />{lens}</label>
+          ))}
         </div>
       </Field>
+      <footer><button type="button" className="customer-primary-button" onClick={onSavePreferences}>Save preferences</button></footer>
     </ProfileCard>
   );
 }
 
-function NotificationProfile({ profileDraft, setProfileDraft }) {
+function NotificationProfile({ profileDraft, setProfileDraft, onSavePreferences }) {
   const toggles = [
     ["orders", "Order updates", "Confirmation, packing, shipping and delivery alerts."],
     ["restocks", "Restock alerts", "Tell me when wishlist items are back in stock."],
     ["drops", "New drops", "Be the first to see new collections."],
     ["offers", "Promotions & offers", "Exclusive member deals."],
+    ["email", "Email notifications", "Use email for account and campaign messages."],
     ["sms", "SMS notifications", "Receive important alerts via text."]
   ];
   return (
@@ -743,6 +868,7 @@ function NotificationProfile({ profileDraft, setProfileDraft }) {
           <button type="button" className={profileDraft.notifications[key] ? "is-on" : ""} onClick={() => setProfileDraft((current) => ({ ...current, notifications: { ...current.notifications, [key]: !current.notifications[key] } }))}><i /></button>
         </div>
       ))}
+      <footer><button type="button" className="customer-primary-button" onClick={onSavePreferences}>Save notifications</button></footer>
     </ProfileCard>
   );
 }

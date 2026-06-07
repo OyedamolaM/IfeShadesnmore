@@ -253,6 +253,24 @@ export async function handleApiRequest(request, splat = "") {
     if (method === "POST" && pathname === "/api/auth/logout") return logout();
     if (method === "PATCH" && pathname === "/api/auth/profile") return updateProfile(request);
     if (method === "PATCH" && pathname === "/api/auth/password") return updatePassword(request);
+    if (method === "GET" && pathname === "/api/account/dashboard") return getAccountDashboard(request);
+    if (method === "PATCH" && pathname === "/api/account/preferences") return updateAccountPreferences(request);
+    if (method === "POST" && pathname === "/api/account/addresses") return createAccountAddress(request);
+    if (method === "PUT" && match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)) {
+      return updateAccountAddress(request, decodeURIComponent(match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)[1]));
+    }
+    if (method === "DELETE" && match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)) {
+      return deleteAccountAddress(request, decodeURIComponent(match(pathname, /^\/api\/account\/addresses\/([^/]+)$/)[1]));
+    }
+    if (method === "PATCH" && match(pathname, /^\/api\/account\/addresses\/([^/]+)\/default$/)) {
+      return setDefaultAccountAddress(request, decodeURIComponent(match(pathname, /^\/api\/account\/addresses\/([^/]+)\/default$/)[1]));
+    }
+    if (method === "POST" && match(pathname, /^\/api\/account\/wishlist\/([^/]+)$/)) {
+      return addWishlistItem(request, decodeURIComponent(match(pathname, /^\/api\/account\/wishlist\/([^/]+)$/)[1]));
+    }
+    if (method === "DELETE" && match(pathname, /^\/api\/account\/wishlist\/([^/]+)$/)) {
+      return removeWishlistItem(request, decodeURIComponent(match(pathname, /^\/api\/account\/wishlist\/([^/]+)$/)[1]));
+    }
     if (method === "GET" && pathname === "/api/orders/my") return getMyOrders(request);
     if (method === "GET" && pathname === "/api/orders") return getAllOrders(request);
     if (method === "POST" && pathname === "/api/orders") return createAdminOrder(request);
@@ -655,6 +673,7 @@ const checkoutSchema = z.object({
   items: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1).max(99) })).min(1),
   paymentMethod: z.enum(["card", "transfer"]),
   shippingTierId: z.string().min(1).max(80),
+  addressId: z.coerce.number().int().positive().optional(),
   customer: z
     .object({
       firstName: z.string().max(60).optional().default(""),
@@ -675,6 +694,29 @@ const checkoutSchema = z.object({
         Boolean(`${value.fullName || ""}`.trim()),
       { message: "First and last name are required.", path: ["firstName"] }
     )
+});
+const addressSchema = z.object({
+  label: z.enum(["Home", "Work", "Other"]).optional().default("Home"),
+  name: z.string().max(120).optional().default(""),
+  street: z.string().min(1).max(300),
+  city: z.string().min(1).max(120),
+  state: z.string().max(120).optional().default(""),
+  phone: z.string().max(40).optional().default(""),
+  isDefault: z.boolean().optional().default(false)
+});
+const accountPreferencesSchema = z.object({
+  frameStyles: z.array(z.string().max(40)).max(12).optional(),
+  frameSize: z.enum(["Small", "Medium", "Large"]).optional(),
+  prescription: z.string().max(600).optional(),
+  lensPreferences: z.array(z.string().max(80)).max(12).optional(),
+  notifications: z.object({
+    orders: z.boolean().optional(),
+    restocks: z.boolean().optional(),
+    drops: z.boolean().optional(),
+    offers: z.boolean().optional(),
+    email: z.boolean().optional(),
+    sms: z.boolean().optional()
+  }).optional()
 });
 const orderStatusSchema = z.object({ orderStatus: z.enum(["processing", "shipped", "delivered", "cancelled"]) });
 const adminCustomerSchema = z.object({
@@ -713,6 +755,7 @@ const subscriptionUpdateSchema = z.object({
 const newsletterSendSchema = z.object({
   subject: z.string().min(1).max(180),
   message: z.string().min(1).max(8000),
+  campaignType: z.enum(["general", "drops", "restocks", "offers"]).optional().default("general"),
   excludedSubscriptionIds: z.array(z.coerce.number().int().positive()).max(1000).optional().default([])
 });
 
@@ -947,6 +990,228 @@ async function withOrderItems(rows) {
   return Promise.all(rows.map(async (row) => ({ ...mapOrderRow(row), items: await getOrderItems(row.id) })));
 }
 
+const DEFAULT_ACCOUNT_PREFERENCES = {
+  frameStyles: [],
+  frameSize: "Medium",
+  prescription: "",
+  lensPreferences: []
+};
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  orders: true,
+  restocks: true,
+  drops: true,
+  offers: false,
+  email: true,
+  sms: false
+};
+
+function parseJsonObject(value, fallback) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...fallback, ...parsed } : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function mapAddressRow(row) {
+  return {
+    id: Number(row.id),
+    label: row.label || "Home",
+    name: row.name || "",
+    street: row.street || "",
+    city: row.city || "",
+    state: row.state || "",
+    phone: row.phone || "",
+    isDefault: toBoolean(row.is_default),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getAccountAddresses(userId) {
+  const rows = await queryAll("SELECT * FROM account_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC", [userId]);
+  return rows.map(mapAddressRow);
+}
+
+async function getWishlistProducts(userId) {
+  const rows = await queryAll(
+    `
+      SELECT p.*, w.created_at AS saved_at
+      FROM wishlist_items w
+      JOIN products p ON p.id = w.product_id
+      WHERE w.user_id = ?
+      ORDER BY w.created_at DESC
+    `,
+    [userId]
+  );
+  return rows.map((row) => ({ ...mapProductRow(row), savedAt: row.saved_at }));
+}
+
+function buildMembership(orders) {
+  const paidOrders = orders.filter((order) => String(order.paymentStatus || "").toLowerCase() === "paid");
+  const totalSpent = paidOrders.reduce((sum, order) => sum + (Number(order.total ?? order.subtotal) || 0), 0);
+  if (paidOrders.length >= 5 || totalSpent >= 100000) {
+    return {
+      tier: "gold",
+      label: "Gold member",
+      description: "Free shipping rewards and early access are active.",
+      paidOrderCount: paidOrders.length,
+      totalSpent
+    };
+  }
+  if (paidOrders.length > 0) {
+    return {
+      tier: "member",
+      label: "Member",
+      description: `${Math.max(0, 5 - paidOrders.length)} paid order${5 - paidOrders.length === 1 ? "" : "s"} to Gold.`,
+      paidOrderCount: paidOrders.length,
+      totalSpent
+    };
+  }
+  return {
+    tier: "new",
+    label: "New member",
+    description: "Place your first paid order to start earning Gold status.",
+    paidOrderCount: 0,
+    totalSpent: 0
+  };
+}
+
+async function getNotificationPreferencesForUserId(userId) {
+  const row = await queryOne("SELECT notification_preferences FROM users WHERE id = ?", [userId]);
+  return parseJsonObject(row?.notification_preferences, DEFAULT_NOTIFICATION_PREFERENCES);
+}
+
+async function getNotificationPreferencesForEmail(email) {
+  const row = await queryOne("SELECT notification_preferences FROM users WHERE lower(email) = lower(?)", [normalizeEmail(email)]);
+  return parseJsonObject(row?.notification_preferences, DEFAULT_NOTIFICATION_PREFERENCES);
+}
+
+async function getAccountDashboard(request) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const userRow = await queryOne("SELECT * FROM users WHERE id = ?", [auth.user.id]);
+  const orderRows = await queryAll("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC", [auth.user.id]);
+  const orders = await withOrderItems(orderRows);
+  const accountPreferences = parseJsonObject(userRow.account_preferences, DEFAULT_ACCOUNT_PREFERENCES);
+  const notificationPreferences = parseJsonObject(userRow.notification_preferences, DEFAULT_NOTIFICATION_PREFERENCES);
+  return json({
+    user: mapUserRow(userRow),
+    orders,
+    addresses: await getAccountAddresses(auth.user.id),
+    wishlist: await getWishlistProducts(auth.user.id),
+    preferences: accountPreferences,
+    notifications: notificationPreferences,
+    membership: buildMembership(orders)
+  });
+}
+
+async function updateAccountPreferences(request) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const parsed = accountPreferencesSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid account preferences." }, 400);
+  const userRow = await queryOne("SELECT account_preferences, notification_preferences FROM users WHERE id = ?", [auth.user.id]);
+  const currentPrefs = parseJsonObject(userRow.account_preferences, DEFAULT_ACCOUNT_PREFERENCES);
+  const currentNotifications = parseJsonObject(userRow.notification_preferences, DEFAULT_NOTIFICATION_PREFERENCES);
+  const nextPrefs = {
+    ...currentPrefs,
+    ...(parsed.data.frameStyles ? { frameStyles: parsed.data.frameStyles } : {}),
+    ...(parsed.data.frameSize ? { frameSize: parsed.data.frameSize } : {}),
+    ...(typeof parsed.data.prescription === "string" ? { prescription: parsed.data.prescription } : {}),
+    ...(parsed.data.lensPreferences ? { lensPreferences: parsed.data.lensPreferences } : {})
+  };
+  const nextNotifications = {
+    ...currentNotifications,
+    ...(parsed.data.notifications || {})
+  };
+  await execute(
+    "UPDATE users SET account_preferences = ?, notification_preferences = ?, updated_at = datetime('now') WHERE id = ?",
+    [JSON.stringify(nextPrefs), JSON.stringify(nextNotifications), auth.user.id]
+  );
+  return json({ preferences: nextPrefs, notifications: nextNotifications });
+}
+
+async function createAccountAddress(request) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const parsed = addressSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid address." }, 400);
+  const existingCount = Number((await queryOne("SELECT COUNT(*) AS count FROM account_addresses WHERE user_id = ?", [auth.user.id]))?.count || 0);
+  const shouldDefault = parsed.data.isDefault || existingCount === 0;
+  await withTransaction(async (tx) => {
+    if (shouldDefault) await tx.execute("UPDATE account_addresses SET is_default = false, updated_at = datetime('now') WHERE user_id = ?", [auth.user.id]);
+    await tx.execute(
+      "INSERT INTO account_addresses (user_id, label, name, street, city, state, phone, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [auth.user.id, parsed.data.label, parsed.data.name.trim(), parsed.data.street.trim(), parsed.data.city.trim(), parsed.data.state.trim(), parsed.data.phone.trim(), shouldDefault]
+    );
+  });
+  return json({ addresses: await getAccountAddresses(auth.user.id) }, 201);
+}
+
+async function updateAccountAddress(request, id) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const addressId = Number(id);
+  if (!Number.isInteger(addressId) || addressId <= 0) return json({ error: "Invalid address id." }, 400);
+  const parsed = addressSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid address." }, 400);
+  const existing = await queryOne("SELECT id FROM account_addresses WHERE id = ? AND user_id = ?", [addressId, auth.user.id]);
+  if (!existing) return json({ error: "Address not found." }, 404);
+  await withTransaction(async (tx) => {
+    if (parsed.data.isDefault) await tx.execute("UPDATE account_addresses SET is_default = false, updated_at = datetime('now') WHERE user_id = ?", [auth.user.id]);
+    await tx.execute(
+      "UPDATE account_addresses SET label = ?, name = ?, street = ?, city = ?, state = ?, phone = ?, is_default = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      [parsed.data.label, parsed.data.name.trim(), parsed.data.street.trim(), parsed.data.city.trim(), parsed.data.state.trim(), parsed.data.phone.trim(), parsed.data.isDefault, addressId, auth.user.id]
+    );
+  });
+  return json({ addresses: await getAccountAddresses(auth.user.id) });
+}
+
+async function deleteAccountAddress(request, id) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const addressId = Number(id);
+  if (!Number.isInteger(addressId) || addressId <= 0) return json({ error: "Invalid address id." }, 400);
+  await execute("DELETE FROM account_addresses WHERE id = ? AND user_id = ?", [addressId, auth.user.id]);
+  const addresses = await getAccountAddresses(auth.user.id);
+  if (addresses.length > 0 && !addresses.some((address) => address.isDefault)) {
+    await execute("UPDATE account_addresses SET is_default = true, updated_at = datetime('now') WHERE id = ? AND user_id = ?", [addresses[0].id, auth.user.id]);
+  }
+  return json({ addresses: await getAccountAddresses(auth.user.id) });
+}
+
+async function setDefaultAccountAddress(request, id) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const addressId = Number(id);
+  if (!Number.isInteger(addressId) || addressId <= 0) return json({ error: "Invalid address id." }, 400);
+  const existing = await queryOne("SELECT id FROM account_addresses WHERE id = ? AND user_id = ?", [addressId, auth.user.id]);
+  if (!existing) return json({ error: "Address not found." }, 404);
+  await withTransaction(async (tx) => {
+    await tx.execute("UPDATE account_addresses SET is_default = false, updated_at = datetime('now') WHERE user_id = ?", [auth.user.id]);
+    await tx.execute("UPDATE account_addresses SET is_default = true, updated_at = datetime('now') WHERE id = ? AND user_id = ?", [addressId, auth.user.id]);
+  });
+  return json({ addresses: await getAccountAddresses(auth.user.id) });
+}
+
+async function addWishlistItem(request, productId) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  const product = await queryOne("SELECT id FROM products WHERE id = ?", [productId]);
+  if (!product) return json({ error: "Product not found." }, 404);
+  await execute("INSERT INTO wishlist_items (user_id, product_id) VALUES (?, ?) ON CONFLICT(user_id, product_id) DO NOTHING", [auth.user.id, productId]);
+  return json({ wishlist: await getWishlistProducts(auth.user.id) }, 201);
+}
+
+async function removeWishlistItem(request, productId) {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+  await execute("DELETE FROM wishlist_items WHERE user_id = ? AND product_id = ?", [auth.user.id, productId]);
+  return json({ wishlist: await getWishlistProducts(auth.user.id) });
+}
+
 async function getMyOrders(request) {
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
@@ -1115,13 +1380,19 @@ async function initializeCheckout(request) {
   const orderId = createOrderId();
   const reference = createPaymentReference();
   const customer = payload.customer;
-  const customerFullName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || customer.fullName.trim();
+  const savedAddress = payload.addressId
+    ? await queryOne("SELECT * FROM account_addresses WHERE id = ? AND user_id = ?", [payload.addressId, auth.user.id])
+    : null;
+  if (payload.addressId && !savedAddress) return json({ error: "Selected address was not found." }, 400);
+  const customerFullName = (savedAddress?.name || `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || customer.fullName.trim()).trim();
   const customerEmail = normalizeEmail(customer.email || "");
-  const customerPhone = String(customer.phone || "").trim();
+  const customerPhone = String(savedAddress?.phone || customer.phone || "").trim();
+  const shippingAddress = String(savedAddress?.street || customer.address || "").trim();
+  const shippingCity = String(savedAddress?.city || customer.city || "").trim();
   await withTransaction(async (tx) => {
     await tx.execute(
       "INSERT INTO orders (id, user_id, email, full_name, phone, address, city, payment_method, payment_reference, payment_status, order_status, shipping_tier_id, shipping_tier_name, shipping_fee, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'processing', ?, ?, ?, ?)",
-      [orderId, auth.user.id, customerEmail || auth.user.email, customerFullName, customerPhone, customer.address.trim(), customer.city.trim(), payload.paymentMethod, reference, shippingTier.id, shippingTier.name, shippingFee, subtotal]
+      [orderId, auth.user.id, customerEmail || auth.user.email, customerFullName, customerPhone, shippingAddress, shippingCity, payload.paymentMethod, reference, shippingTier.id, shippingTier.name, shippingFee, subtotal]
     );
     for (const item of validItems) {
       await tx.execute(
@@ -1142,8 +1413,8 @@ async function initializeCheckout(request) {
     await execute("UPDATE users SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now') WHERE id = ?", [
       customerFullName,
       customerPhone,
-      customer.address.trim(),
-      customer.city.trim(),
+      shippingAddress,
+      shippingCity,
       auth.user.id
     ]);
     return json({ orderId, reference, authorizationUrl: checkout.authorization_url, accessCode: checkout.access_code });
@@ -1530,9 +1801,19 @@ async function sendNewsletter(request) {
   if (recipients.length === 0) return json({ error: "No eligible subscribers to send to." }, 400);
 
   let deliveredCount = 0;
+  let skippedCount = 0;
   const failed = [];
   for (const subscription of recipients) {
     try {
+      const notificationPreferences = await getNotificationPreferencesForEmail(subscription.email);
+      if (notificationPreferences.email === false) {
+        skippedCount += 1;
+        continue;
+      }
+      if (parsed.data.campaignType !== "general" && notificationPreferences[parsed.data.campaignType] === false) {
+        skippedCount += 1;
+        continue;
+      }
       const result = await sendNewsletterCampaign({
         toEmail: subscription.email,
         subject: parsed.data.subject.trim(),
@@ -1554,6 +1835,7 @@ async function sendNewsletter(request) {
     ok: true,
     attemptedCount: recipients.length,
     deliveredCount,
+    skippedCount,
     failedCount: failed.length,
     failed: failed.slice(0, 10)
   });
@@ -1721,6 +2003,10 @@ async function sendCustomerOrderAlertSafe({ orderId }) {
   if (!row || row.customer_notified_at) return { delivered: Boolean(row?.customer_notified_at) };
   const toEmail = normalizeEmail(row.email || "");
   if (!toEmail) return { delivered: false, skipped: "missing_customer_email" };
+  const notificationPreferences = await getNotificationPreferencesForUserId(row.user_id);
+  if (notificationPreferences.email === false || notificationPreferences.orders === false) {
+    return { delivered: false, skipped: "customer_notifications_disabled" };
+  }
   try {
     const result = await sendCustomerOrderConfirmation({ toEmail, order: mapOrderRow(row), items: await getOrderItems(orderId) });
     if (result?.delivered) {

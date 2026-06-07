@@ -4248,6 +4248,48 @@ select {
   padding: 1.5rem;
 }
 
+.customer-membership-card {
+  border: 1px solid var(--customer-border);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--customer-gold) 10%, transparent), var(--customer-card));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.customer-membership-card.is-new {
+  background: var(--customer-card);
+}
+
+.customer-membership-card p {
+  margin: 0;
+  color: var(--customer-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.customer-membership-card h2 {
+  margin: 0.35rem 0;
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 400;
+}
+
+.customer-membership-card span {
+  color: var(--customer-muted);
+  font-size: 0.8125rem;
+}
+
+.customer-membership-card strong {
+  color: var(--customer-gold);
+  font-family: "Syne", ui-serif, system-ui, sans-serif;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .customer-tracking-card h2 {
   margin-top: 0.5rem;
   font-size: 1.5rem;
@@ -4765,6 +4807,12 @@ select {
   color: var(--customer-fg);
   cursor: pointer;
   padding: 0.55rem 0.85rem;
+}
+
+.customer-choice-list button.is-active {
+  border-color: var(--customer-gold);
+  background: color-mix(in srgb, var(--customer-gold) 10%, transparent);
+  color: var(--customer-gold);
 }
 
 .customer-segmented {

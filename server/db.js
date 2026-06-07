@@ -341,6 +341,8 @@ async function runMigrationsSqlite() {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      account_preferences TEXT DEFAULT '{}',
+      notification_preferences TEXT DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -438,6 +440,30 @@ async function runMigrationsSqlite() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS account_addresses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      label TEXT NOT NULL DEFAULT 'Home',
+      name TEXT NOT NULL DEFAULT '',
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS wishlist_items (
+      user_id INTEGER NOT NULL,
+      product_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY(user_id, product_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS email_verification_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -469,6 +495,12 @@ async function runMigrationsSqlite() {
   }
   if (!userColumns.some((column) => column.name === "auth_provider")) {
     sqliteDb.exec(`ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'password'`);
+  }
+  if (!userColumns.some((column) => column.name === "account_preferences")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN account_preferences TEXT DEFAULT '{}'`);
+  }
+  if (!userColumns.some((column) => column.name === "notification_preferences")) {
+    sqliteDb.exec(`ALTER TABLE users ADD COLUMN notification_preferences TEXT DEFAULT '{}'`);
   }
   sqliteDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != ''`);
 
@@ -560,6 +592,8 @@ async function runMigrationsPostgres() {
       phone TEXT DEFAULT '',
       address TEXT DEFAULT '',
       city TEXT DEFAULT '',
+      account_preferences TEXT DEFAULT '{}',
+      notification_preferences TEXT DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -655,6 +689,27 @@ async function runMigrationsPostgres() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS account_addresses (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      label TEXT NOT NULL DEFAULT 'Home',
+      name TEXT NOT NULL DEFAULT '',
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      is_default BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS wishlist_items (
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, product_id)
+    );
+
     CREATE TABLE IF NOT EXISTS email_verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -668,6 +723,8 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT TRUE;`);
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'password';`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_preferences TEXT DEFAULT '{}';`);
+  await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_preferences TEXT DEFAULT '{}';`);
   await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL AND google_sub != '';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT NOT NULL DEFAULT 'processing';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ DEFAULT NULL;`);
