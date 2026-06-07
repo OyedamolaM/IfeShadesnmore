@@ -696,6 +696,51 @@ export async function sendNewsletterAdminNotification({ toEmail, subscriberEmail
   });
 }
 
+export async function sendNewsletterCampaign({ toEmail, subject, message, unsubscribeUrl }) {
+  const safeEmail = String(toEmail || "").trim();
+  const safeSubject = String(subject || "").trim();
+  const safeMessage = String(message || "").trim();
+  const safeUnsubscribeUrl = String(unsubscribeUrl || "").trim();
+  const paragraphs = safeMessage
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const htmlMessage = paragraphs.length
+    ? paragraphs.map((paragraph) => `<p style="margin:0 0 14px;line-height:1.65;">${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`).join("")
+    : `<p style="margin:0 0 14px;line-height:1.65;">${escapeHtml(safeMessage)}</p>`;
+
+  const text = [
+    safeMessage,
+    "",
+    "You are receiving this because you subscribed to IfeShadesnMore updates.",
+    safeUnsubscribeUrl ? `Opt out here: ${safeUnsubscribeUrl}` : "",
+    "",
+    `Sent to: ${safeEmail}`
+  ].filter((line) => line !== "").join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f1a17;background:#fdf8f3;padding:28px;">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #eadfd4;border-radius:18px;padding:28px;">
+        <p style="margin:0 0 8px;color:#c96e4c;font-size:11px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">IfeShadesnMore</p>
+        <h1 style="margin:0 0 18px;font-family:Georgia,serif;font-size:30px;line-height:1.1;color:#2d1b11;">${escapeHtml(safeSubject)}</h1>
+        ${htmlMessage}
+        <hr style="border:0;border-top:1px solid #eadfd4;margin:24px 0;" />
+        <p style="margin:0 0 8px;color:#7b6f68;font-size:12px;line-height:1.55;">You are receiving this because you subscribed to IfeShadesnMore updates.</p>
+        ${safeUnsubscribeUrl ? `<p style="margin:0;color:#7b6f68;font-size:12px;"><a href="${escapeHtml(safeUnsubscribeUrl)}" style="color:#c96e4c;">Opt out of newsletters</a></p>` : ""}
+      </div>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject: safeSubject,
+    text,
+    html,
+    logPrefix: "[newsletter-campaign]",
+    from: getSenderFromEnv("NEWSLETTER_MAIL_FROM")
+  });
+}
+
 export async function sendAccountWelcome({ toEmail, fullName }) {
   const greetingName = String(fullName || "").trim() || "there";
   const subject = "Welcome to IfeShadesnMore";

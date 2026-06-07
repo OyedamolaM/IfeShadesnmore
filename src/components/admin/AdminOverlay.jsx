@@ -18,8 +18,10 @@ import {
   fetchAdminCustomers,
   fetchAllOrders,
   fetchSubscriptions,
+  sendNewsletter,
   updateBlog,
   updateOrderStatus,
+  updateSubscription,
   uploadImage
 } from "../../utils/api";
 
@@ -28,6 +30,7 @@ const ADMIN_TABS = [
   { id: "orders", label: "Orders", icon: "orders" },
   { id: "customers", label: "Customers", icon: "customers" },
   { id: "subscribers", label: "Subscribers", icon: "subscribers" },
+  { id: "blogs", label: "Blogs", icon: "blogs" },
   { id: "products", label: "Products", icon: "products" },
   { id: "settings", label: "Settings", icon: "settings" }
 ];
@@ -53,6 +56,7 @@ const ADMIN_PAGE_COPY = {
   orders: ["Orders", "Manage fulfillment, payments and delivery in one place."],
   customers: ["Customers", "People who shop with you. Tap a row for full history."],
   subscribers: ["Subscribers", "Your newsletter audience. Ready to ship the next drop."],
+  blogs: ["Blogs", "Write and publish journal posts for the storefront."],
   products: ["Products", "Your catalog. Add, edit, or restock in seconds."],
   settings: ["Store settings", "Control your brand text, homepage content and account preferences."]
 };
@@ -77,6 +81,10 @@ const EMPTY_CUSTOMER_DRAFT = {
 const EMPTY_SUBSCRIBER_DRAFT = {
   email: "",
   source: "admin"
+};
+const EMPTY_NEWSLETTER_DRAFT = {
+  subject: "",
+  message: ""
 };
 const EMPTY_ORDER_DRAFT = {
   customerId: "",
@@ -373,9 +381,11 @@ function AdminOverlay({
   const [blogDraft, setBlogDraft] = useState(EMPTY_BLOG_DRAFT);
   const [customerDraft, setCustomerDraft] = useState(EMPTY_CUSTOMER_DRAFT);
   const [subscriberDraft, setSubscriberDraft] = useState(EMPTY_SUBSCRIBER_DRAFT);
+  const [newsletterDraft, setNewsletterDraft] = useState(EMPTY_NEWSLETTER_DRAFT);
+  const [newsletterExcludedIds, setNewsletterExcludedIds] = useState([]);
+  const [isSendingNewsletter, setIsSendingNewsletter] = useState(false);
   const [orderDraft, setOrderDraft] = useState(EMPTY_ORDER_DRAFT);
   const [isEditingBlog, setIsEditingBlog] = useState(false);
-  const [blogMessage, setBlogMessage] = useState("");
   const [isBlogImageUploading, setIsBlogImageUploading] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
   const [modalError, setModalError] = useState("");
@@ -575,6 +585,13 @@ function AdminOverlay({
     });
   }, [productFilter, productSearch, products]);
 
+  const subscriberStats = useMemo(() => {
+    const optedOut = subscriptions.filter((subscription) => subscription.isOptedOut).length;
+    const excluded = subscriptions.filter((subscription) => subscription.excludedFromCampaigns && !subscription.isOptedOut).length;
+    const sendable = subscriptions.filter((subscription) => !subscription.isOptedOut && !subscription.excludedFromCampaigns).length;
+    return { optedOut, excluded, sendable };
+  }, [subscriptions]);
+
   const handleOrderStatusSave = async (orderId) => {
     const nextStatus = orderStatusDrafts[orderId] || "processing";
     setOrderStatusNotice("");
@@ -648,6 +665,7 @@ function AdminOverlay({
     if (activeTab === "orders") return { label: "Create Order", modal: "order" };
     if (activeTab === "customers") return { label: "Create Customer", modal: "customer" };
     if (activeTab === "subscribers") return { label: "Add Subscriber", modal: "subscriber" };
+    if (activeTab === "blogs") return { label: "New blog post", modal: "blog" };
     if (activeTab === "products") return { label: "New product", modal: "product" };
     return null;
   };
@@ -742,11 +760,15 @@ function AdminOverlay({
     try {
       const result = await createSubscription(subscriberDraft);
       const now = new Date().toISOString();
+      const savedSubscription = result?.subscription;
       setSubscriptions((current) => [
-        {
+        savedSubscription || {
           id: result?.id || `new-${Date.now()}`,
           email: subscriberDraft.email,
           source: subscriberDraft.source || "admin",
+          isOptedOut: false,
+          optedOutAt: null,
+          excludedFromCampaigns: false,
           createdAt: now
         },
         ...current.filter((subscription) => subscription.email !== subscriberDraft.email)
@@ -756,6 +778,61 @@ function AdminOverlay({
       setModalMessage("Subscriber added.");
     } catch (requestError) {
       setModalError(requestError.message || "Could not add subscriber.");
+    }
+  };
+
+  const openNewsletterModal = () => {
+    setNewsletterDraft(EMPTY_NEWSLETTER_DRAFT);
+    setNewsletterExcludedIds([]);
+    openModal("newsletter");
+  };
+
+  const toggleNewsletterExclusion = (subscriptionId) => {
+    const id = Number(subscriptionId);
+    setNewsletterExcludedIds((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]
+    );
+  };
+
+  const handleSubscriptionPreference = async (subscription, field, value) => {
+    resetModalFeedback();
+    try {
+      const payload = field === "excludedFromCampaigns"
+        ? { excludedFromCampaigns: value }
+        : { isOptedOut: value };
+      const result = await updateSubscription(subscription.id, payload);
+      const updatedSubscription = result?.subscription;
+      if (!updatedSubscription) throw new Error("Could not update subscriber.");
+      setSubscriptions((current) =>
+        current.map((entry) => (entry.id === updatedSubscription.id ? updatedSubscription : entry))
+      );
+      pushAdminToast("Subscriber preference updated.", "success");
+    } catch (requestError) {
+      pushAdminToast(requestError.message || "Could not update subscriber.", "error");
+    }
+  };
+
+  const handleSendNewsletter = async (event) => {
+    event.preventDefault();
+    resetModalFeedback();
+    setIsSendingNewsletter(true);
+    try {
+      const result = await sendNewsletter({
+        subject: newsletterDraft.subject,
+        message: newsletterDraft.message,
+        excludedSubscriptionIds: newsletterExcludedIds
+      });
+      setNewsletterDraft(EMPTY_NEWSLETTER_DRAFT);
+      setNewsletterExcludedIds([]);
+      setActiveModal(null);
+      pushAdminToast(`Newsletter sent to ${result.deliveredCount || 0} subscriber${Number(result.deliveredCount) === 1 ? "" : "s"}.`, "success");
+      if (Number(result.failedCount || 0) > 0) {
+        pushAdminToast(`${result.failedCount} newsletter email${Number(result.failedCount) === 1 ? "" : "s"} could not be delivered.`, "error");
+      }
+    } catch (requestError) {
+      setModalError(requestError.message || "Could not send newsletter.");
+    } finally {
+      setIsSendingNewsletter(false);
     }
   };
 
@@ -792,7 +869,6 @@ function AdminOverlay({
       isPublished: Boolean(blog.isPublished)
     });
     setIsEditingBlog(true);
-    setBlogMessage("");
     setActiveTab("blogs");
     setActiveModal("blog");
   };
@@ -805,7 +881,7 @@ function AdminOverlay({
 
   const handleBlogSubmit = async (event) => {
     event.preventDefault();
-    setBlogMessage("");
+    resetModalFeedback();
     try {
       const payload = {
         title: blogDraft.title.trim(),
@@ -825,25 +901,25 @@ function AdminOverlay({
         ? blogs.map((blog) => (blog.id === savedBlog.id ? savedBlog : blog))
         : [savedBlog, ...blogs];
       syncBlogs(nextBlogs);
-      setBlogMessage(isEditingBlog ? "Blog post updated." : "Blog post published.");
+      pushAdminToast(isEditingBlog ? "Blog post updated." : "Blog post published.", "success");
       resetBlogDraft();
       setActiveModal(null);
     } catch (requestError) {
-      setBlogMessage(requestError.message || "Could not save blog post.");
+      setModalError(requestError.message || "Could not save blog post.");
     }
   };
 
   const handleBlogImageUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    setBlogMessage("");
+    resetModalFeedback();
     setIsBlogImageUploading(true);
     try {
       const result = await uploadImage(file, "blog");
       setBlogDraft((current) => ({ ...current, image: result.secureUrl || "" }));
-      setBlogMessage("Blog picture uploaded.");
+      pushAdminToast("Blog picture uploaded.", "success");
     } catch (requestError) {
-      setBlogMessage(requestError.message || "Could not upload blog picture.");
+      setModalError(requestError.message || "Could not upload blog picture.");
     } finally {
       setIsBlogImageUploading(false);
       event.target.value = "";
@@ -853,14 +929,14 @@ function AdminOverlay({
   const handleDeleteBlog = async (blog) => {
     const shouldDelete = window.confirm(`Delete blog post "${blog.title}"?`);
     if (!shouldDelete) return;
-    setBlogMessage("");
+    resetModalFeedback();
     try {
       await deleteBlog(blog.id);
       syncBlogs(blogs.filter((item) => item.id !== blog.id));
       if (blogDraft.id === blog.id) resetBlogDraft();
-      setBlogMessage("Blog post deleted.");
+      pushAdminToast("Blog post deleted.", "success");
     } catch (requestError) {
-      setBlogMessage(requestError.message || "Could not delete blog post.");
+      pushAdminToast(requestError.message || "Could not delete blog post.", "error");
     }
   };
 
@@ -919,6 +995,10 @@ function AdminOverlay({
 
   const closeModal = () => {
     if (activeModal === "blog") resetBlogDraft();
+    if (activeModal === "newsletter") {
+      setNewsletterDraft(EMPTY_NEWSLETTER_DRAFT);
+      setNewsletterExcludedIds([]);
+    }
     if (activeModal === "product") onCancelEdit?.();
     resetModalFeedback();
     setActiveModal(null);
@@ -1237,25 +1317,70 @@ function AdminOverlay({
             <section>
               <div className="la-subscriber-stats">
                 <StatCard label="Total subscribers" value={String(subscriptions.length)} delta="Newsletter list" />
-                <StatCard label="Avg. open rate" value="42%" delta="Campaign benchmark" />
-                <StatCard label="Last campaign" value={`${subscriptions.length} ready`} delta="Audience size" />
+                <StatCard label="Ready to send" value={String(subscriberStats.sendable)} delta="Active audience" />
+                <StatCard label="Opted out" value={String(subscriberStats.optedOut)} delta={`${subscriberStats.excluded} excluded`} />
+              </div>
+              <div className="la-page-tools">
+                <button type="button" className="la-primary-button" onClick={openNewsletterModal}>Send newsletter</button>
               </div>
               <div className="la-card la-table-card">
                 <div className="la-table-wrap">
                   <table>
-                    <thead><tr><th>Email</th><th>Source</th><th>Joined</th></tr></thead>
+                    <thead><tr><th>Email</th><th>Source</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
                     <tbody>
                       {subscriptions.map((subscription) => (
                         <tr key={subscription.id}>
                           <td>{subscription.email}</td>
                           <td>{subscription.source}</td>
+                          <td>
+                            {subscription.isOptedOut ? <AdminBadge tone="danger">Opted out</AdminBadge> : null}
+                            {!subscription.isOptedOut && subscription.excludedFromCampaigns ? <AdminBadge tone="warning">Excluded</AdminBadge> : null}
+                            {!subscription.isOptedOut && !subscription.excludedFromCampaigns ? <AdminBadge tone="success">Subscribed</AdminBadge> : null}
+                          </td>
                           <td>{formatOrderDate(subscription.createdAt)}</td>
+                          <td>
+                            <div className="la-inline-actions">
+                              <button
+                                type="button"
+                                onClick={() => handleSubscriptionPreference(subscription, "excludedFromCampaigns", !subscription.excludedFromCampaigns)}
+                                disabled={subscription.isOptedOut}
+                              >
+                                {subscription.excludedFromCampaigns ? "Include" : "Exclude"}
+                              </button>
+                              {subscription.isOptedOut ? (
+                                <button type="button" onClick={() => handleSubscriptionPreference(subscription, "isOptedOut", false)}>Resubscribe</button>
+                              ) : null}
+                            </div>
+                          </td>
                         </tr>
                       ))}
-                      {subscriptions.length === 0 ? <tr><td colSpan={3}>No subscribers yet.</td></tr> : null}
+                      {subscriptions.length === 0 ? <tr><td colSpan={5}>No subscribers yet.</td></tr> : null}
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </section>
+          ) : null}
+
+          {activeTab === "blogs" ? (
+            <section>
+              <div className="la-blog-grid">
+                {blogs.map((blog) => (
+                  <article key={blog.id} className="la-card la-blog-card">
+                    {blog.image ? <img src={blog.image} alt="" /> : <div className="la-blog-placeholder"><AdminIcon name="blogs" /></div>}
+                    <div>
+                      <AdminBadge tone={blog.isPublished ? "success" : "warning"}>{blog.isPublished ? "Published" : "Draft"}</AdminBadge>
+                      <h2>{blog.title}</h2>
+                      <p>{blog.excerpt || "No excerpt yet."}</p>
+                      <small>{formatOrderDate(blog.createdAt)} by {blog.author || "IfeShadesnMore"}</small>
+                    </div>
+                    <footer>
+                      <button type="button" onClick={() => startEditBlog(blog)}>Edit</button>
+                      <button type="button" className="la-danger-text" onClick={() => handleDeleteBlog(blog)}>Delete</button>
+                    </footer>
+                  </article>
+                ))}
+                {blogs.length === 0 ? <p className="la-notice">No blog posts yet.</p> : null}
               </div>
             </section>
           ) : null}
@@ -1410,6 +1535,57 @@ function AdminOverlay({
           <label>Email<input type="email" value={subscriberDraft.email} onChange={(event) => setSubscriberDraft((current) => ({ ...current, email: event.target.value }))} required /></label>
           <label>Source<input value={subscriberDraft.source} onChange={(event) => setSubscriberDraft((current) => ({ ...current, source: event.target.value }))} /></label>
           <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button">Add subscriber</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal === "newsletter" ? (
+        <form className="la-modal-card is-open la-newsletter-modal" onSubmit={handleSendNewsletter}>
+          <header><div><h2>Send Newsletter</h2><p>Email your active subscriber list.</p></div><button type="button" onClick={closeModal}>x</button></header>
+          <label>Subject<input value={newsletterDraft.subject} onChange={(event) => setNewsletterDraft((current) => ({ ...current, subject: event.target.value }))} required /></label>
+          <label>Message<textarea rows={8} value={newsletterDraft.message} onChange={(event) => setNewsletterDraft((current) => ({ ...current, message: event.target.value }))} required /></label>
+          <section className="la-newsletter-exclusions">
+            <h3>Exclude from this send</h3>
+            <div>
+              {subscriptions.map((subscription) => {
+                const disabled = subscription.isOptedOut || subscription.excludedFromCampaigns;
+                return (
+                  <label key={subscription.id} className={disabled ? "is-disabled" : ""}>
+                    <input
+                      type="checkbox"
+                      checked={disabled || newsletterExcludedIds.includes(Number(subscription.id))}
+                      disabled={disabled}
+                      onChange={() => toggleNewsletterExclusion(subscription.id)}
+                    />
+                    <span>{subscription.email}</span>
+                    <small>{subscription.isOptedOut ? "Opted out" : subscription.excludedFromCampaigns ? "Excluded by admin" : "Subscribed"}</small>
+                  </label>
+                );
+              })}
+              {subscriptions.length === 0 ? <p className="la-notice">No subscribers yet.</p> : null}
+            </div>
+          </section>
+          <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button" disabled={isSendingNewsletter}>{isSendingNewsletter ? "Sending..." : "Send newsletter"}</button></footer>
+        </form>
+      ) : null}
+
+      {activeModal === "blog" ? (
+        <form className="la-modal-card is-open la-blog-modal" onSubmit={handleBlogSubmit}>
+          <header><div><h2>{isEditingBlog ? "Edit Blog" : "New Blog"}</h2><p>Publish updates to the storefront journal.</p></div><button type="button" onClick={closeModal}>x</button></header>
+          <label>Title<input value={blogDraft.title} onChange={(event) => setBlogDraft((current) => ({ ...current, title: event.target.value }))} required /></label>
+          <label>Excerpt<textarea rows={3} value={blogDraft.excerpt} onChange={(event) => setBlogDraft((current) => ({ ...current, excerpt: event.target.value }))} /></label>
+          <label>Content<textarea rows={9} value={blogDraft.content} onChange={(event) => setBlogDraft((current) => ({ ...current, content: event.target.value }))} required /></label>
+          <div className="la-form-grid">
+            <label>Author<input value={blogDraft.author} onChange={(event) => setBlogDraft((current) => ({ ...current, author: event.target.value }))} /></label>
+            <label>Image URL<input value={blogDraft.image} onChange={(event) => setBlogDraft((current) => ({ ...current, image: event.target.value }))} /></label>
+          </div>
+          <label className="la-upload-card">Blog image{blogDraft.image ? <span><img src={blogDraft.image} alt="" /></span> : <span><AdminIcon name="blogs" /></span>}<input type="file" accept="image/*" onChange={handleBlogImageUpload} /><small>{isBlogImageUploading ? "Uploading..." : "PNG or JPG recommended."}</small></label>
+          <div className="la-toggle-row">
+            <span>Published</span>
+            <button type="button" className={blogDraft.isPublished ? "is-on" : ""} onClick={() => setBlogDraft((current) => ({ ...current, isPublished: !current.isPublished }))} aria-label="Toggle publish state">
+              <i className={blogDraft.isPublished ? "is-on" : ""} />
+            </button>
+          </div>
+          <footer><button type="button" onClick={closeModal}>Cancel</button><button type="submit" className="la-primary-button">{isEditingBlog ? "Save blog" : "Publish blog"}</button></footer>
         </form>
       ) : null}
 

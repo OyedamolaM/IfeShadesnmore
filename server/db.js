@@ -431,6 +431,10 @@ async function runMigrationsSqlite() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
       source TEXT NOT NULL DEFAULT 'footer',
+      is_opted_out INTEGER NOT NULL DEFAULT 0,
+      opted_out_at TEXT DEFAULT NULL,
+      excluded_from_campaigns INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -525,6 +529,20 @@ async function runMigrationsSqlite() {
   }
   if (!blogColumns.some((column) => column.name === "is_published")) {
     sqliteDb.exec(`ALTER TABLE blogs ADD COLUMN is_published INTEGER NOT NULL DEFAULT 1`);
+  }
+
+  const subscriptionColumns = sqliteDb.prepare("PRAGMA table_info(subscriptions)").all();
+  if (!subscriptionColumns.some((column) => column.name === "is_opted_out")) {
+    sqliteDb.exec(`ALTER TABLE subscriptions ADD COLUMN is_opted_out INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!subscriptionColumns.some((column) => column.name === "opted_out_at")) {
+    sqliteDb.exec(`ALTER TABLE subscriptions ADD COLUMN opted_out_at TEXT DEFAULT NULL`);
+  }
+  if (!subscriptionColumns.some((column) => column.name === "excluded_from_campaigns")) {
+    sqliteDb.exec(`ALTER TABLE subscriptions ADD COLUMN excluded_from_campaigns INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!subscriptionColumns.some((column) => column.name === "updated_at")) {
+    sqliteDb.exec(`ALTER TABLE subscriptions ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
   }
 }
 
@@ -630,6 +648,10 @@ async function runMigrationsPostgres() {
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       source TEXT NOT NULL DEFAULT 'footer',
+      is_opted_out BOOLEAN NOT NULL DEFAULT FALSE,
+      opted_out_at TIMESTAMPTZ DEFAULT NULL,
+      excluded_from_campaigns BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -670,6 +692,10 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS author TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT TRUE;`);
+  await pgPool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_opted_out BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pgPool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS opted_out_at TIMESTAMPTZ DEFAULT NULL;`);
+  await pgPool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS excluded_from_campaigns BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pgPool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
 }
 
 async function seedSettingsIfEmpty() {

@@ -131,6 +131,10 @@ async function ensurePostgresSchema(client) {
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       source TEXT NOT NULL DEFAULT 'footer',
+      is_opted_out BOOLEAN NOT NULL DEFAULT FALSE,
+      opted_out_at TIMESTAMPTZ DEFAULT NULL,
+      excluded_from_campaigns BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -164,6 +168,10 @@ async function ensurePostgresSchema(client) {
   await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
   await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
+  await client.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS is_opted_out BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await client.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS opted_out_at TIMESTAMPTZ DEFAULT NULL;`);
+  await client.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS excluded_from_campaigns BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await client.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
 }
 
 async function main() {
@@ -397,15 +405,34 @@ async function main() {
       await client.query(
         `
           INSERT INTO subscriptions (
-            id, email, source, created_at
+            id, email, source, is_opted_out, opted_out_at, excluded_from_campaigns, created_at, updated_at
           )
-          VALUES ($1, $2, $3, COALESCE($4::timestamptz, CURRENT_TIMESTAMP))
+          VALUES (
+            $1, $2, $3, $4,
+            $5::timestamptz,
+            $6,
+            COALESCE($7::timestamptz, CURRENT_TIMESTAMP),
+            COALESCE($8::timestamptz, CURRENT_TIMESTAMP)
+          )
           ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             source = EXCLUDED.source,
-            created_at = EXCLUDED.created_at
+            is_opted_out = EXCLUDED.is_opted_out,
+            opted_out_at = EXCLUDED.opted_out_at,
+            excluded_from_campaigns = EXCLUDED.excluded_from_campaigns,
+            created_at = EXCLUDED.created_at,
+            updated_at = EXCLUDED.updated_at
         `,
-        [Number(row.id), row.email, row.source || "footer", toIsoOrNull(row.created_at)]
+        [
+          Number(row.id),
+          row.email,
+          row.source || "footer",
+          parseBoolean(row.is_opted_out, false),
+          toIsoOrNull(row.opted_out_at),
+          parseBoolean(row.excluded_from_campaigns, false),
+          toIsoOrNull(row.created_at),
+          toIsoOrNull(row.updated_at || row.created_at)
+        ]
       );
     }
 

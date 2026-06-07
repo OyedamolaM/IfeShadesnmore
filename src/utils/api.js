@@ -169,6 +169,21 @@ export function fetchSubscriptions() {
   return request("/api/subscriptions");
 }
 
+export function updateSubscription(subscriptionId, payload) {
+  return request(`/api/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function sendNewsletter(payload) {
+  return request("/api/newsletters/send", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: 60000
+  });
+}
+
 export function updateSettings(payload) {
   return request("/api/settings", {
     method: "PATCH",

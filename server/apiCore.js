@@ -27,6 +27,7 @@ import {
   sendAccountWelcome,
   sendCustomerOrderConfirmation,
   sendEmailVerification,
+  sendNewsletterCampaign,
   sendNewsletterAdminNotification,
   sendNewsletterWelcome,
   sendOrderNotification
@@ -287,6 +288,11 @@ export async function handleApiRequest(request, splat = "") {
     }
     if (method === "POST" && pathname === "/api/subscriptions") return createSubscription(request);
     if (method === "GET" && pathname === "/api/subscriptions") return getSubscriptions(request);
+    if (method === "GET" && pathname === "/api/subscriptions/unsubscribe") return unsubscribeFromNewsletter(url);
+    if (method === "PATCH" && match(pathname, /^\/api\/subscriptions\/([^/]+)$/)) {
+      return updateSubscription(request, decodeURIComponent(match(pathname, /^\/api\/subscriptions\/([^/]+)$/)[1]));
+    }
+    if (method === "POST" && pathname === "/api/newsletters/send") return sendNewsletter(request);
     if (method === "POST" && pathname === "/api/uploads/image") return uploadImage(request);
     return json({ error: "Not found." }, 404);
   } catch (error) {
@@ -385,6 +391,24 @@ function hashVerificationToken(rawToken) {
   return crypto.createHash("sha256").update(String(rawToken || "")).digest("hex");
 }
 
+function getNewsletterSecret() {
+  return String(process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || process.env.JWT_SECRET || "dev-only-change-this-jwt-secret");
+}
+
+function createNewsletterOptOutToken(email) {
+  return crypto
+    .createHmac("sha256", getNewsletterSecret())
+    .update(normalizeEmail(email))
+    .digest("hex");
+}
+
+function buildNewsletterOptOutUrl(email) {
+  const url = new URL("/api/subscriptions/unsubscribe", getSiteUrl());
+  url.searchParams.set("email", normalizeEmail(email));
+  url.searchParams.set("token", createNewsletterOptOutToken(email));
+  return url.toString();
+}
+
 async function createVerificationToken(userId) {
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashVerificationToken(rawToken);
@@ -428,6 +452,57 @@ async function sendAccountWelcomeSafe({ toEmail, fullName }) {
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["true", "1", "yes", "on"].includes(normalized);
+}
+
+function mapSubscriptionRow(row) {
+  return {
+    id: Number(row.id),
+    email: row.email,
+    source: row.source || "footer",
+    isOptedOut: toBoolean(row.is_opted_out),
+    optedOutAt: row.opted_out_at || null,
+    excludedFromCampaigns: toBoolean(row.excluded_from_campaigns),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at
+  };
+}
+
+function newsletterOptOutHtml(message, ok) {
+  const safeMessage = String(message || "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[character]);
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${ok ? "Unsubscribed" : "Unsubscribe error"}</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0a0908; color: #fffaf4; font-family: Arial, Helvetica, sans-serif; }
+      main { width: min(92vw, 520px); border: 1px solid #332d24; border-radius: 18px; background: #171511; padding: 32px; }
+      p { color: #cbbda5; line-height: 1.6; }
+      a { color: #d7b84f; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${ok ? "You're opted out." : "We could not opt you out."}</h1>
+      <p>${safeMessage}</p>
+      <p><a href="${getSiteUrl()}">Return to IfeShadesnMore</a></p>
+    </main>
+  </body>
+</html>`;
 }
 
 function parseBooleanEnv(value, fallback = false) {
@@ -630,6 +705,15 @@ const adminOrderSchema = z.object({
 const subscriptionSchema = z.object({
   email: z.string().email(),
   source: z.string().max(80).optional().default("footer")
+});
+const subscriptionUpdateSchema = z.object({
+  excludedFromCampaigns: z.boolean().optional(),
+  isOptedOut: z.boolean().optional()
+});
+const newsletterSendSchema = z.object({
+  subject: z.string().min(1).max(180),
+  message: z.string().min(1).max(8000),
+  excludedSubscriptionIds: z.array(z.coerce.number().int().positive()).max(1000).optional().default([])
 });
 
 async function register(request) {
@@ -1354,18 +1438,125 @@ async function createSubscription(request) {
   const email = normalizeEmail(parsed.data.email);
   const source = String(parsed.data.source || "footer").trim() || "footer";
   await execute(
-    "INSERT INTO subscriptions (email, source) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET source = excluded.source",
+    `
+      INSERT INTO subscriptions (email, source, is_opted_out, opted_out_at, updated_at)
+      VALUES (?, ?, false, NULL, datetime('now'))
+      ON CONFLICT(email) DO UPDATE SET
+        source = excluded.source,
+        is_opted_out = false,
+        opted_out_at = NULL,
+        updated_at = datetime('now')
+    `,
     [email, source]
   );
+  const row = await queryOne("SELECT * FROM subscriptions WHERE lower(email) = lower(?)", [email]);
   const emailResult = await sendNewsletterEmailsSafe({ email, source });
-  return json({ ok: true, email, emailDelivered: Boolean(emailResult.customerDelivered) }, 201);
+  return json({ ok: true, subscription: mapSubscriptionRow(row), email, emailDelivered: Boolean(emailResult.customerDelivered) }, 201);
 }
 
 async function getSubscriptions(request) {
   const auth = await requireUser(request, "admin");
   if (auth.response) return auth.response;
-  const rows = await queryAll("SELECT id, email, source, created_at FROM subscriptions ORDER BY created_at DESC");
-  return json({ subscriptions: rows.map((row) => ({ id: Number(row.id), email: row.email, source: row.source, createdAt: row.created_at })) });
+  const rows = await queryAll("SELECT * FROM subscriptions ORDER BY created_at DESC");
+  return json({ subscriptions: rows.map(mapSubscriptionRow) });
+}
+
+async function updateSubscription(request, id) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  const subscriptionId = Number(id);
+  if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) return json({ error: "Invalid subscription id." }, 400);
+  const parsed = subscriptionUpdateSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Invalid subscription update." }, 400);
+  const existing = await queryOne("SELECT * FROM subscriptions WHERE id = ?", [subscriptionId]);
+  if (!existing) return json({ error: "Subscriber not found." }, 404);
+
+  const updates = [];
+  const params = [];
+  if (typeof parsed.data.excludedFromCampaigns === "boolean") {
+    updates.push("excluded_from_campaigns = ?");
+    params.push(parsed.data.excludedFromCampaigns);
+  }
+  if (typeof parsed.data.isOptedOut === "boolean") {
+    updates.push("is_opted_out = ?");
+    params.push(parsed.data.isOptedOut);
+    updates.push(`opted_out_at = ${parsed.data.isOptedOut ? "datetime('now')" : "NULL"}`);
+  }
+  if (updates.length === 0) return json({ subscription: mapSubscriptionRow(existing) });
+
+  updates.push("updated_at = datetime('now')");
+  params.push(subscriptionId);
+  await execute(`UPDATE subscriptions SET ${updates.join(", ")} WHERE id = ?`, params);
+  const row = await queryOne("SELECT * FROM subscriptions WHERE id = ?", [subscriptionId]);
+  return json({ subscription: mapSubscriptionRow(row) });
+}
+
+async function unsubscribeFromNewsletter(url) {
+  const email = normalizeEmail(url.searchParams.get("email"));
+  const token = String(url.searchParams.get("token") || "").trim();
+  const expectedToken = createNewsletterOptOutToken(email);
+  const isValidToken =
+    email &&
+    token &&
+    token.length === expectedToken.length &&
+    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expectedToken));
+  if (!isValidToken) {
+    return new Response(newsletterOptOutHtml("This unsubscribe link is invalid.", false), {
+      status: 400,
+      headers: { "Content-Type": "text/html; charset=utf-8" }
+    });
+  }
+  await execute(
+    "UPDATE subscriptions SET is_opted_out = true, opted_out_at = COALESCE(opted_out_at, datetime('now')), updated_at = datetime('now') WHERE lower(email) = lower(?)",
+    [email]
+  );
+  return new Response(newsletterOptOutHtml("You have been opted out of IfeShadesnMore newsletters.", true), {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" }
+  });
+}
+
+async function sendNewsletter(request) {
+  const auth = await requireUser(request, "admin");
+  if (auth.response) return auth.response;
+  if (!NEWSLETTER_EMAIL_ENABLED) return json({ error: "Newsletter email sending is disabled." }, 503);
+  const parsed = newsletterSendSchema.safeParse(await readJson(request));
+  if (!parsed.success) return json({ error: "Newsletter subject and message are required." }, 400);
+  const excludedIds = new Set(parsed.data.excludedSubscriptionIds.map((value) => Number(value)));
+  const rows = await queryAll(
+    "SELECT * FROM subscriptions WHERE is_opted_out = false AND excluded_from_campaigns = false ORDER BY created_at DESC"
+  );
+  const recipients = rows.map(mapSubscriptionRow).filter((subscription) => !excludedIds.has(Number(subscription.id)));
+  if (recipients.length === 0) return json({ error: "No eligible subscribers to send to." }, 400);
+
+  let deliveredCount = 0;
+  const failed = [];
+  for (const subscription of recipients) {
+    try {
+      const result = await sendNewsletterCampaign({
+        toEmail: subscription.email,
+        subject: parsed.data.subject.trim(),
+        message: parsed.data.message.trim(),
+        unsubscribeUrl: buildNewsletterOptOutUrl(subscription.email)
+      });
+      if (result?.delivered) deliveredCount += 1;
+    } catch (error) {
+      failed.push({ email: subscription.email, message: error?.message || "Could not send newsletter." });
+      console.error("Could not send newsletter campaign email:", {
+        email: subscription.email,
+        message: error?.message || "",
+        mailer: getMailerRuntimeInfo()
+      });
+    }
+  }
+
+  return json({
+    ok: true,
+    attemptedCount: recipients.length,
+    deliveredCount,
+    failedCount: failed.length,
+    failed: failed.slice(0, 10)
+  });
 }
 
 async function uploadImage(request) {
