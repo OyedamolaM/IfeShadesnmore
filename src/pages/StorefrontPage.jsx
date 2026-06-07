@@ -6,7 +6,7 @@ import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
 import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
 import { CART_STORAGE_KEY } from "../constants/storefront";
-import { createSubscription, fetchAccountDashboard, initializeCheckout } from "../utils/api";
+import { addWishlistItem, createSubscription, fetchAccountDashboard, initializeCheckout } from "../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../utils/themePreference";
 
 const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
@@ -71,6 +71,10 @@ function buildCheckoutLoginRedirect() {
   return `/account/login?redirect=${encodeURIComponent(`/?${params.toString()}`)}`;
 }
 
+function buildLoginRedirect() {
+  return `/account/login?redirect=${encodeURIComponent("/")}`;
+}
+
 function getStoredNewsletterDismissedUntil() {
   if (typeof window === "undefined") return 0;
   return Number(window.localStorage.getItem(NEWSLETTER_DISMISSED_UNTIL_KEY) || 0) || 0;
@@ -121,6 +125,7 @@ function StorefrontPage({
   const [isPopupSubscribing, setIsPopupSubscribing] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
+  const [wishlistPendingProductId, setWishlistPendingProductId] = useState("");
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [previewStyle, setPreviewStyle] = useState("v1");
   const [isPreviewStyleHydrated, setIsPreviewStyleHydrated] = useState(false);
@@ -451,6 +456,25 @@ function StorefrontPage({
     setNewsletterSubscribedFlag();
   };
 
+  const addToWishlist = async (product) => {
+    if (!product?.id) return;
+    if (!currentUser) {
+      setCartToast("Please login to save frames to your wishlist.");
+      onNavigate(buildLoginRedirect());
+      return;
+    }
+
+    setWishlistPendingProductId(product.id);
+    try {
+      await addWishlistItem(product.id);
+      setCartToast(`${product.name} saved to wishlist.`);
+    } catch (requestError) {
+      setCartToast(requestError.message || "Could not save to wishlist.");
+    } finally {
+      setWishlistPendingProductId("");
+    }
+  };
+
   const dismissNewsletterPopup = () => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(NEWSLETTER_DISMISSED_UNTIL_KEY, String(Date.now() + NEWSLETTER_DISMISS_MS));
@@ -534,6 +558,8 @@ function StorefrontPage({
             onSearchChange={setSearchQuery}
             onViewProduct={setSelectedProduct}
             onAddToCart={addToCart}
+            onAddToWishlist={addToWishlist}
+            wishlistPendingProductId={wishlistPendingProductId}
             allowOrdering={orderingEnabled}
             themeVariant={previewStyle}
           />
@@ -641,6 +667,8 @@ function StorefrontPage({
         product={selectedProduct}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
+        onAddToWishlist={addToWishlist}
+        isSavingWishlist={Boolean(selectedProduct?.id && wishlistPendingProductId === selectedProduct.id)}
         onBuyNow={handleBuyNowFromDetails}
         allowOrdering={orderingEnabled}
       />

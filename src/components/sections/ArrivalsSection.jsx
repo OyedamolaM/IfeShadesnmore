@@ -170,6 +170,8 @@ function ArrivalsSection({
   onSearchChange,
   onViewProduct,
   onAddToCart,
+  onAddToWishlist,
+  wishlistPendingProductId = "",
   allowOrdering = true,
   themeVariant = "v1"
 }) {
@@ -322,6 +324,16 @@ function ArrivalsSection({
                                   }}
                                 >
                                   View details
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={wishlistPendingProductId === product.id}
+                                  onClick={() => {
+                                    onAddToWishlist?.(product);
+                                    setOpenProductActionsId("");
+                                  }}
+                                >
+                                  {wishlistPendingProductId === product.id ? "Saving..." : "Save to wishlist"}
                                 </button>
                                 <button
                                   type="button"

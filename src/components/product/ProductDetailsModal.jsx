@@ -12,7 +12,7 @@ function normalizeAvailability(value) {
   return "in_stock";
 }
 
-function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrdering = true }) {
+function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, isSavingWishlist = false, onBuyNow, allowOrdering = true }) {
   const [quantityInput, setQuantityInput] = useState("1");
   const [showPreorderInfo, setShowPreorderInfo] = useState(false);
 
@@ -112,6 +112,14 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onBuyNow, allowOrd
                   </label>
 
                   <div className="product-modal-actions">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => onAddToWishlist?.(product)}
+                      disabled={isSavingWishlist}
+                    >
+                      {isSavingWishlist ? "Saving..." : "Save to Wishlist"}
+                    </button>
                     <button
                       type="button"
                       className="secondary-action"
