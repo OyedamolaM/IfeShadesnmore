@@ -31,15 +31,15 @@ import AccountPage from "./pages/AccountPage";
 import PaymentCallbackPage from "./pages/PaymentCallbackPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 
-function LoadingView() {
-  return (
-    <div className="page">
-      <div className="site-shell loading-shell">
-        <p>Loading storefront...</p>
-      </div>
-    </div>
-  );
-}
+// function LoadingView() {
+//   return (
+//     <div className="page">
+//       <div className="site-shell loading-shell">
+//         <p>Loading storefront...</p>
+//       </div>
+//     </div>
+//   );
+// }
 
 function ErrorView({ message, onRetry }) {
   return (
@@ -341,13 +341,13 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     navigateTo(redirectTarget, { replace: true });
   }, [navigateTo, redirectTarget]);
 
-  if (redirectTarget) {
-    return <LoadingView />;
-  }
+  // if (redirectTarget) {
+  //   return <LoadingView />;
+  // }
 
-  if (needsStorefront && isLoading) {
-    return <LoadingView />;
-  }
+  // if (needsStorefront && isLoading) {
+  //   return <LoadingView />;
+  // }
 
   if (needsStorefront && loadError) {
     return <ErrorView message={loadError} onRetry={loadStore} />;

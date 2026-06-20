@@ -7,14 +7,32 @@ const MIN_SEARCH_LENGTH = 3;
 
 const COLLECTION_CARDS = [
   {
+    audience: "photochromic",
+    title: "Photochromic Antiblue",
+    ctaLabel: "Shop Photochromic Antiblue",
+    sectionId: "photochromic-antiblue-section",
+  },
+  {
+    audience: "antiblue",
+    title: "Unisex Anti Blue Light",
+    ctaLabel: "Shop Unisex Anti-Blue Light",
+    sectionId: "unisex-anti-blue-light-section",
+  },
+  {
+    audience: "women Antiblue",
+    title: "Women's Anti Blue Glasses",
+    ctaLabel: "Shop Women's Anti-Blue Light",
+    sectionId: "women-anti-blue-light-section",
+  },
+  {
     audience: "women",
-    title: "Women's Glasses",
+    title: "Women's Fashion Glasses",
     ctaLabel: "Shop Women's",
     sectionId: "women-section"
   },
   {
     audience: "men",
-    title: "Men's Glasses",
+    title: "Men's Fashion Glasses",
     ctaLabel: "Shop Men's",
     sectionId: "men-section"
   },
@@ -29,12 +47,6 @@ const COLLECTION_CARDS = [
     title: "Unisex Glasses",
     ctaLabel: "Shop Unisex",
     sectionId: "unisex-section"
-  },
-  {
-    audience: "antiblue",
-    title: "Anti Blue Light",
-    ctaLabel: "Shop Anti-Blue Light",
-    sectionId: "anti-blue-light-section",
   },
   {
     audience: "prescription",

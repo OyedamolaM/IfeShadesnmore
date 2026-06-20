@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS = {
   brandName: "IfeShadesnMore",
   brandTagline: "Fashion, Prescription, all in one place",
   heroKicker: "",
-  heroTitle: "Confidence Perfectly Framed",
+  heroTitle: "See Clearly, Work Comfortably, Look Classy",
   heroSubtitle: "Look the class, style with pride, pay with less.",
   heroButtonLabel: "Shop Now",
   heroImage: "/hero/hero-candidate2.jpg",

@@ -9,8 +9,8 @@ const VARIANTS = {
     label: "",
     heroImage: "/preview/hero-v1-gallery.jpg",
     className: "preview-v1",
-    headline: ["Confidence,", "perfectly", "framed."],
-    description: "Luxury frames for fashion, prescription, and statement days.",
+    headline: ["Eyes protected", "Style elevated"],
+    description: "Lenses that shift with the light. Style that doesn't",
     primary: "Shop the drop",
     secondary: "Explore collections",
     statTone: "1,200+ happy customers"
@@ -19,8 +19,8 @@ const VARIANTS = {
     label: "",
     heroImage: "/preview/hero-v2-earth.jpg",
     className: "preview-v2",
-    headline: ["Confidence,", "perfectly", "framed."],
-    description: "A warm boutique edit of polished everyday eyewear.",
+    headline: ["Eyes protected", "Style elevated"],
+    description: "Lenses that shift with the light. Style that doesn't",
     primary: "Shop the drop",
     secondary: "Explore collections",
     statTone: "1,200+ happy customers"
@@ -29,8 +29,8 @@ const VARIANTS = {
     label: "",
     heroImage: "/preview/hero-v3-solar.jpg",
     className: "preview-v3",
-    headline: ["Confidence,", "perfectly", "framed."],
-    description: "Bold frames with a sunlit editorial feel.",
+    headline: ["Eyes protected", "Style elevated"],
+    description: "Lenses that shift with the light. Style that doesn't",
     primary: "Shop the drop",
     secondary: "Explore collections",
     statTone: "1,200+ happy customers"
@@ -381,7 +381,7 @@ function PreviewStorefront({
             </p>
             {variant.label ? <p className="preview-season">{variant.label}</p> : null}
             <h1>
-              {variant.headline[0]}
+              <span className="preview-hero-line">{variant.headline[0]}</span>
               <br />
               <span className="preview-hero-tail">
                 <em className="preview-hero-emphasis">{variant.headline[1]}</em>

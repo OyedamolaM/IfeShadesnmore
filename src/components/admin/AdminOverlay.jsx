@@ -4,6 +4,7 @@ import { toPrice } from "../../utils/format";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
 import {
   AUDIENCE_OPTIONS,
+  BULLET_ICON_TYPES,
   DEFAULT_SETTINGS,
   PRODUCT_AVAILABILITY_OPTIONS
 } from "../../constants/storefront";
@@ -395,7 +396,7 @@ function AdminOverlay({
   const [expandedOrderId, setExpandedOrderId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productFilter, setProductFilter] = useState("all");
-  const [settingsSection, setSettingsSection] = useState("shipping");
+  const [settingsSection, setSettingsSection] = useState("site");
   const [orderStatusNotice, setOrderStatusNotice] = useState("");
   const [orderStatusError, setOrderStatusError] = useState("");
   const [customerActionNotice, setCustomerActionNotice] = useState("");
@@ -990,6 +991,35 @@ function AdminOverlay({
     onSettingsDraftChange("shippingTiers", nextTiers);
   };
 
+  const updateSettingsListItem = (field, index, itemField, value) => {
+    const fallback = Array.isArray(DEFAULT_SETTINGS[field]) ? DEFAULT_SETTINGS[field] : [];
+    const currentItems = Array.isArray(settingsDraft[field]) ? settingsDraft[field] : fallback;
+    const nextItems = currentItems.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [itemField]: value } : item
+    );
+    onSettingsDraftChange(field, nextItems);
+  };
+
+  const addSettingsListItem = (field) => {
+    const fallback = Array.isArray(DEFAULT_SETTINGS[field]) ? DEFAULT_SETTINGS[field] : [];
+    const currentItems = Array.isArray(settingsDraft[field]) ? settingsDraft[field] : fallback;
+    onSettingsDraftChange(field, [
+      ...currentItems,
+      {
+        type: "quality",
+        title: "New item",
+        description: ""
+      }
+    ]);
+  };
+
+  const removeSettingsListItem = (field, index) => {
+    const fallback = Array.isArray(DEFAULT_SETTINGS[field]) ? DEFAULT_SETTINGS[field] : [];
+    const currentItems = Array.isArray(settingsDraft[field]) ? settingsDraft[field] : fallback;
+    if (currentItems.length <= 1) return;
+    onSettingsDraftChange(field, currentItems.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   const handleSettingsModalSubmit = async (event) => {
     await onSaveSettings(event);
     setActiveModal(null);
@@ -1428,13 +1458,71 @@ function AdminOverlay({
           {activeTab === "settings" ? (
             <section className="la-settings-layout">
               <nav className="la-settings-nav" aria-label="Settings sections">
-                {[["shipping", "Shipping", "orders"], ["notifications", "Notifications", "bell"], ["security", "Security", "settings"]].map(([id, label, icon]) => (
+                {[
+                  ["site", "Site", "storefront"],
+                  ["homepage", "Homepage", "overview"],
+                  ["shipping", "Shipping", "orders"],
+                  ["notifications", "Notifications", "bell"],
+                  ["security", "Security", "settings"]
+                ].map(([id, label, icon]) => (
                   <button key={id} type="button" className={settingsSection === id ? "is-active" : ""} onClick={() => setSettingsSection(id)}>
                     <AdminIcon name={icon} />{label}
                   </button>
                 ))}
               </nav>
               <form className="la-settings-panels" onSubmit={onSaveSettings}>
+                {settingsSection === "site" ? (
+                  <section className="la-card la-settings-card">
+                    <h2>Site identity</h2><p>Edit the logo name and short brand line shown across the storefront.</p>
+                    <label>Logo name<input value={settingsDraft.brandName || ""} onChange={(event) => onSettingsDraftChange("brandName", event.target.value)} required /></label>
+                    <label>Tagline<input value={settingsDraft.brandTagline || ""} onChange={(event) => onSettingsDraftChange("brandTagline", event.target.value)} required /></label>
+                    <label>Hero image URL<input value={settingsDraft.heroImage || ""} onChange={(event) => onSettingsDraftChange("heroImage", event.target.value)} required /></label>
+                    <label>Upload hero image<input type="file" accept="image/*" onChange={onHeroUpload} /></label>
+                  </section>
+                ) : null}
+                {settingsSection === "homepage" ? (
+                  <>
+                    <section className="la-card la-settings-card">
+                      <h2>Hero content</h2><p>Update the main homepage copy and call-to-action.</p>
+                      <label>Small heading<input value={settingsDraft.heroKicker || ""} onChange={(event) => onSettingsDraftChange("heroKicker", event.target.value)} /></label>
+                      <label>Title<input value={settingsDraft.heroTitle || ""} onChange={(event) => onSettingsDraftChange("heroTitle", event.target.value)} required /></label>
+                      <label>Subtitle<textarea rows={3} value={settingsDraft.heroSubtitle || ""} onChange={(event) => onSettingsDraftChange("heroSubtitle", event.target.value)} required /></label>
+                      <label>Button label<input value={settingsDraft.heroButtonLabel || ""} onChange={(event) => onSettingsDraftChange("heroButtonLabel", event.target.value)} required /></label>
+                    </section>
+                    <section className="la-card la-settings-card">
+                      <h2>Hero highlights</h2><p>Edit the short promise cards below the homepage hero.</p>
+                      <div className="la-benefit-list">
+                        {(Array.isArray(settingsDraft.heroPromiseItems) ? settingsDraft.heroPromiseItems : DEFAULT_SETTINGS.heroPromiseItems).map((item, index) => (
+                          <div key={`hero-promise-${index}`} className="la-shipping-tier-row">
+                            <label>Icon<select value={item.type || "quality"} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "type", event.target.value)}>
+                              {BULLET_ICON_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select></label>
+                            <label>Title<input value={item.title || ""} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "title", event.target.value)} required /></label>
+                            <label>Description<input value={item.description || ""} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "description", event.target.value)} /></label>
+                            <button type="button" className="la-danger-text" onClick={() => removeSettingsListItem("heroPromiseItems", index)}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button type="button" className="la-primary-button" onClick={() => addSettingsListItem("heroPromiseItems")}>Add highlight</button>
+                    </section>
+                    <section className="la-card la-settings-card">
+                      <h2>Feature blocks</h2><p>Edit the smaller feature messages used elsewhere on the storefront.</p>
+                      <div className="la-benefit-list">
+                        {(Array.isArray(settingsDraft.featureItems) ? settingsDraft.featureItems : DEFAULT_SETTINGS.featureItems).map((item, index) => (
+                          <div key={`feature-item-${index}`} className="la-shipping-tier-row">
+                            <label>Icon<select value={item.type || "quality"} onChange={(event) => updateSettingsListItem("featureItems", index, "type", event.target.value)}>
+                              {BULLET_ICON_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select></label>
+                            <label>Title<input value={item.title || ""} onChange={(event) => updateSettingsListItem("featureItems", index, "title", event.target.value)} required /></label>
+                            <label>Description<input value={item.description || ""} onChange={(event) => updateSettingsListItem("featureItems", index, "description", event.target.value)} /></label>
+                            <button type="button" className="la-danger-text" onClick={() => removeSettingsListItem("featureItems", index)}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button type="button" className="la-primary-button" onClick={() => addSettingsListItem("featureItems")}>Add feature</button>
+                    </section>
+                  </>
+                ) : null}
                 {settingsSection === "notifications" ? (
                   <section className="la-card la-settings-card">
                     <h2>Notifications</h2><p>Choose what hits your inbox.</p>

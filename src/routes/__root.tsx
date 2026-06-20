@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import type { ReactNode } from "react";
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { Analytics } from "@vercel/analytics/react";
 import "../App.css";
 import "../pages/PreviewStorefront.css";
 
@@ -53,6 +54,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
+        <Analytics />
         <Scripts />
       </body>
     </html>

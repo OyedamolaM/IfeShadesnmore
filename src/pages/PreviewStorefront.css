@@ -390,17 +390,23 @@
 
 .preview-v2 .preview-hero h1,
 .preview-v3 .preview-hero h1 {
+  font-size: clamp(3rem, 7.8vw, 6.1rem);
   line-height: 1.05;
 }
 
 .preview-v3 .preview-hero h1 {
-  font-size: clamp(3.5rem, 9vw, 7rem);
+  font-size: clamp(3rem, 7.6vw, 6rem);
   line-height: 0.95;
 }
 
 .preview-v1 .preview-hero h1 {
   font-family: "Cormorant Garamond", "Playfair Display", Georgia, serif;
   font-weight: 500;
+}
+
+.preview-hero-line {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .preview-hero h1 em {
@@ -411,10 +417,6 @@
 
 .preview-hero-tail {
   display: inline;
-}
-
-.preview-v1 .preview-hero h1 em {
-  color: rgba(26, 26, 26, 0.48);
 }
 
 .preview-hero-text {
@@ -2076,12 +2078,12 @@
   }
 
   .preview-v2 .preview-hero h1 {
-    font-size: clamp(2.3rem, 11.2vw, 3.3rem);
+    font-size: clamp(2.05rem, 10vw, 3rem);
     line-height: 1.02;
   }
 
   .preview-v3 .preview-hero h1 {
-    font-size: clamp(2.35rem, 11.4vw, 3.4rem);
+    font-size: clamp(2.05rem, 10vw, 3rem);
     line-height: 0.98;
   }
 
