@@ -117,11 +117,9 @@ function StorefrontPage({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [email, setEmail] = useState("");
-  const [emailStatus, setEmailStatus] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [showNewsletterPopup, setShowNewsletterPopup] = useState(false);
   const [newsletterPopupEmail, setNewsletterPopupEmail] = useState(() => currentUser?.email || "");
-  const [newsletterPopupStatus, setNewsletterPopupStatus] = useState("");
   const [isPopupSubscribing, setIsPopupSubscribing] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const [cartToast, setCartToast] = useState("");
@@ -480,7 +478,6 @@ function StorefrontPage({
       window.localStorage.setItem(NEWSLETTER_DISMISSED_UNTIL_KEY, String(Date.now() + NEWSLETTER_DISMISS_MS));
     }
     setShowNewsletterPopup(false);
-    setNewsletterPopupStatus("");
   };
 
   const submitNewsletterEmail = async ({ emailAddress, source, setStatus, setPending, resetEmail }) => {
@@ -513,7 +510,7 @@ function StorefrontPage({
     await submitNewsletterEmail({
       emailAddress: email,
       source: isAdminPreview ? "admin-storefront" : "footer",
-      setStatus: setEmailStatus,
+      setStatus: setCartToast,
       setPending: setIsSubscribing,
       resetEmail: () => setEmail("")
     });
@@ -524,7 +521,7 @@ function StorefrontPage({
     await submitNewsletterEmail({
       emailAddress: newsletterPopupEmail,
       source: "popup",
-      setStatus: setNewsletterPopupStatus,
+      setStatus: setCartToast,
       setPending: setIsPopupSubscribing,
       resetEmail: () => setNewsletterPopupEmail("")
     });
@@ -570,10 +567,8 @@ function StorefrontPage({
           />
           <ContactSection
             email={email}
-            emailStatus={emailStatus}
             onEmailChange={(nextEmail) => {
               setEmail(nextEmail);
-              setEmailStatus("");
             }}
             onSubscribe={handleNewsletterSubmit}
             isSubscribing={isSubscribing}
@@ -615,22 +610,14 @@ function StorefrontPage({
                 type="email"
                 placeholder="your@email.com"
                 value={newsletterPopupEmail}
-                onChange={(event) => {
-                  setNewsletterPopupEmail(event.target.value);
-                  setNewsletterPopupStatus("");
-                }}
+                onChange={(event) => setNewsletterPopupEmail(event.target.value)}
                 disabled={isPopupSubscribing}
                 aria-label="Email address"
               />
               <button type="submit" disabled={isPopupSubscribing}>
-                {isPopupSubscribing ? "Joining..." : "Join"}
+                {isPopupSubscribing ? <span className="subscribe-button-spinner" aria-hidden="true" /> : "Join"}
               </button>
             </form>
-            {newsletterPopupStatus ? (
-              <strong className="newsletter-popup-status" role="status">
-                {newsletterPopupStatus}
-              </strong>
-            ) : null}
           </section>
         </div>
       ) : null}

@@ -1232,6 +1232,32 @@
   cursor: pointer;
 }
 
+.themed-contact-section .subscribe-inner button:disabled,
+.newsletter-popup button:disabled {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.subscribe-button-spinner {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: subscribeButtonSpin 750ms linear infinite;
+}
+
+.newsletter-popup .subscribe-button-spinner {
+  margin: 0 auto;
+}
+
+@keyframes subscribeButtonSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .themed-contact-v2 .subscribe-inner button {
   border-radius: 0.55rem;
 }

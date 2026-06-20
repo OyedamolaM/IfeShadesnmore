@@ -34,7 +34,7 @@ function SocialIcon({ type }) {
   );
 }
 
-function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubscribing = false, themeVariant = "v1" }) {
+function ContactSection({ email, onEmailChange, onSubscribe, isSubscribing = false, themeVariant = "v1" }) {
   const emailAddress = "oluborodedeborah2000@gmail.com";
   const phoneNumber = "09063556765";
   const officeAddress = "1, Sunday Akinbo Str, command Ipaja, Lagos";
@@ -62,11 +62,10 @@ function ContactSection({ email, emailStatus, onEmailChange, onSubscribe, isSubs
               disabled={isSubscribing}
             />
             <button type="submit" disabled={isSubscribing}>
-              {isSubscribing ? "Subscribing..." : "Subscribe"}
+              {isSubscribing ? <span className="subscribe-button-spinner" aria-hidden="true" /> : "Join"}
             </button>
           </form>
         </div>
-        {emailStatus ? <p className="subscribe-status">{emailStatus}</p> : null}
       </section>
 
       <footer className={`site-footer themed-site-footer themed-site-footer-${themeVariant}`}>

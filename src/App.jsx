@@ -260,25 +260,26 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     }
   };
 
-  const handleSettingsSave = async (event) => {
-    event.preventDefault();
+  const handleSettingsSave = async (event, overrideSettingsDraft) => {
+    event?.preventDefault?.();
+    const draft = overrideSettingsDraft || settingsDraft;
     try {
       const payload = await updateSettings({
-        brandName: settingsDraft.brandName.trim() || DEFAULT_SETTINGS.brandName,
-        brandTagline: settingsDraft.brandTagline.trim() || DEFAULT_SETTINGS.brandTagline,
-        heroKicker: String(settingsDraft.heroKicker || "").trim(),
-        heroTitle: settingsDraft.heroTitle.trim() || DEFAULT_SETTINGS.heroTitle,
-        heroSubtitle: settingsDraft.heroSubtitle.trim() || DEFAULT_SETTINGS.heroSubtitle,
-        heroButtonLabel: settingsDraft.heroButtonLabel.trim() || DEFAULT_SETTINGS.heroButtonLabel,
-        heroImage: settingsDraft.heroImage.trim(),
-        heroPromiseItems: Array.isArray(settingsDraft.heroPromiseItems)
-          ? settingsDraft.heroPromiseItems
+        brandName: draft.brandName.trim() || DEFAULT_SETTINGS.brandName,
+        brandTagline: draft.brandTagline.trim() || DEFAULT_SETTINGS.brandTagline,
+        heroKicker: String(draft.heroKicker || "").trim(),
+        heroTitle: draft.heroTitle.trim() || DEFAULT_SETTINGS.heroTitle,
+        heroSubtitle: draft.heroSubtitle.trim() || DEFAULT_SETTINGS.heroSubtitle,
+        heroButtonLabel: draft.heroButtonLabel.trim() || DEFAULT_SETTINGS.heroButtonLabel,
+        heroImage: draft.heroImage.trim(),
+        heroPromiseItems: Array.isArray(draft.heroPromiseItems)
+          ? draft.heroPromiseItems
           : DEFAULT_SETTINGS.heroPromiseItems,
-        featureItems: Array.isArray(settingsDraft.featureItems)
-          ? settingsDraft.featureItems
+        featureItems: Array.isArray(draft.featureItems)
+          ? draft.featureItems
           : DEFAULT_SETTINGS.featureItems,
-        shippingTiers: Array.isArray(settingsDraft.shippingTiers)
-          ? settingsDraft.shippingTiers
+        shippingTiers: Array.isArray(draft.shippingTiers)
+          ? draft.shippingTiers
           : []
       });
       setSettings(payload.settings);

@@ -9509,8 +9509,53 @@ select {
 }
 
 .la-shipping-tier-row {
-  grid-template-columns: minmax(9rem, 1fr) minmax(10rem, 1.2fr) 8rem auto auto !important;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center;
+}
+
+.la-settings-row {
+  min-height: 3.5rem;
+  border: 1px solid var(--la-border);
+  border-radius: 0.75rem;
+  background: var(--la-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.la-settings-row span,
+.la-shipping-tier-row > span {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.la-settings-row strong,
+.la-shipping-tier-row strong {
+  color: var(--la-fg);
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.la-settings-row small,
+.la-shipping-tier-row small {
+  color: var(--la-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.la-settings-row button,
+.la-inline-actions button {
+  min-height: 2.25rem;
+  border: 1px solid var(--la-border);
+  border-radius: 0.5rem;
+  background: var(--la-card);
+  color: var(--la-fg);
+  cursor: pointer;
+  padding: 0 0.75rem;
 }
 
 .la-shipping-tier-row .la-toggle-row {

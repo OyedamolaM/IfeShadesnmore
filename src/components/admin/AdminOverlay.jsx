@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProductMedia from "../product/ProductMedia";
 import { toPrice } from "../../utils/format";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
@@ -407,6 +407,9 @@ function AdminOverlay({
   const [isThemeOpen, setIsThemeOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [adminToasts, setAdminToasts] = useState([]);
+  const [settingsEditor, setSettingsEditor] = useState(null);
+  const [settingsModalDraft, setSettingsModalDraft] = useState({});
+  const lastAdminMessageRef = useRef("");
 
   const selectedAudiences = useMemo(
     () => normalizeAudienceSelections(productDraft.audiences),
@@ -504,6 +507,14 @@ function AdminOverlay({
   useEffect(() => {
     if (modalError) pushAdminToast(modalError, "error");
   }, [modalError]);
+
+  useEffect(() => {
+    const message = String(adminMessage || "").trim();
+    if (!message || lastAdminMessageRef.current === message) return;
+    lastAdminMessageRef.current = message;
+    const tone = /could not|invalid|required|failed|error/i.test(message) ? "error" : "success";
+    pushAdminToast(message, tone);
+  }, [adminMessage]);
 
   const totalRevenue = useMemo(
     () =>
@@ -610,7 +621,7 @@ function AdminOverlay({
       if (!updatedOrder) throw new Error("Could not update order status.");
 
       setOrders((current) => current.map((order) => (order.id === orderId ? updatedOrder : order)));
-      setOrderStatusNotice(`Order ${orderId} updated to ${nextStatus}.`);
+      pushAdminToast(`Order ${orderId} updated to ${nextStatus}.`, "success");
     } catch (requestError) {
       setOrderStatusError(requestError.message || "Could not update order status.");
     }
@@ -641,7 +652,7 @@ function AdminOverlay({
           )
         );
       }
-      setCustomerActionNotice(`Customer "${label}" was removed.`);
+      pushAdminToast(`Customer "${label}" was removed.`, "success");
     } catch (requestError) {
       setCustomerActionError(requestError.message || "Could not delete customer.");
     }
@@ -735,7 +746,7 @@ function AdminOverlay({
       setOrderStatusDrafts((current) => ({ ...current, [result.order.id]: result.order.orderStatus || "pending" }));
       setOrderDraft(EMPTY_ORDER_DRAFT);
       setActiveModal(null);
-      setOrderStatusNotice(`Order ${result.order.id} created.`);
+      pushAdminToast(`Order ${result.order.id} created.`, "success");
     } catch (requestError) {
       setModalError(requestError.message || "Could not create order.");
     }
@@ -750,7 +761,7 @@ function AdminOverlay({
       setCustomers((current) => [result.customer, ...current]);
       setCustomerDraft(EMPTY_CUSTOMER_DRAFT);
       setActiveModal(null);
-      setCustomerActionNotice(`Customer "${result.customer.fullName || result.customer.email}" created.`);
+      pushAdminToast(`Customer "${result.customer.fullName || result.customer.email}" created.`, "success");
     } catch (requestError) {
       setModalError(requestError.message || "Could not create customer.");
     }
@@ -777,7 +788,7 @@ function AdminOverlay({
       ]);
       setSubscriberDraft(EMPTY_SUBSCRIBER_DRAFT);
       setActiveModal(null);
-      setModalMessage("Subscriber added.");
+      pushAdminToast("Subscriber added.", "success");
     } catch (requestError) {
       setModalError(requestError.message || "Could not add subscriber.");
     }
@@ -1020,6 +1031,119 @@ function AdminOverlay({
     onSettingsDraftChange(field, currentItems.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const listForSetting = (field) => {
+    const fallback = Array.isArray(DEFAULT_SETTINGS[field]) ? DEFAULT_SETTINGS[field] : [];
+    return Array.isArray(settingsDraft[field]) ? settingsDraft[field] : fallback;
+  };
+
+  const openSettingsFieldEditor = ({ field, label, input = "text" }) => {
+    setSettingsEditor({ kind: "field", field, label, input });
+    setSettingsModalDraft({ value: settingsDraft[field] || "" });
+    openModal("settings");
+  };
+
+  const openSettingsListEditor = ({ field, index = -1, label }) => {
+    const items = listForSetting(field);
+    const item = index >= 0 ? items[index] : { type: "quality", title: "", description: "" };
+    setSettingsEditor({ kind: "listItem", field, index, label });
+    setSettingsModalDraft({ ...item });
+    openModal("settings");
+  };
+
+  const openShippingTierEditor = (index = -1) => {
+    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const tier = index >= 0
+      ? currentTiers[index]
+      : {
+          id: `shipping-${Date.now()}`,
+          name: "",
+          description: "",
+          fee: 0,
+          isActive: true
+        };
+    setSettingsEditor({ kind: "shippingTier", index, label: index >= 0 ? "Edit shipping tier" : "Add shipping tier" });
+    setSettingsModalDraft({ ...tier });
+    openModal("settings");
+  };
+
+  const removeSettingsListItemAndSave = async (event, field, index) => {
+    event.preventDefault();
+    const items = listForSetting(field);
+    if (items.length <= 1) {
+      pushAdminToast("At least one item is required.", "error");
+      return;
+    }
+    const nextSettings = {
+      ...settingsDraft,
+      [field]: items.filter((_, itemIndex) => itemIndex !== index)
+    };
+    onSettingsDraftChange(field, nextSettings[field]);
+    await onSaveSettings(event, nextSettings);
+  };
+
+  const removeShippingTierAndSave = async (event, index) => {
+    event.preventDefault();
+    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const nextSettings = {
+      ...settingsDraft,
+      shippingTiers: currentTiers.filter((_, tierIndex) => tierIndex !== index)
+    };
+    onSettingsDraftChange("shippingTiers", nextSettings.shippingTiers);
+    await onSaveSettings(event, nextSettings);
+  };
+
+  const handleSettingsEditorSubmit = async (event) => {
+    event.preventDefault();
+    if (!settingsEditor) return;
+
+    let nextSettings = { ...settingsDraft };
+    if (settingsEditor.kind === "field") {
+      nextSettings[settingsEditor.field] = settingsModalDraft.value || "";
+    }
+
+    if (settingsEditor.kind === "listItem") {
+      const currentItems = listForSetting(settingsEditor.field);
+      const nextItem = {
+        type: settingsModalDraft.type || "quality",
+        title: String(settingsModalDraft.title || "").trim(),
+        description: String(settingsModalDraft.description || "").trim()
+      };
+      if (!nextItem.title) {
+        pushAdminToast("Title is required.", "error");
+        return;
+      }
+      nextSettings[settingsEditor.field] = settingsEditor.index >= 0
+        ? currentItems.map((item, index) => (index === settingsEditor.index ? nextItem : item))
+        : [...currentItems, nextItem];
+    }
+
+    if (settingsEditor.kind === "shippingTier") {
+      const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+      const nextTier = {
+        id: settingsModalDraft.id || `shipping-${Date.now()}`,
+        name: String(settingsModalDraft.name || "").trim(),
+        description: String(settingsModalDraft.description || "").trim(),
+        fee: Math.max(0, Math.round(Number(settingsModalDraft.fee) || 0)),
+        isActive: settingsModalDraft.isActive !== false
+      };
+      if (!nextTier.name) {
+        pushAdminToast("Shipping tier name is required.", "error");
+        return;
+      }
+      nextSettings.shippingTiers = settingsEditor.index >= 0
+        ? currentTiers.map((tier, index) => (index === settingsEditor.index ? nextTier : tier))
+        : [...currentTiers, nextTier];
+    }
+
+    Object.entries(nextSettings).forEach(([field, value]) => {
+      if (settingsDraft[field] !== value) onSettingsDraftChange(field, value);
+    });
+    await onSaveSettings(event, nextSettings);
+    setSettingsEditor(null);
+    setSettingsModalDraft({});
+    setActiveModal(null);
+  };
+
   const handleSettingsModalSubmit = async (event) => {
     await onSaveSettings(event);
     setActiveModal(null);
@@ -1032,6 +1156,10 @@ function AdminOverlay({
       setNewsletterExcludedIds([]);
     }
     if (activeModal === "product") onCancelEdit?.();
+    if (activeModal === "settings") {
+      setSettingsEditor(null);
+      setSettingsModalDraft({});
+    }
     resetModalFeedback();
     setActiveModal(null);
   };
@@ -1134,10 +1262,6 @@ function AdminOverlay({
           </div>
 
           {isLoadingData ? <p className="la-notice">Loading admin data...</p> : null}
-          {orderStatusNotice ? <p className="la-success">{orderStatusNotice}</p> : null}
-          {customerActionNotice ? <p className="la-success">{customerActionNotice}</p> : null}
-          {modalMessage ? <p className="la-success">{modalMessage}</p> : null}
-          {adminMessage ? <p className="la-success">{adminMessage}</p> : null}
 
           {activeTab === "overview" ? (
             <>
@@ -1470,13 +1594,20 @@ function AdminOverlay({
                   </button>
                 ))}
               </nav>
-              <form className="la-settings-panels" onSubmit={onSaveSettings}>
+              <div className="la-settings-panels">
                 {settingsSection === "site" ? (
                   <section className="la-card la-settings-card">
                     <h2>Site identity</h2><p>Edit the logo name and short brand line shown across the storefront.</p>
-                    <label>Logo name<input value={settingsDraft.brandName || ""} onChange={(event) => onSettingsDraftChange("brandName", event.target.value)} required /></label>
-                    <label>Tagline<input value={settingsDraft.brandTagline || ""} onChange={(event) => onSettingsDraftChange("brandTagline", event.target.value)} required /></label>
-                    <label>Hero image URL<input value={settingsDraft.heroImage || ""} onChange={(event) => onSettingsDraftChange("heroImage", event.target.value)} required /></label>
+                    {[
+                      ["brandName", "Logo name", settingsDraft.brandName],
+                      ["brandTagline", "Tagline", settingsDraft.brandTagline],
+                      ["heroImage", "Hero image URL", settingsDraft.heroImage]
+                    ].map(([field, label, value]) => (
+                      <div className="la-settings-row" key={field}>
+                        <span><strong>{label}</strong><small>{value || "-"}</small></span>
+                        <button type="button" onClick={() => openSettingsFieldEditor({ field, label })}>Edit</button>
+                      </div>
+                    ))}
                     <label>Upload hero image<input type="file" accept="image/*" onChange={onHeroUpload} /></label>
                   </section>
                 ) : null}
@@ -1484,42 +1615,47 @@ function AdminOverlay({
                   <>
                     <section className="la-card la-settings-card">
                       <h2>Hero content</h2><p>Update the main homepage copy and call-to-action.</p>
-                      <label>Small heading<input value={settingsDraft.heroKicker || ""} onChange={(event) => onSettingsDraftChange("heroKicker", event.target.value)} /></label>
-                      <label>Title<input value={settingsDraft.heroTitle || ""} onChange={(event) => onSettingsDraftChange("heroTitle", event.target.value)} required /></label>
-                      <label>Subtitle<textarea rows={3} value={settingsDraft.heroSubtitle || ""} onChange={(event) => onSettingsDraftChange("heroSubtitle", event.target.value)} required /></label>
-                      <label>Button label<input value={settingsDraft.heroButtonLabel || ""} onChange={(event) => onSettingsDraftChange("heroButtonLabel", event.target.value)} required /></label>
+                      {[
+                        ["heroKicker", "Small heading", settingsDraft.heroKicker],
+                        ["heroTitle", "Title", settingsDraft.heroTitle],
+                        ["heroSubtitle", "Subtitle", settingsDraft.heroSubtitle, "textarea"],
+                        ["heroButtonLabel", "Button label", settingsDraft.heroButtonLabel]
+                      ].map(([field, label, value, input]) => (
+                        <div className="la-settings-row" key={field}>
+                          <span><strong>{label}</strong><small>{value || "-"}</small></span>
+                          <button type="button" onClick={() => openSettingsFieldEditor({ field, label, input })}>Edit</button>
+                        </div>
+                      ))}
                     </section>
                     <section className="la-card la-settings-card">
                       <h2>Hero highlights</h2><p>Edit the short promise cards below the homepage hero.</p>
                       <div className="la-benefit-list">
                         {(Array.isArray(settingsDraft.heroPromiseItems) ? settingsDraft.heroPromiseItems : DEFAULT_SETTINGS.heroPromiseItems).map((item, index) => (
                           <div key={`hero-promise-${index}`} className="la-shipping-tier-row">
-                            <label>Icon<select value={item.type || "quality"} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "type", event.target.value)}>
-                              {BULLET_ICON_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                            </select></label>
-                            <label>Title<input value={item.title || ""} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "title", event.target.value)} required /></label>
-                            <label>Description<input value={item.description || ""} onChange={(event) => updateSettingsListItem("heroPromiseItems", index, "description", event.target.value)} /></label>
-                            <button type="button" className="la-danger-text" onClick={() => removeSettingsListItem("heroPromiseItems", index)}>Remove</button>
+                            <span><strong>{item.title || "Untitled highlight"}</strong><small>{item.description || "-"}</small></span>
+                            <div className="la-inline-actions">
+                              <button type="button" onClick={() => openSettingsListEditor({ field: "heroPromiseItems", index, label: "Edit highlight" })}>Edit</button>
+                              <button type="button" className="la-danger-text" onClick={(event) => removeSettingsListItemAndSave(event, "heroPromiseItems", index)}>Remove</button>
+                            </div>
                           </div>
                         ))}
                       </div>
-                      <button type="button" className="la-primary-button" onClick={() => addSettingsListItem("heroPromiseItems")}>Add highlight</button>
+                      <button type="button" className="la-primary-button" onClick={() => openSettingsListEditor({ field: "heroPromiseItems", label: "Add highlight" })}>Add highlight</button>
                     </section>
                     <section className="la-card la-settings-card">
                       <h2>Feature blocks</h2><p>Edit the smaller feature messages used elsewhere on the storefront.</p>
                       <div className="la-benefit-list">
                         {(Array.isArray(settingsDraft.featureItems) ? settingsDraft.featureItems : DEFAULT_SETTINGS.featureItems).map((item, index) => (
                           <div key={`feature-item-${index}`} className="la-shipping-tier-row">
-                            <label>Icon<select value={item.type || "quality"} onChange={(event) => updateSettingsListItem("featureItems", index, "type", event.target.value)}>
-                              {BULLET_ICON_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                            </select></label>
-                            <label>Title<input value={item.title || ""} onChange={(event) => updateSettingsListItem("featureItems", index, "title", event.target.value)} required /></label>
-                            <label>Description<input value={item.description || ""} onChange={(event) => updateSettingsListItem("featureItems", index, "description", event.target.value)} /></label>
-                            <button type="button" className="la-danger-text" onClick={() => removeSettingsListItem("featureItems", index)}>Remove</button>
+                            <span><strong>{item.title || "Untitled feature"}</strong><small>{item.description || "-"}</small></span>
+                            <div className="la-inline-actions">
+                              <button type="button" onClick={() => openSettingsListEditor({ field: "featureItems", index, label: "Edit feature" })}>Edit</button>
+                              <button type="button" className="la-danger-text" onClick={(event) => removeSettingsListItemAndSave(event, "featureItems", index)}>Remove</button>
+                            </div>
                           </div>
                         ))}
                       </div>
-                      <button type="button" className="la-primary-button" onClick={() => addSettingsListItem("featureItems")}>Add feature</button>
+                      <button type="button" className="la-primary-button" onClick={() => openSettingsListEditor({ field: "featureItems", label: "Add feature" })}>Add feature</button>
                     </section>
                   </>
                 ) : null}
@@ -1535,23 +1671,18 @@ function AdminOverlay({
                     <div className="la-benefit-list">
                       {(Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : []).map((tier, index) => (
                         <div key={tier.id || `shipping-tier-${index}`} className="la-shipping-tier-row">
-                          <label>Name<input value={tier.name} onChange={(event) => updateShippingTier(index, "name", event.target.value)} required /></label>
-                          <label>Description<input value={tier.description || ""} onChange={(event) => updateShippingTier(index, "description", event.target.value)} /></label>
-                          <label>Fee<input type="number" min="0" step="100" value={tier.fee} onChange={(event) => updateShippingTier(index, "fee", event.target.value)} required /></label>
-                          <div className="la-toggle-row">
-                            <span>Active</span>
-                            <button type="button" className={tier.isActive !== false ? "is-on" : ""} onClick={() => updateShippingTier(index, "isActive", tier.isActive === false)} aria-label={`Toggle ${tier.name}`}>
-                              <i className={tier.isActive !== false ? "is-on" : ""} />
-                            </button>
+                          <span><strong>{tier.name}</strong><small>{tier.description || "No description"} · {toPrice(tier.fee || 0)} · {tier.isActive === false ? "Inactive" : "Active"}</small></span>
+                          <div className="la-inline-actions">
+                            <button type="button" onClick={() => openShippingTierEditor(index)}>Edit</button>
+                            <button type="button" className="la-danger-text" onClick={(event) => removeShippingTierAndSave(event, index)}>Remove</button>
                           </div>
-                          <button type="button" className="la-danger-text" onClick={() => removeShippingTier(index)}>Remove</button>
                         </div>
                       ))}
                       {(!Array.isArray(settingsDraft.shippingTiers) || settingsDraft.shippingTiers.length === 0) ? (
                         <p className="la-notice">No shipping tiers yet.</p>
                       ) : null}
                     </div>
-                    <button type="button" className="la-primary-button" onClick={addShippingTier}>Add shipping tier</button>
+                    <button type="button" className="la-primary-button" onClick={() => openShippingTierEditor()}>Add shipping tier</button>
                   </section>
                 ) : null}
                 {settingsSection === "security" ? (
@@ -1563,12 +1694,60 @@ function AdminOverlay({
                     <div className="la-toggle-row"><span>Two-factor authentication</span><i /></div>
                   </section>
                 ) : null}
-                <div className="la-settings-save"><button type="submit" className="la-primary-button">Save changes</button></div>
-              </form>
+              </div>
             </section>
           ) : null}
         </main>
       </div>
+
+      {activeModal === "settings" && settingsEditor ? (
+        <form className="la-modal-card is-open" onSubmit={handleSettingsEditorSubmit}>
+          <header>
+            <div>
+              <h2>{settingsEditor.label}</h2>
+              <p>Update this setting only.</p>
+            </div>
+            <button type="button" onClick={closeModal} aria-label="Close settings editor">x</button>
+          </header>
+
+          {settingsEditor.kind === "field" ? (
+            settingsEditor.input === "textarea" ? (
+              <label>{settingsEditor.label}<textarea rows={4} value={settingsModalDraft.value || ""} onChange={(event) => setSettingsModalDraft({ value: event.target.value })} /></label>
+            ) : (
+              <label>{settingsEditor.label}<input value={settingsModalDraft.value || ""} onChange={(event) => setSettingsModalDraft({ value: event.target.value })} /></label>
+            )
+          ) : null}
+
+          {settingsEditor.kind === "listItem" ? (
+            <>
+              <label>Icon<select value={settingsModalDraft.type || "quality"} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, type: event.target.value }))}>
+                {BULLET_ICON_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select></label>
+              <label>Title<input value={settingsModalDraft.title || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, title: event.target.value }))} required /></label>
+              <label>Description<input value={settingsModalDraft.description || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, description: event.target.value }))} /></label>
+            </>
+          ) : null}
+
+          {settingsEditor.kind === "shippingTier" ? (
+            <>
+              <label>Name<input value={settingsModalDraft.name || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, name: event.target.value }))} required /></label>
+              <label>Description<input value={settingsModalDraft.description || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, description: event.target.value }))} /></label>
+              <label>Fee<input type="number" min="0" step="100" value={settingsModalDraft.fee || 0} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, fee: event.target.value }))} required /></label>
+              <div className="la-toggle-row">
+                <span>Active</span>
+                <button type="button" className={settingsModalDraft.isActive !== false ? "is-on" : ""} onClick={() => setSettingsModalDraft((current) => ({ ...current, isActive: current.isActive === false }))} aria-label="Toggle shipping tier">
+                  <i className={settingsModalDraft.isActive !== false ? "is-on" : ""} />
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          <footer>
+            <button type="button" onClick={closeModal}>Cancel</button>
+            <button type="submit" className="la-primary-button">Save</button>
+          </footer>
+        </form>
+      ) : null}
 
       {activeModal === "order" ? (
         <form className="la-modal-card is-open" onSubmit={handleCreateOrder}>
