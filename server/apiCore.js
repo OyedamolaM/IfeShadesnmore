@@ -1955,7 +1955,24 @@ async function getStoredImageResponse(tableName, id) {
   if (!image) return new Response("Image not found.", { status: 404 });
 
   if (/^https?:\/\//i.test(image)) {
-    return Response.redirect(image, 302);
+    try {
+      const imageResponse = await fetch(image, {
+        headers: {
+          "User-Agent": "IfeShadesnMore image proxy"
+        }
+      });
+      if (!imageResponse.ok || !imageResponse.body) {
+        return Response.redirect(image, 302);
+      }
+      return new Response(imageResponse.body, {
+        headers: {
+          "Content-Type": imageResponse.headers.get("content-type") || "image/jpeg",
+          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      });
+    } catch {
+      return Response.redirect(image, 302);
+    }
   }
 
   if (image.startsWith("/")) {
