@@ -108,6 +108,16 @@ function withTimeout(promise, timeoutMs, message) {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
+function getMissingSupabaseStorageEnv({ supabaseUrl, serviceRoleKey, bucket }) {
+  return [
+    ["SUPABASE_URL", supabaseUrl],
+    ["SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey],
+    ["SUPABASE_STORAGE_BUCKET", bucket]
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+}
+
 export function getSiteUrl() {
   return String(process.env.SITE_URL || process.env.FRONTEND_URL || FRONTEND_URL)
     .trim()
@@ -1890,8 +1900,9 @@ async function storeImageFile(file, kind) {
   const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
   const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   const bucket = String(process.env.SUPABASE_STORAGE_BUCKET || "ife-shadesnmore").trim();
-  if (!supabaseUrl || !serviceRoleKey || !bucket) {
-    return { response: json({ error: "Supabase Storage is not configured." }, 503) };
+  const missingEnv = getMissingSupabaseStorageEnv({ supabaseUrl, serviceRoleKey, bucket });
+  if (missingEnv.length > 0) {
+    return { response: json({ error: "Supabase Storage is not configured.", missingEnv }, 503) };
   }
   if (!file || typeof file === "string") return { response: json({ error: "Image file is required." }, 400) };
   if (!String(file.type || "").startsWith("image/")) return { response: json({ error: "Only image uploads are allowed." }, 400) };

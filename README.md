@@ -84,6 +84,23 @@ Required env vars in Render:
 - Mail provider vars if you want real email delivery
 - `ORDER_ALERT_EMAIL` (optional, defaults to `ADMIN_EMAIL`)
 
+### Vercel Deployment
+
+Add the same production env vars in your Vercel project settings under
+Settings -> Environment Variables, then redeploy the production deployment.
+Do not rely on local `.env` values for production.
+
+For admin image uploads, Vercel must have these server-side variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_STORAGE_BUCKET` (defaults to `ife-shadesnmore` if omitted)
+- `SUPABASE_STORAGE_FOLDER` (optional, defaults to `uploads`)
+
+Do not prefix `SUPABASE_SERVICE_ROLE_KEY` with `VITE_`; it must stay server-only.
+Make the configured Supabase Storage bucket public so uploaded storefront images
+can load in customer browsers.
+
 ### Keep Free Render Service Warm (Optional)
 
 This repo includes `.github/workflows/keep-render-awake.yml` which pings:
