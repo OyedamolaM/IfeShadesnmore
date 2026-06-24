@@ -25,7 +25,9 @@ export const Route = createFileRoute("/products/$slugId")({
     const title = `${product.name} | IfeShades & More`;
     const description =
       product.description || `Shop ${product.name} from IfeShades & More. Stylish eyewear with secure checkout.`;
-    const image = absoluteUrl(product.image || "/hero/UnisexGlasses.jpg", siteUrl);
+    const image = absoluteUrl(normalizeProductImagePath(product.image || "/hero/UnisexGlasses.jpg"), siteUrl);
+    const imageAlt = `${product.name} product image`;
+    const imageType = inferImageType(image);
     return {
       meta: [
         { title },
@@ -35,10 +37,18 @@ export const Route = createFileRoute("/products/$slugId")({
         { property: "og:type", content: "product" },
         { property: "og:url", content: url },
         { property: "og:image", content: image },
+        { property: "og:image:secure_url", content: image },
+        { property: "og:image:alt", content: imageAlt },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "1200" },
+        ...(imageType ? [{ property: "og:image:type", content: imageType }] : []),
+        { property: "product:price:amount", content: String(product.price) },
+        { property: "product:price:currency", content: "NGN" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
-        { name: "twitter:image", content: image }
+        { name: "twitter:image", content: image },
+        { name: "twitter:image:alt", content: imageAlt }
       ],
       links: [{ rel: "canonical", href: url }],
       scripts: [
@@ -129,4 +139,26 @@ function absoluteUrl(value: string, siteUrl: string) {
   if (!value) return siteUrl;
   if (/^https?:\/\//i.test(value)) return value;
   return `${siteUrl}${value.startsWith("/") ? value : `/${value}`}`;
+}
+
+function normalizeProductImagePath(value: string) {
+  const src = String(value || "").trim();
+  if (src === "/hero/female-glasses.jpg") return "/hero/Female-glasses.jpg";
+  return src;
+}
+
+function inferImageType(value: string) {
+  const pathname = (() => {
+    try {
+      return new URL(value).pathname.toLowerCase();
+    } catch {
+      return String(value || "").toLowerCase();
+    }
+  })();
+
+  if (pathname.endsWith(".png")) return "image/png";
+  if (pathname.endsWith(".webp")) return "image/webp";
+  if (pathname.endsWith(".gif")) return "image/gif";
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+  return "";
 }
