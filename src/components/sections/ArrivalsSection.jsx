@@ -177,7 +177,7 @@ function ArrivalsSection({
   themeVariant = "v1"
 }) {
   const [expandedSections, setExpandedSections] = useState({});
-  const [openProductActionsId, setOpenProductActionsId] = useState("");
+  const [openProductActionsKey, setOpenProductActionsKey] = useState("");
   const [isMobileView, setIsMobileView] = useState(false);
   const sectionRef = useRef(null);
   const rawQuery = String(searchQuery || "").trim().toLowerCase();
@@ -203,19 +203,19 @@ function ArrivalsSection({
   }, []);
 
   useEffect(() => {
-    if (!openProductActionsId || typeof document === "undefined") return undefined;
+    if (!openProductActionsKey || typeof document === "undefined") return undefined;
 
     const handlePointerDown = (event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       const openMenu = sectionRef.current?.querySelector(".collection-action-menu.is-open");
       if (openMenu?.contains(target)) return;
-      setOpenProductActionsId("");
+      setOpenProductActionsKey("");
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [openProductActionsId]);
+  }, [openProductActionsKey]);
 
   useEffect(() => {
     trackEvent("view_shop_collection_section", {
@@ -257,8 +257,8 @@ function ArrivalsSection({
     setExpandedSections((current) => ({ ...current, [audience]: !current[audience] }));
   };
 
-  const toggleProductActions = (productId) => {
-    setOpenProductActionsId((current) => (current === productId ? "" : productId));
+  const toggleProductActions = (actionKey) => {
+    setOpenProductActionsKey((current) => (current === actionKey ? "" : actionKey));
   };
 
   return (
@@ -303,7 +303,8 @@ function ArrivalsSection({
                       {visibleItems.map((product, index) => {
                         const availability = normalizeAvailability(product.availability);
                         const isOutOfStock = availability === "out_of_stock";
-                        const isActionsOpen = openProductActionsId === product.id;
+                        const productActionKey = `${group.id}:${product.id}`;
+                        const isActionsOpen = openProductActionsKey === productActionKey;
                         return (
                           <article className={index % 2 === 1 ? "collection-card is-offset" : "collection-card"} key={product.id}>
                             <button
@@ -330,13 +331,19 @@ function ArrivalsSection({
                                 <p>{toPrice(product.price)}</p>
                               </div>
                               {allowOrdering ? (
-                                <div className={`collection-action-menu ${isActionsOpen ? "is-open" : ""}`}>
+                                <div
+                                  className={`collection-action-menu ${isActionsOpen ? "is-open" : ""}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                >
                                   <div className="collection-action-panel" aria-hidden={!isActionsOpen}>
                                     <button
                                       type="button"
-                                      onClick={() => {
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
                                         onViewProduct(product);
-                                        setOpenProductActionsId("");
+                                        setOpenProductActionsKey("");
                                       }}
                                     >
                                       View details
@@ -344,9 +351,11 @@ function ArrivalsSection({
                                     <button
                                       type="button"
                                       disabled={wishlistPendingProductId === product.id}
-                                      onClick={() => {
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
                                         onAddToWishlist?.(product);
-                                        setOpenProductActionsId("");
+                                        setOpenProductActionsKey("");
                                       }}
                                     >
                                       {wishlistPendingProductId === product.id ? "Saving..." : "Save to wishlist"}
@@ -354,9 +363,11 @@ function ArrivalsSection({
                                     <button
                                       type="button"
                                       disabled={isOutOfStock}
-                                      onClick={() => {
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
                                         if (!isOutOfStock) onAddToCart(product, 1);
-                                        setOpenProductActionsId("");
+                                        setOpenProductActionsKey("");
                                       }}
                                     >
                                       Add to cart
@@ -367,13 +378,15 @@ function ArrivalsSection({
                                     className="collection-add-button"
                                     disabled={isOutOfStock}
                                     aria-expanded={isActionsOpen}
+                                    onPointerDown={(event) => event.stopPropagation()}
                                     aria-label={
                                       isOutOfStock
                                         ? `${product.name} is out of stock`
                                         : `${isActionsOpen ? "Close" : "Open"} ${product.name} actions`
                                     }
-                                    onClick={() => {
-                                      if (!isOutOfStock) toggleProductActions(product.id);
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (!isOutOfStock) toggleProductActions(productActionKey);
                                     }}
                                   >
                                     <span aria-hidden="true">{isActionsOpen ? "-" : "+"}</span>

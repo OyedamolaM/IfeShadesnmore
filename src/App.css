@@ -1659,7 +1659,7 @@ select {
   inset: 0;
   background: rgba(10, 13, 18, 0.55);
   backdrop-filter: blur(2px);
-  z-index: 170;
+  z-index: 121;
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -2235,7 +2235,7 @@ select {
   position: fixed;
   right: 18px;
   bottom: 18px;
-  z-index: 28;
+  z-index: 130;
   margin: 0;
   background: #e7f6ec;
   color: #244b33;

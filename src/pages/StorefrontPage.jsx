@@ -198,7 +198,7 @@ function StorefrontPage({
   }, [cart, productsById]);
 
   const cartCount = useMemo(
-    () => cartItems.reduce((total, item) => total + item.quantity, 0),
+    () => cartItems.length,
     [cartItems]
   );
 
