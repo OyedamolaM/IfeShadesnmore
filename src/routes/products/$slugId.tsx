@@ -11,7 +11,7 @@ export const Route = createFileRoute("/products/$slugId")({
   },
   head: ({ loaderData, params }) => {
     const product = loaderData;
-    const siteUrl = getSiteUrl();
+    const siteUrl = getSiteUrl(product?.seoSiteUrl);
     const url = `${siteUrl}/products/${params.slugId}`;
     if (!product) {
       return {
@@ -131,8 +131,8 @@ function ProductPage() {
   );
 }
 
-function getSiteUrl() {
-  return String(import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+function getSiteUrl(runtimeSiteUrl?: string) {
+  return String(runtimeSiteUrl || import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
 }
 
 function absoluteUrl(value: string, siteUrl: string) {
