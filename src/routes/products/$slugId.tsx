@@ -168,9 +168,7 @@ function ProductPage() {
   const handleShare = async () => {
     const shareData = {
       title: product.name || "IfeShadesnMore product",
-      text: product.name
-        ? `View ${product.name} on IfeShadesnMore: ${productUrl}`
-        : `View this product on IfeShadesnMore: ${productUrl}`,
+      text: product.name ? `View ${product.name} on IfeShadesnMore` : "View this product on IfeShadesnMore",
       url: productUrl
     };
 
@@ -282,6 +280,9 @@ function absoluteUrl(value: string, siteUrl: string) {
 
 function getProductShareImageUrl(product, siteUrl: string) {
   if (!product?.id) return absoluteUrl(normalizeProductImagePath(product?.image || "/hero/UnisexGlasses.jpg"), siteUrl);
+  const image = normalizeProductImagePath(product.image || "");
+  if (/^https?:\/\//i.test(image)) return image;
+  if (image && !image.startsWith("data:")) return absoluteUrl(image, siteUrl);
   return absoluteUrl(`/api/products/${encodeURIComponent(product.id)}/image`, siteUrl);
 }
 

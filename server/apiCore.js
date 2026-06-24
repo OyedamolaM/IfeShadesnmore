@@ -1909,8 +1909,10 @@ async function storeImageFile(file, kind) {
   if (!file || typeof file === "string") return { response: json({ error: "Image file is required." }, 400) };
   if (!String(file.type || "").startsWith("image/")) return { response: json({ error: "Only image uploads are allowed." }, 400) };
   if (file.size > 10 * 1024 * 1024) return { response: json({ error: "Image must be 10MB or smaller." }, 400) };
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const fileName = sanitizeUploadFileName(file.name || "image");
+  const sourceBuffer = Buffer.from(await file.arrayBuffer());
+  const optimizedImage = await optimizeUploadedImage(sourceBuffer, String(file.type || ""));
+  const buffer = optimizedImage.buffer;
+  const fileName = sanitizeUploadFileName(optimizedImage.fileName || file.name || "image");
   const folder = String(process.env.SUPABASE_STORAGE_FOLDER || "uploads").trim().replace(/^\/+|\/+$/g, "") || "uploads";
   const objectPath = `${folder}/${kind}/${crypto.randomUUID()}-${fileName}`;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath
@@ -1922,7 +1924,7 @@ async function storeImageFile(file, kind) {
     headers: {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": String(file.type || "application/octet-stream"),
+      "Content-Type": optimizedImage.contentType,
       "x-upsert": "false"
     },
     body: buffer
@@ -1943,9 +1945,42 @@ async function storeImageFile(file, kind) {
       publicId: objectPath,
       width: null,
       height: null,
-      format: String(file.type || "").split("/")[1] || ""
+      format: optimizedImage.contentType.split("/")[1] || ""
     }
   };
+}
+
+async function optimizeUploadedImage(buffer, contentType) {
+  const fallbackExtension = String(contentType || "").split("/")[1] || "jpg";
+  try {
+    const sharp = (await import("sharp")).default;
+    const optimizedBuffer = await sharp(buffer, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: 1400,
+        height: 1400,
+        fit: "inside",
+        withoutEnlargement: true
+      })
+      .jpeg({
+        quality: 82,
+        progressive: true,
+        mozjpeg: true
+      })
+      .toBuffer();
+
+    return {
+      buffer: optimizedBuffer,
+      contentType: "image/jpeg",
+      fileName: "image.jpg"
+    };
+  } catch {
+    return {
+      buffer,
+      contentType: contentType || "application/octet-stream",
+      fileName: `image.${fallbackExtension}`
+    };
+  }
 }
 
 async function getStoredImageResponse(tableName, id) {
@@ -1955,12 +1990,16 @@ async function getStoredImageResponse(tableName, id) {
   if (!image) return new Response("Image not found.", { status: 404 });
 
   if (/^https?:\/\//i.test(image)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4500);
     try {
       const imageResponse = await fetch(image, {
+        signal: controller.signal,
         headers: {
           "User-Agent": "IfeShadesnMore image proxy"
         }
       });
+      clearTimeout(timeout);
       if (!imageResponse.ok || !imageResponse.body) {
         return Response.redirect(image, 302);
       }
@@ -1971,6 +2010,7 @@ async function getStoredImageResponse(tableName, id) {
         }
       });
     } catch {
+      clearTimeout(timeout);
       return Response.redirect(image, 302);
     }
   }

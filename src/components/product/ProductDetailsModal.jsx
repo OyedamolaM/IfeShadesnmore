@@ -75,9 +75,7 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
   const handleShareProduct = async () => {
     const shareData = {
       title: product.name || "IfeShadesnMore product",
-      text: product.name
-        ? `View ${product.name} on IfeShadesnMore: ${productUrl}`
-        : `View this product on IfeShadesnMore: ${productUrl}`,
+      text: product.name ? `View ${product.name} on IfeShadesnMore` : "View this product on IfeShadesnMore",
       url: productUrl
     };
 
