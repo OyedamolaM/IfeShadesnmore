@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import ProductMedia from "../../components/product/ProductMedia.jsx";
+import CartIcon from "../../components/icons/CartIcon.jsx";
+import SearchIcon from "../../components/icons/SearchIcon.jsx";
+import ProfileIcon from "../../components/icons/ProfileIcon.jsx";
 import { toPrice } from "../../utils/format";
 import { getProductPageData } from "../../serverFns";
 import { CART_STORAGE_KEY, DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
@@ -103,6 +106,7 @@ function ProductPage() {
   const [toast, setToast] = useState("");
   const [shareStatus, setShareStatus] = useState("");
   const [isSavingWishlist, setIsSavingWishlist] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const availability = normalizeAvailability(product.availability);
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
@@ -129,6 +133,17 @@ function ProductPage() {
     return () => window.clearTimeout(timer);
   }, [toast, shareStatus]);
 
+  useEffect(() => {
+    setCartCount(getStoredCartCount());
+    const handleStorage = (event) => {
+      if (!event.key || event.key === CART_STORAGE_KEY) {
+        setCartCount(getStoredCartCount());
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   const resolveQuantity = () => {
     const parsed = Number.parseInt(String(quantityInput || "").trim(), 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
@@ -142,6 +157,7 @@ function ProductPage() {
 
     const quantity = resolveQuantity();
     const nextCart = updateStoredCart(product.id, quantity);
+    setCartCount(nextCart.length);
     setToast(
       availability === "preorder" ? `${product.name} added as preorder.` : `${product.name} added to cart.`
     );
@@ -192,11 +208,9 @@ function ProductPage() {
 
   return (
     <div className="page product-seo-page">
+      <ProductPageHeader cartCount={cartCount} />
       <main className="site-shell product-seo-shell">
         <section className="container product-seo-inner">
-          <Link className="legal-back-link" to="/">
-            Back to store
-          </Link>
           <div className="product-seo-grid">
             <div className="product-seo-media">
               <ProductMedia product={product} />
@@ -251,20 +265,107 @@ function ProductPage() {
                 >
                   {isSavingWishlist ? "Saving..." : "Save to Wishlist"}
                 </button>
-                <Link className="secondary-action product-seo-action" to="/" hash="shop">
-                  Back to Shop
-                </Link>
               </div>
             </article>
           </div>
         </section>
       </main>
+      <ProductPageFooter />
       {toast || shareStatus ? (
         <p className="purchase-toast" role="status" aria-live="polite">
           {toast || shareStatus}
         </p>
       ) : null}
     </div>
+  );
+}
+
+function ProductPageHeader({ cartCount }) {
+  const normalizedCount = Math.max(0, Number(cartCount) || 0);
+
+  return (
+    <header className="site-header product-page-header">
+      <div className="container header-inner">
+        <Link to="/" className="brand-mark" aria-label="IfeShadesnMore home">
+          <img className="brand-logo" src="/brand/ife-logo-circle.png" alt="" />
+          <span className="brand-copy">
+            <span className="brand-top">IfeShadesnMore</span>
+            <span className="brand-bottom">Fashion, Prescription, all in one place</span>
+          </span>
+        </Link>
+
+        <nav aria-label="Primary navigation" className="primary-nav">
+          <Link to="/">Home</Link>
+          <Link to="/" hash="shop">Shop</Link>
+          <Link to="/" hash="editorial">Blog</Link>
+          <Link to="/" hash="contact">Contact</Link>
+        </nav>
+
+        <div className="header-actions">
+          <Link to="/" hash="shop" className="header-icon-button header-search" aria-label="Search products">
+            <SearchIcon />
+          </Link>
+          <Link to="/account" className="header-icon-button header-profile" aria-label="Open profile">
+            <ProfileIcon />
+          </Link>
+          <Link to="/" search={{ openCart: "1" }} className="header-icon-button header-cart" aria-label="Open cart">
+            <CartIcon />
+            {normalizedCount > 0 ? (
+              <span className="cart-count">{normalizedCount > 99 ? "99+" : normalizedCount}</span>
+            ) : null}
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function ProductPageFooter() {
+  return (
+    <footer className="site-footer product-page-footer">
+      <div className="container footer-inner">
+        <div className="footer-links">
+          <Link to="/privacy-policy" className="footer-link-button">
+            Privacy Policy
+          </Link>
+          <span>|</span>
+          <Link to="/terms-of-service" className="footer-link-button">
+            Terms of Service
+          </Link>
+        </div>
+
+        <div className="footer-contact-stack">
+          <div className="footer-contact-links">
+            <a href="mailto:oluborodedeborah2000@gmail.com" target="_blank" rel="noopener noreferrer">
+              oluborodedeborah2000@gmail.com
+            </a>
+            <span>|</span>
+            <a href="tel:09063556765">09063556765</a>
+            <span>|</span>
+            <a
+              href="https://wa.me/2349063556765?text=Hello%20Ife_ShadesnMore%2C%20I%20would%20like%20to%20make%20an%20order."
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              WhatsApp
+            </a>
+          </div>
+          <p>1, Sunday Akinbo Str, command Ipaja, Lagos</p>
+        </div>
+
+        <div className="footer-socials" aria-label="Social media links">
+          <a href="https://www.facebook.com/share/1CJYVRj8hQ/" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
+            <SocialIcon type="facebook" />
+          </a>
+          <a href="https://www.instagram.com/ife_shadesnmore?igsh=MW90cDlmdXRzZzRncQ==" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+            <SocialIcon type="instagram" />
+          </a>
+          <a href="https://www.tiktok.com/@ife_shadesnmore?_r=1&_t=ZS-946goatDDNp" target="_blank" rel="noopener noreferrer" aria-label="TikTok">
+            <SocialIcon type="tiktok" />
+          </a>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -343,6 +444,11 @@ function parseStoredCart(rawValue) {
   }
 }
 
+function getStoredCartCount() {
+  if (typeof window === "undefined") return 0;
+  return parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]").length;
+}
+
 function updateStoredCart(productId, quantity) {
   if (typeof window === "undefined") return [];
   const current = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
@@ -355,6 +461,36 @@ function updateStoredCart(productId, quantity) {
         );
   window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(next));
   return next;
+}
+
+function SocialIcon({ type }) {
+  if (type === "facebook") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M13.4 8.1h2.3V5.2h-2.3c-2.3 0-3.7 1.6-3.7 3.8v2H7.5v2.8h2.2v5.1h2.9v-5.1h2.5l.4-2.8h-2.9V9.4c0-.8.4-1.3 1.1-1.3Z" />
+      </svg>
+    );
+  }
+
+  if (type === "instagram") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4.2" y="4.2" width="15.6" height="15.6" rx="4.2" />
+        <circle cx="12" cy="12" r="3.7" />
+        <circle cx="17.2" cy="6.8" r="1.1" />
+      </svg>
+    );
+  }
+
+  if (type === "tiktok") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14.8 3.5c.6 1.6 1.8 2.8 3.4 3.4v2.6a6.1 6.1 0 0 1-3.4-1v5.6a5.8 5.8 0 1 1-5-5.8v2.7a3.2 3.2 0 1 0 2.4 3.1V3.5h2.6Z" />
+      </svg>
+    );
+  }
+
+  return null;
 }
 
 function ShareIcon() {
