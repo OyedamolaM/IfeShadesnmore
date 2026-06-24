@@ -1621,25 +1621,27 @@
   border: 1px solid var(--theme-line);
   border-radius: var(--theme-card-radius);
   background: var(--theme-card);
-  aspect-ratio: 4 / 5;
+  aspect-ratio: auto;
   height: auto;
   overflow: hidden;
 }
 
 .themed-product-v2 .seller-media {
   border-radius: var(--theme-card-radius);
-  aspect-ratio: 3 / 4;
+  aspect-ratio: auto;
 }
 
 .themed-product-v3 .seller-media {
   border-radius: var(--theme-card-radius);
-  aspect-ratio: 1 / 1;
+  aspect-ratio: auto;
 }
 
 .themed-product-section .seller-media img {
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
+  background: var(--theme-card);
   transition: transform 700ms ease;
 }
 
@@ -2365,4 +2367,16 @@
     justify-content: flex-start;
     padding-inline: 0.65rem;
   }
+}
+
+.themed-product-section .collection-card .seller-media {
+  aspect-ratio: auto;
+  height: auto;
+}
+
+.themed-product-section .collection-card .seller-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
 }

@@ -12,13 +12,40 @@ function normalizeAvailability(value) {
   return "in_stock";
 }
 
+function productSlugId(product) {
+  const slug =
+    String(product?.name || product?.id || "product")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "product";
+  return `${slug}--${encodeURIComponent(product.id)}`;
+}
+
+function getProductUrl(product) {
+  const path = `/products/${productSlugId(product)}`;
+  if (typeof window === "undefined") return path;
+  return `${window.location.origin}${path}`;
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M18 8a3 3 0 1 0-2.82-4H15a3 3 0 0 0 .62 1.82L8.9 9.2a3 3 0 1 0 0 5.6l6.72 3.38A3 3 0 1 0 17 16a3 3 0 0 0-1.82.62L8.46 13.2a3.1 3.1 0 0 0 0-2.4l6.72-3.38A3 3 0 0 0 18 8Z" />
+    </svg>
+  );
+}
+
 function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, isSavingWishlist = false, onBuyNow, allowOrdering = true }) {
   const [quantityInput, setQuantityInput] = useState("1");
   const [showPreorderInfo, setShowPreorderInfo] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
 
   useEffect(() => {
     setQuantityInput("1");
     setShowPreorderInfo(false);
+    setShareStatus("");
   }, [product?.id]);
 
   if (!product) return null;
@@ -43,6 +70,32 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
     (product.preorderNote || "").trim() || "This product is available on preorder and ships when stock arrives.";
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
+  const productUrl = getProductUrl(product);
+
+  const handleShareProduct = async () => {
+    const shareData = {
+      title: product.name || "IfeShadesnMore product",
+      text: product.name ? `View ${product.name} on IfeShadesnMore` : "View this product on IfeShadesnMore",
+      url: productUrl
+    };
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share(shareData);
+        setShareStatus("Shared.");
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(productUrl);
+        setShareStatus("Product link copied.");
+        return;
+      }
+      setShareStatus(productUrl);
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      setShareStatus("Could not share. Copy the product page link from your browser.");
+    }
+  };
 
   return (
     <div
@@ -62,7 +115,9 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
         </div>
 
         <div className="product-modal-content">
-          <h2>{product.name}</h2>
+          <div className="product-modal-heading">
+            <h2>{product.name}</h2>
+          </div>
           <p className="product-modal-price">{toPrice(product.price)}</p>
           <div className="product-availability-row">
             <span className={`availability-pill availability-${availability}`}>{availabilityLabel}</span>
@@ -109,9 +164,24 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
                         setQuantityInput(String(resolveQuantity()));
                       }}
                     />
+                    <button
+                      type="button"
+                      className="secondary-action detail-cart-button"
+                      onClick={() => onAddToCart(product, nextQuantity)}
+                    >
+                      {isPreorder ? "Add Preorder" : "Add to Cart"}
+                    </button>
                   </label>
 
                   <div className="product-modal-actions">
+                    <button
+                      type="button"
+                      className="secondary-action product-action-share"
+                      onClick={handleShareProduct}
+                    >
+                      <ShareIcon />
+                      Share
+                    </button>
                     <button
                       type="button"
                       className="secondary-action"
@@ -119,16 +189,6 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
                       disabled={isSavingWishlist}
                     >
                       {isSavingWishlist ? "Saving..." : "Save to Wishlist"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      onClick={() => onAddToCart(product, nextQuantity)}
-                    >
-                      {isPreorder ? "Add Preorder" : "Add to Cart"}
-                    </button>
-                    <button type="button" className="primary-action" onClick={() => onBuyNow(product, nextQuantity)}>
-                      {isPreorder ? "Preorder Now" : "Buy Now"}
                     </button>
                   </div>
                 </>

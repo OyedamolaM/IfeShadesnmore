@@ -5,57 +5,37 @@ import { trackEvent } from "../../utils/analytics";
 
 const MIN_SEARCH_LENGTH = 3;
 
-const COLLECTION_CARDS = [
+const COLLECTION_SECTIONS = [
   {
-    audience: "photochromic",
-    title: "Photochromic Antiblue",
-    ctaLabel: "Shop Photochromic Antiblue",
-    sectionId: "photochromic-antiblue-section",
+    title: "Plain Fashion Glasses",
+    sectionId: "plain-fashion-section",
+    groups: [
+      { id: "fashion-women", title: "Female Fashion Glasses", gender: "women", strictFashion: true },
+      { id: "fashion-men", title: "Male Fashion Glasses", gender: "men", strictFashion: true }
+    ]
   },
   {
-    audience: "antiblue",
-    title: "Unisex Anti Blue Light",
-    ctaLabel: "Shop Unisex Anti-Blue Light",
-    sectionId: "unisex-anti-blue-light-section",
+    title: "Photochromic Glasses",
+    sectionId: "photochromic-section",
+    groups: [
+      { id: "photochromic-women", title: "Female", gender: "women", feature: "photochromic" },
+      { id: "photochromic-men", title: "Male", gender: "men", feature: "photochromic" },
+      { id: "photochromic-unisex", title: "Unisex", gender: "unisex", feature: "photochromic" }
+    ]
   },
   {
-    audience: "women Antiblue",
-    title: "Women's Anti Blue Glasses",
-    ctaLabel: "Shop Women's Anti-Blue Light",
-    sectionId: "women-anti-blue-light-section",
-  },
-  {
-    audience: "women",
-    title: "Women's Fashion Glasses",
-    ctaLabel: "Shop Women's",
-    sectionId: "women-section"
-  },
-  {
-    audience: "men",
-    title: "Men's Fashion Glasses",
-    ctaLabel: "Shop Men's",
-    sectionId: "men-section"
-  },
-  {
-    audience: "sunglasses",
-    title: "Sunglasses",
-    ctaLabel: "Shop Sunglasses",
-    sectionId: "sunglasses-section"
-  },
-  {
-    audience: "unisex",
-    title: "Unisex Glasses",
-    ctaLabel: "Shop Unisex",
-    sectionId: "unisex-section"
-  },
-  {
-    audience: "prescription",
-    title: "Prescriptions",
-    ctaLabel: "Shop Prescription",
-    sectionId: "prescription-section",
-    comingSoon: true
+    title: "Anti-blue Glasses",
+    sectionId: "anti-blue-section",
+    groups: [
+      { id: "antiblue-women", title: "Female", gender: "women", feature: "antiblue" },
+      { id: "antiblue-men", title: "Male", gender: "men", feature: "antiblue" },
+      { id: "antiblue-unisex", title: "Unisex", gender: "unisex", feature: "antiblue" }
+    ]
   }
 ];
+
+const COLLECTION_GROUPS = COLLECTION_SECTIONS.flatMap((section) => section.groups);
+const FEATURE_AUDIENCES = new Set(["photochromic", "antiblue", "prescrip"]);
 
 function normalizeAvailability(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -76,6 +56,14 @@ function normalizeAudienceKey(value) {
   const source = String(value || "").trim().toLowerCase();
   const compact = source.replace(/[^a-z]/g, "");
   if (!compact) return "unisex";
+
+  if (compact.includes("fashion")) {
+    return "fashion";
+  }
+
+  if (compact.includes("photochromic")) {
+    return "photochromic";
+  }
 
   if (
     compact.includes("women") ||
@@ -117,6 +105,7 @@ function normalizeAudienceKey(value) {
 
 function inferAudienceFromName(name) {
   const value = String(name || "").toLowerCase();
+  if (/\bphotochromic\b/.test(value)) return "photochromic";
   if (/\b(women|woman|lady|female|girls?)\b/.test(value)) return "women";
   if (/\b(men|man|male|gent|boys?)\b/.test(value)) return "men";
   if (/\b(sunglass|sunglasses|shades?)\b/.test(value)) return "sunglasses";
@@ -132,6 +121,14 @@ function resolveAudiences(product) {
   const normalized = [...new Set(merged.map((entry) => normalizeAudienceKey(entry)).filter(Boolean))];
   if (normalized.length > 0) return normalized;
   return [inferAudienceFromName(product?.name)];
+}
+
+function productMatchesCollectionGroup(product, group) {
+  const audiences = new Set(resolveAudiences(product));
+  const hasFeatureAudience = [...audiences].some((audience) => FEATURE_AUDIENCES.has(audience));
+  if (group.strictFashion && hasFeatureAudience) return false;
+  if (group.feature && !audiences.has(group.feature)) return false;
+  return audiences.has(group.gender);
 }
 
 function matchesQuery(product, query) {
@@ -150,27 +147,19 @@ function canDisplayOnStorefront(product) {
   return normalizeAvailability(product?.availability) !== "out_of_stock";
 }
 
-function groupProductsByAudience(items) {
-  const grouped = COLLECTION_CARDS.reduce((acc, card) => {
-    acc[card.audience] = [];
+function groupProductsByCollection(items) {
+  const grouped = COLLECTION_GROUPS.reduce((acc, group) => {
+    acc[group.id] = [];
     return acc;
   }, {});
 
   (items || []).forEach((product) => {
-    const audiences = resolveAudiences(product);
-    let pushed = false;
-
-    audiences.forEach((audience) => {
-      if (!grouped[audience]) return;
-      if (!grouped[audience].some((entry) => entry.id === product.id)) {
-        grouped[audience].push(product);
+    COLLECTION_GROUPS.forEach((group) => {
+      if (!productMatchesCollectionGroup(product, group)) return;
+      if (!grouped[group.id].some((entry) => entry.id === product.id)) {
+        grouped[group.id].push(product);
       }
-      pushed = true;
     });
-
-    if (!pushed && !grouped.unisex.some((entry) => entry.id === product.id)) {
-      grouped.unisex.push(product);
-    }
   });
 
   return grouped;
@@ -242,30 +231,27 @@ function ArrivalsSection({
   }, [products, query]);
 
   const allProductsByAudience = useMemo(
-    () => groupProductsByAudience((products || []).filter((product) => canDisplayOnStorefront(product))),
+    () => groupProductsByCollection((products || []).filter((product) => canDisplayOnStorefront(product))),
     [products]
   );
   const visibleProductsByAudience = useMemo(
-    () => groupProductsByAudience(visibleProducts),
+    () => groupProductsByCollection(visibleProducts),
     [visibleProducts]
   );
 
-  const sortedCollectionCards = useMemo(() => {
-    return [...COLLECTION_CARDS]
-      .sort((cardA, cardB) => {
-        const aHasProducts = (allProductsByAudience[cardA.audience] || []).length > 0;
-        const bHasProducts = (allProductsByAudience[cardB.audience] || []).length > 0;
-        if (aHasProducts === bHasProducts) return 0;
-        return bHasProducts ? 1 : -1;
-      });
-  }, [allProductsByAudience]);
-
-  const visibleCollectionCards = useMemo(() => {
+  const visibleCollectionSections = useMemo(() => {
+    const source = isSearching ? visibleProductsByAudience : allProductsByAudience;
     if (!isSearching) {
-      return sortedCollectionCards.filter((card) => (allProductsByAudience[card.audience] || []).length > 0);
+      return COLLECTION_SECTIONS.map((section) => ({
+        ...section,
+        groups: section.groups.filter((group) => (source[group.id] || []).length > 0)
+      })).filter((section) => section.groups.length > 0);
     }
-    return sortedCollectionCards.filter((card) => (visibleProductsByAudience[card.audience] || []).length > 0);
-  }, [allProductsByAudience, isSearching, sortedCollectionCards, visibleProductsByAudience]);
+    return COLLECTION_SECTIONS.map((section) => ({
+      ...section,
+      groups: section.groups.filter((group) => (source[group.id] || []).length > 0)
+    })).filter((section) => section.groups.length > 0);
+  }, [allProductsByAudience, isSearching, visibleProductsByAudience]);
 
   const toggleSection = (audience) => {
     setExpandedSections((current) => ({ ...current, [audience]: !current[audience] }));
@@ -291,129 +277,133 @@ function ArrivalsSection({
           <p className="search-hint">Type at least {MIN_SEARCH_LENGTH} characters to search.</p>
         ) : null}
 
-        {visibleCollectionCards.map((card) => {
-          const visibleItemsAll = visibleProductsByAudience[card.audience] || [];
-          const listItems = visibleItemsAll;
-          const isExpanded = Boolean(expandedSections[card.audience]);
-          const visibleItems = isExpanded
-            ? listItems
-            : listItems.slice(0, collapsedItemCount);
-          const canExpand = visibleItemsAll.length > collapsedItemCount;
-
+        {visibleCollectionSections.map((section) => {
           return (
-            <section className="collection-block" id={card.sectionId} key={card.sectionId}>
+            <section className="collection-block" id={section.sectionId} key={section.sectionId}>
               <div className="collection-header">
                 <div className="lined-heading">
                   <span />
-                  <h2>{card.title}</h2>
+                  <h2>{section.title}</h2>
                   <span />
                 </div>
               </div>
 
-              {visibleItems.length > 0 ? (
-                <div className="collection-grid">
-                  {visibleItems.map((product, index) => {
-                    const availability = normalizeAvailability(product.availability);
-                    const isOutOfStock = availability === "out_of_stock";
-                    const isActionsOpen = openProductActionsId === product.id;
-                    return (
-                      <article className={index % 2 === 1 ? "collection-card is-offset" : "collection-card"} key={product.id}>
+              {section.groups.map((group) => {
+                const visibleItemsAll = visibleProductsByAudience[group.id] || [];
+                const isExpanded = Boolean(expandedSections[group.id]);
+                const visibleItems = isExpanded
+                  ? visibleItemsAll
+                  : visibleItemsAll.slice(0, collapsedItemCount);
+                const canExpand = visibleItemsAll.length > collapsedItemCount;
+
+                return (
+                  <div className="collection-subgroup" key={group.id}>
+                    <h3 className="collection-subheading">{group.title}</h3>
+                    <div className="collection-grid">
+                      {visibleItems.map((product, index) => {
+                        const availability = normalizeAvailability(product.availability);
+                        const isOutOfStock = availability === "out_of_stock";
+                        const isActionsOpen = openProductActionsId === product.id;
+                        return (
+                          <article className={index % 2 === 1 ? "collection-card is-offset" : "collection-card"} key={product.id}>
+                            <button
+                              type="button"
+                              className="seller-media media-button"
+                              onClick={() => onViewProduct(product)}
+                            >
+                              <span className="themed-product-tag">
+                                {getAvailabilityLabel(availability)}
+                              </span>
+                              <ProductMedia product={product} />
+                            </button>
+                            <div className="collection-card-meta">
+                              <div>
+                                <h3>
+                                  <button
+                                    type="button"
+                                    className="product-name-button"
+                                    onClick={() => onViewProduct(product)}
+                                  >
+                                    {product.name}
+                                  </button>
+                                </h3>
+                                <p>{toPrice(product.price)}</p>
+                              </div>
+                              {allowOrdering ? (
+                                <div className={`collection-action-menu ${isActionsOpen ? "is-open" : ""}`}>
+                                  <div className="collection-action-panel" aria-hidden={!isActionsOpen}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onViewProduct(product);
+                                        setOpenProductActionsId("");
+                                      }}
+                                    >
+                                      View details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={wishlistPendingProductId === product.id}
+                                      onClick={() => {
+                                        onAddToWishlist?.(product);
+                                        setOpenProductActionsId("");
+                                      }}
+                                    >
+                                      {wishlistPendingProductId === product.id ? "Saving..." : "Save to wishlist"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isOutOfStock}
+                                      onClick={() => {
+                                        if (!isOutOfStock) onAddToCart(product, 1);
+                                        setOpenProductActionsId("");
+                                      }}
+                                    >
+                                      Add to cart
+                                    </button>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="collection-add-button"
+                                    disabled={isOutOfStock}
+                                    aria-expanded={isActionsOpen}
+                                    aria-label={
+                                      isOutOfStock
+                                        ? `${product.name} is out of stock`
+                                        : `${isActionsOpen ? "Close" : "Open"} ${product.name} actions`
+                                    }
+                                    onClick={() => {
+                                      if (!isOutOfStock) toggleProductActions(product.id);
+                                    }}
+                                  >
+                                    <span aria-hidden="true">{isActionsOpen ? "-" : "+"}</span>
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    {canExpand ? (
+                      <div className="collection-footer-toggle">
                         <button
                           type="button"
-                          className="seller-media media-button"
-                          onClick={() => onViewProduct(product)}
+                          className="section-toggle-link"
+                          onClick={() => toggleSection(group.id)}
                         >
-                          <span className="themed-product-tag">
-                            {getAvailabilityLabel(availability)}
-                          </span>
-                          <ProductMedia product={product} />
+                          {isExpanded ? "Show Less" : "View Full Products"}
                         </button>
-                        <div className="collection-card-meta">
-                          <div>
-                            <h3>
-                              <button
-                                type="button"
-                                className="product-name-button"
-                                onClick={() => onViewProduct(product)}
-                              >
-                                {product.name}
-                              </button>
-                            </h3>
-                            <p>{toPrice(product.price)}</p>
-                          </div>
-                          {allowOrdering ? (
-                            <div className={`collection-action-menu ${isActionsOpen ? "is-open" : ""}`}>
-                              <div className="collection-action-panel" aria-hidden={!isActionsOpen}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onViewProduct(product);
-                                    setOpenProductActionsId("");
-                                  }}
-                                >
-                                  View details
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={wishlistPendingProductId === product.id}
-                                  onClick={() => {
-                                    onAddToWishlist?.(product);
-                                    setOpenProductActionsId("");
-                                  }}
-                                >
-                                  {wishlistPendingProductId === product.id ? "Saving..." : "Save to wishlist"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isOutOfStock}
-                                  onClick={() => {
-                                    if (!isOutOfStock) onAddToCart(product, 1);
-                                    setOpenProductActionsId("");
-                                  }}
-                                >
-                                  Add to cart
-                                </button>
-                              </div>
-                              <button
-                                type="button"
-                                className="collection-add-button"
-                                disabled={isOutOfStock}
-                                aria-expanded={isActionsOpen}
-                                aria-label={
-                                  isOutOfStock
-                                    ? `${product.name} is out of stock`
-                                    : `${isActionsOpen ? "Close" : "Open"} ${product.name} actions`
-                                }
-                                onClick={() => {
-                                  if (!isOutOfStock) toggleProductActions(product.id);
-                                }}
-                              >
-                                <span aria-hidden="true">{isActionsOpen ? "-" : "+"}</span>
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {canExpand ? (
-                <div className="collection-footer-toggle">
-                  <button
-                    type="button"
-                    className="section-toggle-link"
-                    onClick={() => toggleSection(card.audience)}
-                  >
-                    {isExpanded ? "Show Less" : "View Full Products"}
-                  </button>
-                </div>
-              ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </section>
           );
         })}
-        {isSearching && visibleCollectionCards.length === 0 ? (
+        {isSearching && visibleCollectionSections.length === 0 ? (
           <p className="collection-empty">No glasses matched your search.</p>
         ) : null}
       </div>

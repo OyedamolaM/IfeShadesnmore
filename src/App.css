@@ -910,6 +910,29 @@ select {
   aspect-ratio: 4 / 3;
 }
 
+.themed-product-section .collection-card .seller-media {
+  aspect-ratio: auto;
+  height: auto;
+}
+
+.themed-product-section .collection-card .seller-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.collection-subgroup {
+  margin-top: 1.05rem;
+}
+
+.collection-subheading {
+  margin: 0 0 0.7rem;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .collection-card h3 {
   margin: 0.45rem 0 0.16rem;
   font-size: 18px;
@@ -1710,6 +1733,60 @@ select {
   text-wrap: balance;
 }
 
+.product-modal-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
+  align-items: start;
+  gap: 0.7rem;
+}
+
+.product-share-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid #d9d9d9;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #222834;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.product-share-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: currentColor;
+}
+
+.product-link-row {
+  margin-top: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.88rem;
+}
+
+.product-link-row span {
+  color: #4f5560;
+  font-weight: 700;
+}
+
+.product-link-row button {
+  border: 0;
+  background: transparent;
+  color: #1f2430;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 0;
+  text-align: right;
+}
+
 .product-modal-price {
   margin: 0.35rem 0 0;
   font-size: 1.5rem;
@@ -1808,12 +1885,26 @@ select {
 .product-modal-actions {
   margin-top: 1.1rem;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
 }
 
 .product-modal-actions .secondary-action,
 .product-modal-actions .primary-action {
   min-height: 44px;
+}
+
+.product-action-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+}
+
+.product-action-share svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
 }
 
 .product-modal-readonly {
@@ -3029,13 +3120,12 @@ select {
   .product-modal-actions {
     margin-top: 0.52rem;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 0.35rem;
   }
 
   .product-modal-actions .secondary-action,
   .product-modal-actions .primary-action {
-    width: 100%;
     min-height: 40px;
     font-size: 0.84rem;
   }
@@ -9108,6 +9198,10 @@ select {
 .la-upload-card img { width: 100%; height: 100%; object-fit: cover; }
 .la-upload-card small { color: var(--la-muted); letter-spacing: 0; text-transform: none; }
 .la-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.la-audience-tag-groups { display: grid; gap: 0.75rem; }
+.la-audience-tag-groups section { display: grid; gap: 0.4rem; }
+.la-audience-tag-groups strong { color: var(--la-fg); font-size: 0.8rem; line-height: 1.2; }
+.la-audience-tag-groups small { color: var(--la-muted); font-size: 0.72rem; line-height: 1.35; letter-spacing: 0; text-transform: none; }
 .la-audience-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .la-choice-grid button.is-active,
 .la-audience-tags button.is-active { border-color: var(--la-gold); background: color-mix(in srgb, var(--la-gold) 10%, transparent); color: var(--la-gold); }

@@ -274,6 +274,50 @@ function normalizeAudienceSelections(value) {
   return unique.length > 0 ? unique : ["unisex"];
 }
 
+const COLLECTION_AUDIENCES = new Set(["fashion", "photochromic", "antiblue", "prescrip"]);
+const GENDER_AUDIENCES = new Set(["men", "women", "unisex"]);
+const AUDIENCE_TAG_GROUPS = [
+  {
+    title: "Collection",
+    help: "",
+    values: ["fashion", "photochromic", "antiblue", "prescrip"]
+  },
+  {
+    title: "Sex",
+    help: "",
+    values: ["women", "men", "unisex"]
+  },
+  {
+    title: "Other",
+    help: "",
+    values: ["sunglasses"]
+  }
+];
+
+function reconcileAudienceSelections(value) {
+  let next = normalizeAudienceSelections(value);
+  if (next.includes("men") && next.includes("women")) {
+    const lastGender = [...next].reverse().find((entry) => entry === "men" || entry === "women") || "men";
+    next = next.filter((entry) => entry !== (lastGender === "men" ? "women" : "men"));
+  }
+  if (next.includes("fashion")) {
+    next = next.filter((entry) => !["photochromic", "antiblue", "prescrip"].includes(entry));
+  }
+  if (next.includes("prescrip")) {
+    next = next.filter((entry) => !["fashion", "photochromic", "antiblue"].includes(entry));
+  }
+  if ((next.includes("photochromic") || next.includes("antiblue")) && !next.includes("prescrip")) {
+    next = next.filter((entry) => entry !== "fashion");
+  }
+  if (!next.some((entry) => COLLECTION_AUDIENCES.has(entry))) {
+    next = ["fashion", ...next];
+  }
+  if (!next.some((entry) => GENDER_AUDIENCES.has(entry))) {
+    next = ["unisex", ...next];
+  }
+  return [...new Set(next)];
+}
+
 function formatAudienceLabel(value) {
   const option = AUDIENCE_OPTIONS.find((entry) => entry.value === value);
   return option ? option.label : String(value || "Unisex");
@@ -412,7 +456,7 @@ function AdminOverlay({
   const lastAdminMessageRef = useRef("");
 
   const selectedAudiences = useMemo(
-    () => normalizeAudienceSelections(productDraft.audiences),
+    () => reconcileAudienceSelections(productDraft.audiences),
     [productDraft.audiences]
   );
   const activeTabMeta = ADMIN_TABS.find((tab) => tab.id === activeTab) || ADMIN_TABS[0];
@@ -955,18 +999,34 @@ function AdminOverlay({
   };
 
   const toggleAudienceSelection = (audience, checked) => {
-    const current = normalizeAudienceSelections(productDraft.audiences);
+    const current = reconcileAudienceSelections(productDraft.audiences);
     let next;
 
     if (checked) {
       next = [...new Set([...current, audience])];
+      if (audience === "fashion") {
+        next = next.filter((entry) => !["photochromic", "antiblue", "prescrip"].includes(entry));
+      }
+      if (audience === "prescrip") {
+        next = next.filter((entry) => !["fashion", "photochromic", "antiblue"].includes(entry));
+      }
+      if (audience === "photochromic" || audience === "antiblue") {
+        next = next.filter((entry) => !["fashion", "prescrip"].includes(entry));
+      }
+      if (audience === "men") {
+        next = next.filter((entry) => entry !== "women");
+      }
+      if (audience === "women") {
+        next = next.filter((entry) => entry !== "men");
+      }
     } else {
       next = current.filter((entry) => entry !== audience);
       if (next.length === 0) next = ["unisex"];
     }
 
-    onProductDraftChange("audiences", next);
-    onProductDraftChange("audience", next[0]);
+    const reconciled = reconcileAudienceSelections(next);
+    onProductDraftChange("audiences", reconciled);
+    onProductDraftChange("audience", reconciled[0]);
   };
 
   const updateShippingTier = (index, field, value) => {
@@ -1876,7 +1936,32 @@ function AdminOverlay({
             <label>Placement<div className="la-choice-grid">{[["category", "Top category"], ["bestseller", "Featured"]].map(([value, label]) => <button key={value} type="button" className={productDraft.section === value ? "is-active" : ""} onClick={() => onProductDraftChange("section", value)}>{label}</button>)}</div></label>
             <label>Availability<div className="la-choice-grid">{PRODUCT_AVAILABILITY_OPTIONS.map((option) => <button key={option.value} type="button" className={(productDraft.availability || "in_stock") === option.value ? "is-active" : ""} onClick={() => onProductDraftChange("availability", option.value)}>{option.label}</button>)}</div></label>
             {String(productDraft.availability || "in_stock") === "preorder" ? <label>Preorder note<input value={productDraft.preorderNote || ""} onChange={(event) => onProductDraftChange("preorderNote", event.target.value)} /></label> : null}
-            <label>Audience tags<div className="la-audience-tags">{AUDIENCE_OPTIONS.map((option) => <button key={option.value} type="button" className={selectedAudiences.includes(option.value) ? "is-active" : ""} onClick={() => toggleAudienceSelection(option.value, !selectedAudiences.includes(option.value))}>{option.label}</button>)}</div></label>
+            <label>Collection tags
+              <div className="la-audience-tag-groups">
+                {AUDIENCE_TAG_GROUPS.map((group) => (
+                  <section key={group.title}>
+                    <strong>{group.title}</strong>
+                    {group.help ? <small>{group.help}</small> : null}
+                    <div className="la-audience-tags">
+                      {group.values.map((value) => {
+                        const option = AUDIENCE_OPTIONS.find((entry) => entry.value === value);
+                        if (!option) return null;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={selectedAudiences.includes(option.value) ? "is-active" : ""}
+                            onClick={() => toggleAudienceSelection(option.value, !selectedAudiences.includes(option.value))}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </label>
             <label>Description<input value={productDraft.description} onChange={(event) => onProductDraftChange("description", event.target.value)} /></label>
             <label>Product detail bullets<textarea rows={4} value={productDraft.detailBulletsText || ""} onChange={(event) => onProductDraftChange("detailBulletsText", event.target.value)} /></label>
             <label>Fallback frame style<select value={productDraft.variant} onChange={(event) => onProductDraftChange("variant", event.target.value)}><option value="round">Round</option><option value="tortoise">Tortoise</option><option value="cat">Cat-Eye</option><option value="butterfly">Butterfly</option><option value="clear">Clear</option><option value="square">Square</option><option value="aviator">Aviator</option></select></label>

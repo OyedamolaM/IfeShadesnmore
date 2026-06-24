@@ -5,12 +5,14 @@ export const ORDER_STORAGE_KEY = "ife_shadesnmore_orders_v1";
 export const PROFILE_STORAGE_KEY = "ife_shadesnmore_profile_v1";
 
 export const AUDIENCE_OPTIONS = [
-  { value: "women", label: "Women" },
-  { value: "men", label: "Men" },
-  { value: "sunglasses", label: "Sunglasses" },
+  { value: "fashion", label: "Fashion" },
+  { value: "photochromic", label: "Photochromic" },
+  { value: "antiblue", label: "Anti-blue" },
+  { value: "prescrip", label: "Prescription" },
+  { value: "women", label: "Female" },
+  { value: "men", label: "Male" },
   { value: "unisex", label: "Unisex" },
-  { value: "antiblue", label: "Anti-Blue / Anti-Glare" },
-  { value: "prescrip", label: "Prescription" }
+  { value: "sunglasses", label: "Sunglasses" }
 ];
 
 export const BULLET_ICON_TYPES = [
@@ -90,8 +92,8 @@ export const EMPTY_PRODUCT = {
   name: "",
   price: "",
   section: "category",
-  audiences: ["unisex"],
-  audience: "unisex",
+  audiences: ["fashion", "unisex"],
+  audience: "fashion",
   ctaLabel: "",
   description: "",
   detailBullets: DEFAULT_PRODUCT_DETAIL_BULLETS,

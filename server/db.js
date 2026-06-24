@@ -78,11 +78,13 @@ if (USE_POSTGRES) {
 export const databaseDriver = USE_POSTGRES ? "postgres" : "sqlite";
 
 const PRODUCT_AUDIENCE_VALUES = new Set([
+  "fashion",
   "women",
   "men",
   "sunglasses",
   "unisex",
   "antiblue",
+  "photochromic",
   "prescrip"
 ]);
 const PRODUCT_AVAILABILITY_VALUES = new Set(["in_stock", "out_of_stock", "preorder"]);
@@ -186,6 +188,8 @@ function normalizeProductAudience(value) {
   if (PRODUCT_AUDIENCE_VALUES.has(source)) return source;
 
   const compact = source.replace(/[^a-z]/g, "");
+  if (compact.includes("fashion")) return "fashion";
+  if (compact.includes("photochromic")) return "photochromic";
   if (
     compact.includes("women") ||
     compact.includes("woman") ||

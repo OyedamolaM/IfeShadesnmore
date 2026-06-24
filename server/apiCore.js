@@ -43,7 +43,7 @@ dotenv.config();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.SITE_URL || "http://localhost:3000";
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
-const PRODUCT_AUDIENCE_VALUES = ["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"];
+const PRODUCT_AUDIENCE_VALUES = ["fashion", "women", "men", "sunglasses", "unisex", "antiblue", "photochromic", "prescrip"];
 const PRODUCT_AUDIENCE_SET = new Set(PRODUCT_AUDIENCE_VALUES);
 const PRODUCT_AVAILABILITY_VALUES = ["in_stock", "out_of_stock", "preorder"];
 const PRODUCT_AVAILABILITY_SET = new Set(PRODUCT_AVAILABILITY_VALUES);
@@ -547,6 +547,8 @@ function normalizeAudienceValue(value) {
   if (!source) return "unisex";
   if (PRODUCT_AUDIENCE_SET.has(source)) return source;
   const compact = source.replace(/[^a-z]/g, "");
+  if (compact.includes("fashion")) return "fashion";
+  if (compact.includes("photochromic")) return "photochromic";
   if (compact.includes("women") || compact.includes("woman") || compact.includes("female") || compact.includes("lady")) return "women";
   if (compact === "men" || compact === "man" || compact.includes("male") || compact.includes("gent")) return "men";
   if (compact.includes("sunglass") || compact.includes("shades")) return "sunglasses";

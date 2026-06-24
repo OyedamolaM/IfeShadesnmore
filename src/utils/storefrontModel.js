@@ -3,7 +3,7 @@ import { DEFAULT_PRODUCT_DETAIL_BULLETS } from "../constants/storefront";
 const BLOCKED_HERO_IMAGE_BASE_URLS = new Set([
   "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f"
 ]);
-const KNOWN_AUDIENCES = new Set(["women", "men", "sunglasses", "unisex", "antiblue", "prescrip"]);
+const KNOWN_AUDIENCES = new Set(["fashion", "women", "men", "sunglasses", "unisex", "antiblue", "photochromic", "prescrip"]);
 const KNOWN_AVAILABILITY_VALUES = new Set(["in_stock", "out_of_stock", "preorder"]);
 
 export function isBlockedHeroImageSource(source) {
@@ -24,6 +24,14 @@ export function normalizeAudience(value) {
   if (!source) return "unisex";
   if (KNOWN_AUDIENCES.has(source)) return source;
   const compact = source.replace(/[^a-z]/g, "");
+
+  if (compact.includes("fashion")) {
+    return "fashion";
+  }
+
+  if (compact.includes("photochromic")) {
+    return "photochromic";
+  }
 
   if (
     compact.includes("women") ||
