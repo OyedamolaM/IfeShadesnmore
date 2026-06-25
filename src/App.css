@@ -2275,9 +2275,9 @@ select {
 }
 
 .checkout-delivery-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 220;
   display: grid;
   place-items: center;
   padding: 0.75rem;
@@ -2350,7 +2350,15 @@ select {
   font-size: 0.92rem;
 }
 
-.checkout-shipping-options button {
+.checkout-shipping-picker {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.checkout-shipping-trigger,
+.checkout-shipping-menu button {
   width: 100%;
   min-width: 0;
   min-height: 46px;
@@ -2367,23 +2375,59 @@ select {
   text-align: left;
 }
 
-.checkout-shipping-options button.is-selected {
+.checkout-shipping-trigger {
+  position: relative;
+}
+
+.checkout-shipping-trigger::after {
+  content: "⌄";
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  color: #5d636d;
+  font-weight: 800;
+}
+
+.checkout-shipping-trigger strong {
+  margin-right: 1.4rem;
+}
+
+.checkout-shipping-menu {
+  max-height: 190px;
+  overflow: auto;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid #d8d8d8;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgba(15, 16, 19, 0.12);
+}
+
+.checkout-shipping-menu button {
+  box-shadow: none;
+}
+
+.checkout-shipping-menu button.is-selected {
   border-color: #20242b;
   box-shadow: 0 0 0 2px rgba(32, 36, 43, 0.08);
 }
 
-.checkout-shipping-options button:disabled {
+.checkout-shipping-trigger:disabled,
+.checkout-shipping-menu button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
 }
 
-.checkout-shipping-options span {
+.checkout-shipping-trigger span,
+.checkout-shipping-menu span {
   min-width: 0;
   overflow-wrap: anywhere;
   line-height: 1.25;
 }
 
-.checkout-shipping-options strong {
+.checkout-shipping-trigger strong,
+.checkout-shipping-menu strong {
   white-space: nowrap;
 }
 

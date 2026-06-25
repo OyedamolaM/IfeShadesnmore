@@ -302,8 +302,9 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
     try {
-      const replacementIndex = Number(replaceIndex);
-      const isReplacing = Number.isInteger(replacementIndex);
+      const hasReplaceIndex = replaceIndex !== null && replaceIndex !== undefined;
+      const replacementIndex = hasReplaceIndex ? Number(replaceIndex) : -1;
+      const isReplacing = hasReplaceIndex && Number.isInteger(replacementIndex);
       const uploadFiles = isReplacing ? files.slice(0, 1) : files.slice(0, 6);
       setAdminMessage(isReplacing ? "Replacing product image..." : "Uploading product images...");
       const uploadedUrls = [];

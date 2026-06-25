@@ -34,6 +34,7 @@ function CheckoutModal({
   isSubmitting
 }) {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showShippingOptions, setShowShippingOptions] = useState(false);
   if (!open) return null;
   const selectedShippingTier = shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId));
   const deliverySummary = [
@@ -232,22 +233,51 @@ function CheckoutModal({
               {shippingTiers.length === 0 ? (
                 <p className="checkout-hint">No shipping options are currently available.</p>
               ) : (
-                shippingTiers.map((tier) => {
-                  const isSelected = String(selectedShippingTierId || form.shippingTierId || "") === String(tier.id);
-                  return (
-                    <button
-                      key={tier.id}
-                      type="button"
-                      className={isSelected ? "is-selected" : ""}
-                      onClick={() => onFieldChange("shippingTierId", tier.id)}
-                      disabled={isSubmitting}
-                      aria-pressed={isSelected}
-                    >
-                      <span>{tier.name}</span>
-                      <strong>{toPrice(tier.fee)}</strong>
-                    </button>
-                  );
-                })
+                <div className="checkout-shipping-picker">
+                  <button
+                    type="button"
+                    className="checkout-shipping-trigger"
+                    onClick={() => setShowShippingOptions((current) => !current)}
+                    disabled={isSubmitting}
+                    aria-expanded={showShippingOptions}
+                  >
+                    <span>{selectedShippingTier ? selectedShippingTier.name : "Select a shipping option"}</span>
+                    {selectedShippingTier ? <strong>{toPrice(selectedShippingTier.fee)}</strong> : null}
+                  </button>
+                  {showShippingOptions ? (
+                    <div className="checkout-shipping-menu">
+                      <button
+                        type="button"
+                        className={!selectedShippingTier ? "is-selected" : ""}
+                        onClick={() => {
+                          onFieldChange("shippingTierId", "");
+                          setShowShippingOptions(false);
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        <span>Select a shipping option</span>
+                      </button>
+                      {shippingTiers.map((tier) => {
+                        const isSelected = String(selectedShippingTierId || form.shippingTierId || "") === String(tier.id);
+                        return (
+                          <button
+                            key={tier.id}
+                            type="button"
+                            className={isSelected ? "is-selected" : ""}
+                            onClick={() => {
+                              onFieldChange("shippingTierId", tier.id);
+                              setShowShippingOptions(false);
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <span>{tier.name}</span>
+                            <strong>{toPrice(tier.fee)}</strong>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               )}
             </fieldset>
             {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description ? (
