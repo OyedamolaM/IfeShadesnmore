@@ -211,17 +211,14 @@ function StorefrontPage({
     [settings?.shippingTiers]
   );
   const selectedShippingTier = useMemo(
-    () => activeShippingTiers.find((tier) => tier.id === checkoutForm.shippingTierId) || activeShippingTiers[0] || null,
+    () =>
+      activeShippingTiers.find(
+        (tier) => tier.id === checkoutForm.shippingTierId
+      ) || null,
     [activeShippingTiers, checkoutForm.shippingTierId]
   );
   const shippingFee = Number(selectedShippingTier?.fee) || 0;
   const checkoutTotal = cartSubtotal + shippingFee;
-
-  useEffect(() => {
-    if (!showCheckout || activeShippingTiers.length === 0) return;
-    if (checkoutForm.shippingTierId && activeShippingTiers.some((tier) => tier.id === checkoutForm.shippingTierId)) return;
-    setCheckoutForm((current) => ({ ...current, shippingTierId: activeShippingTiers[0].id }));
-  }, [activeShippingTiers, checkoutForm.shippingTierId, showCheckout]);
 
   useEffect(() => {
     if (!Array.isArray(products) || products.length === 0) return;
@@ -697,7 +694,7 @@ function StorefrontPage({
             items={cartItems}
             subtotal={cartSubtotal}
             shippingTiers={activeShippingTiers}
-            selectedShippingTierId={selectedShippingTier?.id || ""}
+            selectedShippingTierId= ""
             shippingFee={shippingFee}
             total={checkoutTotal}
             form={checkoutForm}
