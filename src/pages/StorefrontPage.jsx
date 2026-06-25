@@ -224,6 +224,7 @@ function StorefrontPage({
   }, [activeShippingTiers, checkoutForm.shippingTierId, showCheckout]);
 
   useEffect(() => {
+    if (!Array.isArray(products) || products.length === 0) return;
     const availableProductIds = new Set(
       products
         .filter((item) => normalizeAvailability(item.availability) !== "out_of_stock")
@@ -356,6 +357,19 @@ function StorefrontPage({
 
     setCheckoutError("");
     setCheckoutNotice("");
+    setShowCheckout(true);
+    setShowCart(false);
+    const nameParts = splitFullName(currentUser.fullName || "");
+    setCheckoutForm((current) => ({
+      ...current,
+      firstName: current.firstName || nameParts.firstName,
+      lastName: current.lastName || nameParts.lastName,
+      email: current.email || currentUser.email || "",
+      phone: current.phone || currentUser.phone || "",
+      address: current.address || currentUser.address || "",
+      city: current.city || currentUser.city || ""
+    }));
+
     let savedAddresses = accountAddresses;
     try {
       const accountPayload = await fetchAccountDashboard();
@@ -365,7 +379,6 @@ function StorefrontPage({
       savedAddresses = accountAddresses;
     }
     const defaultAddress = savedAddresses.find((address) => address.isDefault) || savedAddresses[0] || null;
-    const nameParts = splitFullName(currentUser.fullName || "");
     setCheckoutForm((current) => ({
       ...current,
       firstName: current.firstName || nameParts.firstName,
@@ -376,7 +389,6 @@ function StorefrontPage({
       city: current.city || defaultAddress?.city || currentUser.city || "",
       addressId: current.addressId || (defaultAddress?.id ? String(defaultAddress.id) : "")
     }));
-    setShowCheckout(true);
   };
 
   const handleCheckoutSubmit = async (event) => {

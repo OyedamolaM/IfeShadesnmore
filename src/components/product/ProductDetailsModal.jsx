@@ -41,11 +41,13 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
   const [quantityInput, setQuantityInput] = useState("1");
   const [showPreorderInfo, setShowPreorderInfo] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
     setQuantityInput("1");
     setShowPreorderInfo(false);
     setShareStatus("");
+    setActiveImageIndex(Math.max(0, Number(product?.mainImageIndex) || 0));
   }, [product?.id]);
 
   if (!product) return null;
@@ -71,6 +73,11 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
   const productUrl = getProductUrl(product);
+  const productImages = normalizeProductImages(product);
+  const selectedImageIndex = Math.max(0, Math.min(activeImageIndex, productImages.length - 1));
+  const selectedProduct = productImages.length > 0
+    ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
+    : product;
 
   const handleShareProduct = async () => {
     const shareData = {
@@ -111,7 +118,44 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
         </button>
 
         <div className="product-modal-media">
-          <ProductMedia product={product} />
+          <div className="product-gallery-stage">
+            <ProductMedia product={selectedProduct} />
+            {productImages.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  className="product-gallery-nav product-gallery-prev"
+                  onClick={() => setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)}
+                  aria-label="Show previous product image"
+                >
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  className="product-gallery-nav product-gallery-next"
+                  onClick={() => setActiveImageIndex((current) => (current + 1) % productImages.length)}
+                  aria-label="Show next product image"
+                >
+                  &gt;
+                </button>
+              </>
+            ) : null}
+          </div>
+          {productImages.length > 1 ? (
+            <div className="product-gallery-thumbs" aria-label="Product images">
+              {productImages.map((image, index) => (
+                <button
+                  key={`${image}-${index}`}
+                  type="button"
+                  className={index === selectedImageIndex ? "is-active" : ""}
+                  onClick={() => setActiveImageIndex(index)}
+                  aria-label={`Show product image ${index + 1}`}
+                >
+                  <img src={image} alt="" />
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="product-modal-content">
@@ -206,3 +250,11 @@ function ProductDetailsModal({ product, onClose, onAddToCart, onAddToWishlist, i
 }
 
 export default ProductDetailsModal;
+
+function normalizeProductImages(product) {
+  const source = Array.isArray(product?.images) ? product.images : [];
+  const candidates = [...source, product?.image]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return [...new Set(candidates)].slice(0, 6);
+}

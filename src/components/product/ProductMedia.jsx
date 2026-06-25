@@ -39,7 +39,10 @@ function optimizeRemoteImageUrl(value) {
 
 function ProductMedia({ product }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const normalizedImage = optimizeRemoteImageUrl(normalizeHeroPath(product.image));
+  const gallery = Array.isArray(product?.images) ? product.images : [];
+  const mainImageIndex = Math.max(0, Math.min(Number(product?.mainImageIndex) || 0, gallery.length - 1));
+  const primaryImage = gallery[mainImageIndex] || product?.image;
+  const normalizedImage = optimizeRemoteImageUrl(normalizeHeroPath(primaryImage));
 
   useEffect(() => {
     setImageFailed(false);

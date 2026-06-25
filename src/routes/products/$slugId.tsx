@@ -4,10 +4,12 @@ import ProductMedia from "../../components/product/ProductMedia.jsx";
 import CartIcon from "../../components/icons/CartIcon.jsx";
 import SearchIcon from "../../components/icons/SearchIcon.jsx";
 import ProfileIcon from "../../components/icons/ProfileIcon.jsx";
+import PreviewStyleSwitcher from "../../components/preview/PreviewStyleSwitcher.jsx";
 import { toPrice } from "../../utils/format";
 import { getProductPageData } from "../../serverFns";
 import { CART_STORAGE_KEY, DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
 import { addWishlistItem } from "../../utils/api";
+import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
 
 export const Route = createFileRoute("/products/$slugId")({
   loader: async ({ params }) => {
@@ -107,6 +109,9 @@ function ProductPage() {
   const [shareStatus, setShareStatus] = useState("");
   const [isSavingWishlist, setIsSavingWishlist] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [themeVariant, setThemeVariant] = useState("v1");
+  const [isThemeHydrated, setIsThemeHydrated] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const availability = normalizeAvailability(product.availability);
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
@@ -123,6 +128,15 @@ function ProductPage() {
     typeof window === "undefined"
       ? `/products/${productSlugId(product)}`
       : `${window.location.origin}/products/${productSlugId(product)}`;
+  const productImages = normalizeProductImages(product);
+  const selectedImageIndex = Math.max(0, Math.min(activeImageIndex, productImages.length - 1));
+  const selectedProduct = productImages.length > 0
+    ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
+    : product;
+
+  useEffect(() => {
+    setActiveImageIndex(Math.max(0, Number(product?.mainImageIndex) || 0));
+  }, [product?.id, product?.mainImageIndex]);
 
   useEffect(() => {
     if (!toast && !shareStatus) return undefined;
@@ -143,6 +157,16 @@ function ProductPage() {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  useEffect(() => {
+    setThemeVariant(getStoredThemeVariant());
+    setIsThemeHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isThemeHydrated) return;
+    persistThemeVariant(themeVariant);
+  }, [isThemeHydrated, themeVariant]);
 
   const resolveQuantity = () => {
     const parsed = Number.parseInt(String(quantityInput || "").trim(), 10);
@@ -207,13 +231,54 @@ function ProductPage() {
   };
 
   return (
-    <div className="page product-seo-page">
-      <ProductPageHeader cartCount={cartCount} />
+    <div className={`page product-seo-page preview-storefront preview-${themeVariant}`}>
+      <ProductPageHeader
+        cartCount={cartCount}
+        themeVariant={themeVariant}
+        onThemeVariantChange={setThemeVariant}
+      />
       <main className="site-shell product-seo-shell">
         <section className="container product-seo-inner">
           <div className="product-seo-grid">
             <div className="product-seo-media">
-              <ProductMedia product={product} />
+              <div className="product-gallery-stage">
+                <ProductMedia product={selectedProduct} />
+                {productImages.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="product-gallery-nav product-gallery-prev"
+                      onClick={() => setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)}
+                      aria-label="Show previous product image"
+                    >
+                      &lt;
+                    </button>
+                    <button
+                      type="button"
+                      className="product-gallery-nav product-gallery-next"
+                      onClick={() => setActiveImageIndex((current) => (current + 1) % productImages.length)}
+                      aria-label="Show next product image"
+                    >
+                      &gt;
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {productImages.length > 1 ? (
+                <div className="product-gallery-thumbs" aria-label="Product images">
+                  {productImages.map((image, index) => (
+                    <button
+                      key={`${image}-${index}`}
+                      type="button"
+                      className={index === selectedImageIndex ? "is-active" : ""}
+                      onClick={() => setActiveImageIndex(index)}
+                      aria-label={`Show product image ${index + 1}`}
+                    >
+                      <img src={image} alt="" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <article className="product-seo-content">
               <div className="product-availability-row">
@@ -280,41 +345,34 @@ function ProductPage() {
   );
 }
 
-function ProductPageHeader({ cartCount }) {
+function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange }) {
   const normalizedCount = Math.max(0, Number(cartCount) || 0);
 
   return (
-    <header className="site-header product-page-header">
-      <div className="container header-inner">
-        <Link to="/" className="brand-mark" aria-label="IfeShadesnMore home">
-          <img className="brand-logo" src="/brand/ife-logo-circle.png" alt="" />
-          <span className="brand-copy">
-            <span className="brand-top">IfeShadesnMore</span>
-            <span className="brand-bottom">Fashion, Prescription, all in one place</span>
-          </span>
+    <header className="preview-nav product-page-header">
+      <Link to="/" className="preview-brand" aria-label="IfeShadesnMore home">
+        <img src="/brand/ife-logo-circle.png" alt="" />
+        <strong>IfeShadesnMore</strong>
+      </Link>
+
+      <nav aria-label="Primary navigation">
+        <Link to="/" hash="shop">Shop</Link>
+        <Link to="/" hash="editorial">Blog</Link>
+        <Link to="/" hash="contact">Contact</Link>
+      </nav>
+
+      <div className="preview-nav-actions">
+        <PreviewStyleSwitcher value={themeVariant} onChange={onThemeVariantChange} compactLabel="Theme" />
+        <Link to="/" hash="shop" className="preview-account-button" aria-label="Search products">
+          <SearchIcon />
         </Link>
-
-        <nav aria-label="Primary navigation" className="primary-nav">
-          <Link to="/">Home</Link>
-          <Link to="/" hash="shop">Shop</Link>
-          <Link to="/" hash="editorial">Blog</Link>
-          <Link to="/" hash="contact">Contact</Link>
-        </nav>
-
-        <div className="header-actions">
-          <Link to="/" hash="shop" className="header-icon-button header-search" aria-label="Search products">
-            <SearchIcon />
-          </Link>
-          <Link to="/account" className="header-icon-button header-profile" aria-label="Open profile">
-            <ProfileIcon />
-          </Link>
-          <Link to="/" search={{ openCart: "1" }} className="header-icon-button header-cart" aria-label="Open cart">
-            <CartIcon />
-            {normalizedCount > 0 ? (
-              <span className="cart-count">{normalizedCount > 99 ? "99+" : normalizedCount}</span>
-            ) : null}
-          </Link>
-        </div>
+        <Link to="/account" className="preview-account-button" aria-label="Open profile">
+          <ProfileIcon />
+        </Link>
+        <Link to="/" search={{ openCart: "1" }} className="preview-cart-button" aria-label="Open cart">
+          <CartIcon />
+          {normalizedCount > 0 ? <span>{normalizedCount > 99 ? "99+" : normalizedCount}</span> : null}
+        </Link>
       </div>
     </header>
   );
@@ -391,6 +449,14 @@ function normalizeProductImagePath(value: string) {
   const src = String(value || "").trim();
   if (src === "/hero/female-glasses.jpg") return "/hero/Female-glasses.jpg";
   return src;
+}
+
+function normalizeProductImages(product) {
+  const source = Array.isArray(product?.images) ? product.images : [];
+  const candidates = [...source, product?.image]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return [...new Set(candidates)].slice(0, 6);
 }
 
 function inferImageType(value: string) {

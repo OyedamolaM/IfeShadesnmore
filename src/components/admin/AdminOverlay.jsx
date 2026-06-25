@@ -1928,7 +1928,44 @@ function AdminOverlay({
         <form className="la-product-drawer is-open" onSubmit={handleProductModalSubmit}>
           <header><div><p>{isEditing ? "Edit" : "New"}</p><h2>{isEditing ? productDraft.name || "Product" : "Add product"}</h2></div><button type="button" onClick={closeProductModal}>x</button></header>
           <div className="la-drawer-body">
-            <label className="la-upload-card">Product image{productDraft.image ? <span><img src={productDraft.image} alt="" /></span> : <span><AdminIcon name="products" /></span>}<input type="file" accept="image/*" onChange={onProductUpload} /><small>PNG or JPG, 1:1 ratio recommended.</small></label>
+            <label className="la-upload-card">Product images{productDraft.image ? <span><img src={productDraft.image} alt="" /></span> : <span><AdminIcon name="products" /></span>}<input type="file" accept="image/*" onChange={onProductUpload} disabled={(productDraft.images || []).length >= 6} /><small>Upload up to 6 images. The main image displays on the homepage.</small></label>
+            {Array.isArray(productDraft.images) && productDraft.images.length > 0 ? (
+              <div className="la-product-image-grid">
+                {productDraft.images.map((image, index) => (
+                  <div key={`${image}-${index}`} className={Number(productDraft.mainImageIndex || 0) === index ? "is-main" : ""}>
+                    <img src={image} alt="" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onProductDraftChange("mainImageIndex", index);
+                        onProductDraftChange("image", image);
+                      }}
+                    >
+                      {Number(productDraft.mainImageIndex || 0) === index ? "Main" : "Make main"}
+                    </button>
+                    <label className="la-image-replace-control">
+                      Replace
+                      <input type="file" accept="image/*" onChange={(event) => onProductUpload(event, index)} />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextImages = productDraft.images.filter((_, imageIndex) => imageIndex !== index);
+                        const currentMainIndex = Number(productDraft.mainImageIndex || 0);
+                        const nextMainIndex = index < currentMainIndex
+                          ? currentMainIndex - 1
+                          : Math.max(0, Math.min(currentMainIndex, nextImages.length - 1));
+                        onProductDraftChange("images", nextImages);
+                        onProductDraftChange("mainImageIndex", nextMainIndex);
+                        onProductDraftChange("image", nextImages[nextMainIndex] || "");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="la-form-grid">
               <label>Product name<input value={productDraft.name} onChange={(event) => onProductDraftChange("name", event.target.value)} required /></label>
               <label>Price (NGN)<input type="number" min="0" step="1" value={productDraft.price} onChange={(event) => onProductDraftChange("price", event.target.value)} required /></label>

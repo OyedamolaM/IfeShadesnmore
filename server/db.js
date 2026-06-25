@@ -274,6 +274,20 @@ function serializeProductDetailBullets(value) {
   return JSON.stringify(normalized.length > 0 ? normalized : DEFAULT_PRODUCT_DETAIL_BULLETS);
 }
 
+function parseProductImages(value, fallbackImage = "") {
+  let parsed = [];
+  try {
+    parsed = value ? JSON.parse(String(value)) : [];
+  } catch {
+    parsed = [];
+  }
+  const source = Array.isArray(parsed) ? parsed : [];
+  const candidates = [...source, fallbackImage]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return [...new Set(candidates)].slice(0, 6);
+}
+
 function normalizePreorderNote(value) {
   return String(value || "").trim().slice(0, 180);
 }
@@ -381,6 +395,7 @@ async function runMigrationsSqlite() {
       detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
+      images TEXT DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -555,6 +570,9 @@ async function runMigrationsSqlite() {
   if (!productColumns.some((column) => column.name === "detail_bullets")) {
     sqliteDb.exec(`ALTER TABLE products ADD COLUMN detail_bullets TEXT DEFAULT '[]'`);
   }
+  if (!productColumns.some((column) => column.name === "images")) {
+    sqliteDb.exec(`ALTER TABLE products ADD COLUMN images TEXT DEFAULT '[]'`);
+  }
 
   const orderItemColumns = sqliteDb.prepare("PRAGMA table_info(order_items)").all();
   if (!orderItemColumns.some((column) => column.name === "availability")) {
@@ -640,6 +658,7 @@ async function runMigrationsPostgres() {
       detail_bullets TEXT DEFAULT '[]',
       variant TEXT DEFAULT 'round',
       image TEXT DEFAULT '',
+      images TEXT DEFAULT '[]',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -760,6 +779,7 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_bullets TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'in_stock';`);
   await pgPool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS preorder_note TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE blogs ADD COLUMN IF NOT EXISTS image TEXT DEFAULT '';`);
@@ -813,9 +833,9 @@ async function seedProductsIfEmpty() {
     await execute(
       `
         INSERT INTO products (
-          id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image
+          id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image, images
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         item.id,
@@ -829,7 +849,8 @@ async function seedProductsIfEmpty() {
         item.description || "",
         serializeProductDetailBullets(item.detailBullets),
         item.variant || "round",
-        item.image || ""
+        item.image || "",
+        JSON.stringify(parseProductImages(item.images, item.image))
       ]
     );
   }
@@ -910,6 +931,8 @@ export async function closeDatabase() {
 export function mapProductRow(row) {
   const audiences = parseAudienceList(row.audience);
   const availability = normalizeProductAvailability(row.availability);
+  const images = parseProductImages(row.images, row.image);
+  const mainImageIndex = Math.max(0, images.findIndex((image) => image === row.image));
   return {
     id: row.id,
     name: row.name,
@@ -923,7 +946,9 @@ export function mapProductRow(row) {
     description: row.description || "",
     detailBullets: parseProductDetailBullets(row.detail_bullets),
     variant: row.variant || "round",
-    image: row.image || ""
+    image: row.image || images[0] || "",
+    images,
+    mainImageIndex
   };
 }
 

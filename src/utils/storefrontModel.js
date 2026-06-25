@@ -103,9 +103,32 @@ function normalizeAvailability(value) {
   return "in_stock";
 }
 
+export function normalizeProductImages(product) {
+  const source = Array.isArray(product?.images) ? product.images : [];
+  const candidates = [
+    ...source,
+    product?.image
+  ]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  const unique = [...new Set(candidates)].slice(0, 6);
+  const requestedIndex = Number(product?.mainImageIndex);
+  const mainImageIndex =
+    Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < unique.length
+      ? requestedIndex
+      : 0;
+  const image = unique[mainImageIndex] || String(product?.image || "").trim();
+  return {
+    image,
+    images: unique,
+    mainImageIndex: unique.length > 0 ? mainImageIndex : 0
+  };
+}
+
 export function normalizeProduct(product) {
   const audiences = normalizeAudienceList(product.audiences || product.audience);
   const availability = normalizeAvailability(product.availability);
+  const productImages = normalizeProductImages(product);
   return {
     ...product,
     section: normalizeSection(product.section),
@@ -117,7 +140,9 @@ export function normalizeProduct(product) {
     description: product.description || "",
     detailBullets: normalizeDetailBullets(product.detailBullets),
     variant: product.variant || "round",
-    image: product.image || ""
+    image: productImages.image,
+    images: productImages.images,
+    mainImageIndex: productImages.mainImageIndex
   };
 }
 

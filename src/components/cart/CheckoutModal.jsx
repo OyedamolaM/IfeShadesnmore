@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { toPrice } from "../../utils/format";
 
 function normalizeAvailability(value) {
@@ -32,7 +33,16 @@ function CheckoutModal({
   checkoutNotice,
   isSubmitting
 }) {
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   if (!open) return null;
+  const selectedShippingTier = shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId));
+  const deliverySummary = [
+    [form.firstName, form.lastName].filter(Boolean).join(" "),
+    form.phone || form.email,
+    form.address,
+    form.city,
+    selectedShippingTier ? `${selectedShippingTier.name} - ${toPrice(selectedShippingTier.fee)}` : ""
+  ].filter(Boolean);
 
   return (
     <div className="commerce-overlay checkout-overlay" onClick={isSubmitting ? undefined : onClose}>
@@ -51,7 +61,92 @@ function CheckoutModal({
         </div>
 
         <div className="checkout-content">
-          <form className="checkout-form" onSubmit={onSubmit}>
+          <div className="checkout-summary checkout-main-summary">
+            <h3>Order Summary</h3>
+            <ul>
+              {items.map((item) => (
+                <li key={item.product.id}>
+                  <span className="checkout-item-meta">
+                    <span>
+                      {item.product.name} x {item.quantity}
+                    </span>
+                    {normalizeAvailability(item.product.availability) === "preorder" ? (
+                      <small className="preorder-note">{resolvePreorderNote(item)}</small>
+                    ) : null}
+                  </span>
+                  <strong>{toPrice(item.lineTotal)}</strong>
+                </li>
+              ))}
+            </ul>
+            <p>
+              Items <strong>{toPrice(subtotal)}</strong>
+            </p>
+            <p>
+              Shipping <strong>{toPrice(shippingFee)}</strong>
+            </p>
+            <p>
+              Total <strong>{toPrice(total)}</strong>
+            </p>
+            <p className="checkout-shipping-note">
+              Shipping is included in the payment total.
+            </p>
+          </div>
+
+          <form className="checkout-form checkout-payment-panel" onSubmit={onSubmit}>
+            <section className="checkout-delivery-card">
+              <div>
+                <h3>Delivery Details</h3>
+                {deliverySummary.length > 0 ? (
+                  <address>{deliverySummary.join(", ")}</address>
+                ) : (
+                  <span>Add delivery details before payment.</span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setShowDeliveryModal(true)}
+                disabled={isSubmitting}
+              >
+                {deliverySummary.length > 0 ? "Edit Details" : "Add Details"}
+              </button>
+            </section>
+
+            {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
+            {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
+
+            <button type="submit" className="primary-action" disabled={items.length === 0 || isSubmitting}>
+              {isSubmitting ? "Processing..." : "Pay Now"}
+            </button>
+            <p className="checkout-hint">
+              Payment is processed securely by Paystack.
+            </p>
+          </form>
+        </div>
+
+        {showDeliveryModal ? (
+          <div className="checkout-delivery-overlay" onClick={() => !isSubmitting && setShowDeliveryModal(false)}>
+            <form
+              className="checkout-delivery-modal checkout-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setShowDeliveryModal(false);
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="checkout-header">
+                <h2>Delivery Details</h2>
+                <button
+                  type="button"
+                  className="close-x"
+                  onClick={() => setShowDeliveryModal(false)}
+                  aria-label="Close delivery details"
+                  disabled={isSubmitting}
+                >
+                  x
+                </button>
+              </div>
+              <div className="checkout-delivery-fields">
             <div className="split-input-row">
               <label>
                 <span>
@@ -155,60 +250,14 @@ function CheckoutModal({
                 {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description}
               </p>
             ) : null}
-            <label>
-              Payment method
-              <select
-                value={form.paymentMethod}
-                onChange={(event) => onFieldChange("paymentMethod", event.target.value)}
-                disabled={isSubmitting}
-              >
-                <option value="card">Paystack Card Payment</option>
-                <option value="transfer">Paystack Bank Transfer</option>
-              </select>
-            </label>
-            <p className="checkout-hint">
-              Payment is processed securely by Paystack. Use card or transfer to complete your order.
-            </p>
 
-            {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
-            {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
-
-            <button type="submit" className="primary-action" disabled={items.length === 0 || isSubmitting}>
-              {isSubmitting ? "Processing..." : "Pay Securely"}
-            </button>
-          </form>
-
-          <div className="checkout-summary">
-            <h3>Order Summary</h3>
-            <ul>
-              {items.map((item) => (
-                <li key={item.product.id}>
-                  <span className="checkout-item-meta">
-                    <span>
-                      {item.product.name} x {item.quantity}
-                    </span>
-                    {normalizeAvailability(item.product.availability) === "preorder" ? (
-                      <small className="preorder-note">{resolvePreorderNote(item)}</small>
-                    ) : null}
-                  </span>
-                  <strong>{toPrice(item.lineTotal)}</strong>
-                </li>
-              ))}
-            </ul>
-            <p>
-              Items <strong>{toPrice(subtotal)}</strong>
-            </p>
-            <p>
-              Shipping <strong>{toPrice(shippingFee)}</strong>
-            </p>
-            <p>
-              Total <strong>{toPrice(total)}</strong>
-            </p>
-            <p className="checkout-shipping-note">
-              Shipping is included in the payment total.
-            </p>
+              <button type="submit" className="primary-action" disabled={isSubmitting}>
+                Save Details
+              </button>
+              </div>
+            </form>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

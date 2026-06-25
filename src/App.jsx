@@ -21,6 +21,7 @@ import {
   buildHeroSlides,
   normalizeAudienceList,
   normalizeProduct,
+  normalizeProductImages,
   normalizeSection
 } from "./utils/storefrontModel";
 import { initAnalytics, trackPageView } from "./utils/analytics";
@@ -187,6 +188,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     const detailBullets = Array.isArray(product.detailBullets)
       ? product.detailBullets
       : DEFAULT_PRODUCT_DETAIL_BULLETS;
+    const productImages = normalizeProductImages(product);
     setProductDraft({
       ...product,
       section: normalizeSection(product.section),
@@ -198,7 +200,10 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
       description: product.description || "",
       detailBullets,
       detailBulletsText: formatDetailBulletLines(detailBullets),
-      price: String(product.price)
+      price: String(product.price),
+      image: productImages.image,
+      images: productImages.images,
+      mainImageIndex: productImages.mainImageIndex
     });
     setAdminMessage("");
   };
@@ -214,6 +219,7 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     try {
       const audiences = normalizeAudienceList(productDraft.audiences || productDraft.audience);
       const detailBullets = normalizeDetailBulletLines(productDraft.detailBulletsText);
+      const productImages = normalizeProductImages(productDraft);
       const payload = {
         id: isEditingProduct ? productDraft.id : undefined,
         name: productDraft.name.trim(),
@@ -230,7 +236,9 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
         description: String(productDraft.description || "").trim(),
         detailBullets,
         variant: String(productDraft.variant || "round").trim() || "round",
-        image: String(productDraft.image || "").trim()
+        image: productImages.image,
+        images: productImages.images,
+        mainImageIndex: productImages.mainImageIndex
       };
       if (!payload.name) throw new Error("Product name is required.");
       const response = isEditingProduct
@@ -290,14 +298,33 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     }
   };
 
-  const handleProductUpload = async (event) => {
+  const handleProductUpload = async (event, replaceIndex = null) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
       setAdminMessage("Uploading product image...");
       const uploaded = await uploadImage(file, "product");
-      setProductDraft((current) => ({ ...current, image: uploaded.secureUrl }));
-      setAdminMessage("Product image uploaded.");
+      setProductDraft((current) => {
+        const currentImages = normalizeProductImages(current).images;
+        const replacementIndex = Number(replaceIndex);
+        const isReplacing =
+          Number.isInteger(replacementIndex) &&
+          replacementIndex >= 0 &&
+          replacementIndex < currentImages.length;
+        const nextImages = isReplacing
+          ? currentImages.map((image, index) => (index === replacementIndex ? uploaded.secureUrl : image))
+          : [...currentImages, uploaded.secureUrl].filter(Boolean).slice(0, 6);
+        const mainImageIndex = nextImages.length === 1
+          ? 0
+          : Math.max(0, Math.min(Number(current.mainImageIndex) || 0, nextImages.length - 1));
+        return {
+          ...current,
+          image: nextImages[mainImageIndex] || uploaded.secureUrl,
+          images: nextImages,
+          mainImageIndex
+        };
+      });
+      setAdminMessage(Number.isInteger(Number(replaceIndex)) ? "Product image replaced." : "Product image uploaded.");
     } catch (error) {
       setAdminMessage(error.message || "Could not upload selected product image.");
     } finally {

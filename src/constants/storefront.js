@@ -101,7 +101,9 @@ export const EMPTY_PRODUCT = {
   availability: "in_stock",
   preorderNote: "",
   variant: "round",
-  image: ""
+  image: "",
+  images: [],
+  mainImageIndex: 0
 };
 
 export const DEFAULT_HERO_ROTATION_IMAGES = [

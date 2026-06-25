@@ -76,7 +76,7 @@ let storefrontFallbackWarningLogged = false;
 const PUBLIC_PRODUCT_SELECT = `
   SELECT
     id, name, price, section, audience, availability, preorder_note, cta_label,
-    description, detail_bullets, variant,
+    description, detail_bullets, variant, images,
     CASE
       WHEN image LIKE 'data:image/%;base64,%' THEN '/api/products/' || id || '/image'
       ELSE coalesce(image, '')
@@ -672,7 +672,9 @@ const productSchema = z.object({
   availability: z.enum(PRODUCT_AVAILABILITY_VALUES).optional().default("in_stock"),
   preorderNote: z.string().max(180).optional().default(""),
   variant: z.string().max(40).optional().default("round"),
-  image: z.string().max(5_000_000).optional().default("")
+  image: z.string().max(5_000_000).optional().default(""),
+  images: z.array(z.string().max(5_000_000)).max(6).optional().default([]),
+  mainImageIndex: z.coerce.number().int().min(0).max(5).optional().default(0)
 });
 const blogSchema = z.object({
   id: z.string().min(1).max(120).optional(),
@@ -1549,8 +1551,8 @@ async function createProduct(request) {
   const id = payload.id || crypto.randomUUID();
   const product = normalizeProductPayload(payload);
   await execute(
-    "INSERT INTO products (id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [id, product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, product.image]
+    "INSERT INTO products (id, name, price, section, audience, availability, preorder_note, cta_label, description, detail_bullets, variant, image, images) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, product.image, product.images]
   );
   const row = await queryOne("SELECT * FROM products WHERE id = ?", [id]);
   return json({ product: mapProductRow(row) }, 201);
@@ -1561,13 +1563,13 @@ async function updateProduct(request, id) {
   if (auth.response) return auth.response;
   const parsed = productSchema.safeParse({ ...(await readJson(request)), id });
   if (!parsed.success) return json({ error: "Invalid product payload." }, 400);
-  const existing = await queryOne("SELECT id, image FROM products WHERE id = ?", [id]);
+  const existing = await queryOne("SELECT id, image, images FROM products WHERE id = ?", [id]);
   if (!existing) return json({ error: "Product not found." }, 404);
   const product = normalizeProductPayload(parsed.data);
   const image = product.image === productImageEndpoint(id) ? existing.image || "" : product.image;
   await execute(
-    "UPDATE products SET name = ?, price = ?, section = ?, audience = ?, availability = ?, preorder_note = ?, cta_label = ?, description = ?, detail_bullets = ?, variant = ?, image = ?, updated_at = datetime('now') WHERE id = ?",
-    [product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, image, id]
+    "UPDATE products SET name = ?, price = ?, section = ?, audience = ?, availability = ?, preorder_note = ?, cta_label = ?, description = ?, detail_bullets = ?, variant = ?, image = ?, images = ?, updated_at = datetime('now') WHERE id = ?",
+    [product.name, product.price, product.section, product.audience, product.availability, product.preorderNote, product.ctaLabel, product.description, product.detailBullets, product.variant, image, product.images, id]
   );
   const row = await queryOne("SELECT * FROM products WHERE id = ?", [id]);
   return json({ product: mapProductRow(row) });
@@ -1591,7 +1593,23 @@ function normalizeProductPayload(payload) {
     description: payload.description.trim(),
     detailBullets: JSON.stringify(normalizeDetailBullets(payload.detailBullets)),
     variant: payload.variant.trim() || "round",
-    image: payload.image.trim()
+    ...normalizeProductImages(payload)
+  };
+}
+
+function normalizeProductImages(payload) {
+  const candidates = [
+    ...(Array.isArray(payload.images) ? payload.images : []),
+    payload.image
+  ]
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  const images = [...new Set(candidates)].slice(0, 6);
+  const index = Number(payload.mainImageIndex);
+  const mainImageIndex = Number.isInteger(index) && index >= 0 && index < images.length ? index : 0;
+  return {
+    image: images[mainImageIndex] || String(payload.image || "").trim(),
+    images: JSON.stringify(images)
   };
 }
 
