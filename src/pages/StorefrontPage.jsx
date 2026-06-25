@@ -414,7 +414,7 @@ function StorefrontPage({
       setCheckoutError("Phone or email is required.");
       return;
     }
-    if (!selectedShippingTier) {
+    if (!checkoutForm.shippingTierId) {
       setCheckoutError("Please select a shipping option.");
       return;
     }
@@ -430,7 +430,7 @@ function StorefrontPage({
           quantity: item.quantity
         })),
         paymentMethod: checkoutForm.paymentMethod,
-        shippingTierId: selectedShippingTier.id,
+        shippingTierId: checkoutForm.shippingTierId,
         addressId: checkoutForm.addressId || undefined,
         customer: {
           firstName: checkoutForm.firstName.trim(),
