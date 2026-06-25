@@ -227,25 +227,29 @@ function CheckoutModal({
                 disabled={isSubmitting}
               />
             </label>
-            <label>
-              Shipping
-              <select
-                value={selectedShippingTierId || form.shippingTierId || ""}
-                onChange={(event) => onFieldChange("shippingTierId", event.target.value)}
-                disabled={isSubmitting}
-                required
-              >
-                <option value="" disabled>
-                  Select a shipping option
-                </option>
-
-                {shippingTiers.map((tier) => (
-                  <option key={tier.id} value={tier.id}>
-                    {tier.name} - {toPrice(tier.fee)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <fieldset className="checkout-shipping-options">
+              <legend>Shipping</legend>
+              {shippingTiers.length === 0 ? (
+                <p className="checkout-hint">No shipping options are currently available.</p>
+              ) : (
+                shippingTiers.map((tier) => {
+                  const isSelected = String(selectedShippingTierId || form.shippingTierId || "") === String(tier.id);
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      className={isSelected ? "is-selected" : ""}
+                      onClick={() => onFieldChange("shippingTierId", tier.id)}
+                      disabled={isSubmitting}
+                      aria-pressed={isSelected}
+                    >
+                      <span>{tier.name}</span>
+                      <strong>{toPrice(tier.fee)}</strong>
+                    </button>
+                  );
+                })
+              )}
+            </fieldset>
             {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description ? (
               <p className="checkout-hint">
                 {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description}

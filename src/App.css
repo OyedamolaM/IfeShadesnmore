@@ -2335,6 +2335,58 @@ select {
   box-sizing: border-box;
 }
 
+.checkout-shipping-options {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.checkout-shipping-options legend {
+  margin: 0 0 0.34rem;
+  padding: 0;
+  font-size: 0.92rem;
+}
+
+.checkout-shipping-options button {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20242b;
+  cursor: pointer;
+  padding: 0.62rem 0.75rem;
+  text-align: left;
+}
+
+.checkout-shipping-options button.is-selected {
+  border-color: #20242b;
+  box-shadow: 0 0 0 2px rgba(32, 36, 43, 0.08);
+}
+
+.checkout-shipping-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.checkout-shipping-options span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.checkout-shipping-options strong {
+  white-space: nowrap;
+}
+
 .checkout-form label {
   display: grid;
   gap: 0.34rem;
