@@ -655,6 +655,7 @@ const reviewItemSchema = z.object({
   name: z.string().min(1).max(80),
   role: z.string().max(80).optional().default(""),
   rating: z.coerce.number().int().min(1).max(5).optional().default(5),
+  image: z.string().max(5_000_000).optional().default(""),
   text: z.string().min(1).max(280)
 });
 const faqItemSchema = z.object({
@@ -1924,7 +1925,7 @@ async function uploadImage(request) {
   const form = await request.formData();
   const file = form.get("file");
   const requestedKind = String(form.get("kind") || "product").trim();
-  const kind = ["product", "hero", "blog"].includes(requestedKind) ? requestedKind : "product";
+  const kind = ["product", "hero", "blog", "review"].includes(requestedKind) ? requestedKind : "product";
   const result = await storeImageFile(file, kind);
   if (result.response) return result.response;
   return json(result.payload, 201);
@@ -1957,7 +1958,7 @@ async function storeImageFile(file, kind) {
   if (!String(file.type || "").startsWith("image/")) return { response: json({ error: "Only image uploads are allowed." }, 400) };
   if (file.size > 10 * 1024 * 1024) return { response: json({ error: "Image must be 10MB or smaller." }, 400) };
   const sourceBuffer = Buffer.from(await file.arrayBuffer());
-  const optimizedImage = await optimizeUploadedImage(sourceBuffer, String(file.type || ""));
+  const optimizedImage = await optimizeUploadedImage(sourceBuffer, String(file.type || ""), kind);
   const buffer = optimizedImage.buffer;
   const fileName = sanitizeUploadFileName(optimizedImage.fileName || file.name || "image");
   const folder = String(process.env.SUPABASE_STORAGE_FOLDER || "uploads").trim().replace(/^\/+|\/+$/g, "") || "uploads";
@@ -1997,20 +1998,23 @@ async function storeImageFile(file, kind) {
   };
 }
 
-async function optimizeUploadedImage(buffer, contentType) {
+async function optimizeUploadedImage(buffer, contentType, kind = "product") {
   const fallbackExtension = String(contentType || "").split("/")[1] || "jpg";
   try {
     const sharp = (await import("sharp")).default;
+    const isTinyAvatar = kind === "review" || kind === "avatar";
+    const targetSize = isTinyAvatar ? 360 : 1400;
     const optimizedBuffer = await sharp(buffer, { failOn: "none" })
       .rotate()
       .resize({
-        width: 1400,
-        height: 1400,
-        fit: "inside",
+        width: targetSize,
+        height: targetSize,
+        fit: isTinyAvatar ? "cover" : "inside",
+        position: "center",
         withoutEnlargement: true
       })
       .jpeg({
-        quality: 82,
+        quality: isTinyAvatar ? 68 : 82,
         progressive: true,
         mozjpeg: true
       })

@@ -334,10 +334,11 @@ function parseReviewItems(value) {
       if (!item || typeof item !== "object") return null;
       const name = String(item.name || "").trim().slice(0, 80);
       const role = String(item.role || "").trim().slice(0, 80);
+      const image = String(item.image || "").trim().slice(0, 5_000_000);
       const text = String(item.text || "").trim().slice(0, 280);
       const rating = Math.min(5, Math.max(1, Math.round(Number(item.rating) || 5)));
       if (!name || !text) return null;
-      return { name, role, rating, text };
+      return { name, role, rating, image, text };
     })
     .filter(Boolean)
     .slice(0, 12);

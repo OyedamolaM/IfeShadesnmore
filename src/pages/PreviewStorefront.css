@@ -1126,15 +1126,25 @@
 }
 
 .preview-review-avatar {
-  width: 3rem;
-  height: 3rem;
+  width: 4.25rem;
+  height: 4.25rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: var(--preview-accent);
   color: var(--preview-bg);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 900;
+  flex: 0 0 auto;
+}
+
+.preview-review-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
 }
 
 .preview-testimonial-card strong {

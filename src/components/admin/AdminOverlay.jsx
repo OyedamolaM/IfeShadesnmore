@@ -433,6 +433,7 @@ function AdminOverlay({
   const [orderDraft, setOrderDraft] = useState(EMPTY_ORDER_DRAFT);
   const [isEditingBlog, setIsEditingBlog] = useState(false);
   const [isBlogImageUploading, setIsBlogImageUploading] = useState(false);
+  const [isReviewImageUploading, setIsReviewImageUploading] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
   const [modalError, setModalError] = useState("");
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
@@ -984,6 +985,23 @@ function AdminOverlay({
     }
   };
 
+  const handleReviewImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    resetModalFeedback();
+    setIsReviewImageUploading(true);
+    try {
+      const result = await uploadImage(file, "review");
+      setSettingsModalDraft((current) => ({ ...current, image: result.secureUrl || "" }));
+      pushAdminToast("Review picture uploaded.", "success");
+    } catch (requestError) {
+      setModalError(requestError.message || "Could not upload review picture.");
+    } finally {
+      setIsReviewImageUploading(false);
+      event.target.value = "";
+    }
+  };
+
   const handleDeleteBlog = async (blog) => {
     const shouldDelete = window.confirm(`Delete blog post "${blog.title}"?`);
     if (!shouldDelete) return;
@@ -1129,7 +1147,7 @@ function AdminOverlay({
     const items = listForSetting("reviewItems");
     const item = index >= 0
       ? items[index]
-      : { name: "", role: "", rating: 5, text: "" };
+      : { name: "", role: "", rating: 5, image: "", text: "" };
     setSettingsEditor({ kind: "reviewItem", index, label: index >= 0 ? "Edit review" : "Add review" });
     setSettingsModalDraft({ ...item });
     openModal("settings");
@@ -1220,6 +1238,7 @@ function AdminOverlay({
         name: String(settingsModalDraft.name || "").trim(),
         role: String(settingsModalDraft.role || "").trim(),
         rating: Math.min(5, Math.max(1, Math.round(Number(settingsModalDraft.rating) || 5))),
+        image: String(settingsModalDraft.image || "").trim(),
         text: String(settingsModalDraft.text || "").trim()
       };
       if (!nextItem.name || !nextItem.text) {
@@ -1887,6 +1906,8 @@ function AdminOverlay({
             <>
               <label>Name<input value={settingsModalDraft.name || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, name: event.target.value }))} required /></label>
               <label>Role<input value={settingsModalDraft.role || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, role: event.target.value }))} placeholder="Laptop user, tech customer..." /></label>
+              <label>Photo URL<input value={settingsModalDraft.image || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, image: event.target.value }))} placeholder="https://..." /></label>
+              <label className="la-upload-card">Review photo{settingsModalDraft.image ? <span><img src={settingsModalDraft.image} alt="" /></span> : <span><AdminIcon name="customers" /></span>}<input type="file" accept="image/*" onChange={handleReviewImageUpload} disabled={isReviewImageUploading} /><small>{isReviewImageUploading ? "Uploading and compressing..." : "Square photo recommended. It will be compressed and shown as a circle."}</small></label>
               <label>Rating<input type="number" min="1" max="5" value={settingsModalDraft.rating || 5} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, rating: event.target.value }))} required /></label>
               <label>Review<textarea rows={4} value={settingsModalDraft.text || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, text: event.target.value }))} required /></label>
             </>

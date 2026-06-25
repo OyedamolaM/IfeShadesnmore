@@ -301,7 +301,7 @@ export function PreviewSupportSections({ blogs = [], reviewItems = [], faqItems 
               <blockquote>"{activeReview.text}"</blockquote>
               <footer>
                 <div className="preview-review-avatar" aria-hidden="true">
-                  {String(activeReview.name || "C").trim().slice(0, 2).toUpperCase()}
+                  {activeReview.image ? <img src={activeReview.image} alt="" /> : String(activeReview.name || "C").trim().slice(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <strong>{activeReview.name}</strong>

@@ -47,18 +47,21 @@ export const DEFAULT_REVIEW_ITEMS = [
     name: "IfeShadesnMore customer",
     role: "Laptop user",
     rating: 5,
+    image: "",
     text: "The frame looked exactly like the pictures and feels comfortable for long screen hours."
   },
   {
     name: "Verified buyer",
     role: "Working professional",
     rating: 5,
+    image: "",
     text: "Beautiful glasses, neatly packaged, and easy to wear from work calls to evening plans."
   },
   {
     name: "Happy customer",
     role: "Tech customer",
     rating: 5,
+    image: "",
     text: "I wanted stylish anti-blue glasses for laptop work and this made the choice simple."
   }
 ];
