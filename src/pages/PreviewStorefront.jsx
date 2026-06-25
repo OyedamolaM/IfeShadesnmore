@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import CartIcon from "../components/icons/CartIcon";
 import ProfileIcon from "../components/icons/ProfileIcon";
@@ -111,6 +111,8 @@ const HERO_SLIDES = [
 ];
 const HERO_IMAGE_INTERVAL_MS = 4200;
 const BLOG_SWIPER_INTERVAL_MS = 5200;
+const TESTIMONIAL_AUTOPLAY_MS = 6000;
+const WHATSAPP_NUMBER = "2349063556765";
 const PLACEHOLDER_BLOGS = [
   {
     id: "style-guide-placeholder",
@@ -170,10 +172,17 @@ function blogSlugId(blog) {
   return `${slug}--${encodeURIComponent(blog.id)}`;
 }
 
-export function PreviewSupportSections({ blogs = [], onOpenAdmin, includeFooter = true }) {
+export function PreviewSupportSections({ blogs = [], reviewItems = [], faqItems = [], onOpenAdmin, includeFooter = true }) {
   const blogItems = (Array.isArray(blogs) && blogs.length > 0 ? blogs : PLACEHOLDER_BLOGS).filter(Boolean);
+  const reviews = Array.isArray(reviewItems) ? reviewItems.filter((item) => item?.name && item?.text) : [];
+  const faqs = Array.isArray(faqItems) ? faqItems.filter((item) => item?.question && item?.answer) : [];
   const [activeBlogIndex, setActiveBlogIndex] = useState(0);
+  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
+  const [isReviewPaused, setIsReviewPaused] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const reviewTouchX = useRef(null);
   const activeBlog = blogItems[activeBlogIndex % blogItems.length] || PLACEHOLDER_BLOGS[0];
+  const activeReview = reviews.length > 0 ? reviews[activeReviewIndex % reviews.length] : null;
 
   useEffect(() => {
     setActiveBlogIndex(0);
@@ -186,6 +195,40 @@ export function PreviewSupportSections({ blogs = [], onOpenAdmin, includeFooter 
     }, BLOG_SWIPER_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [blogItems.length]);
+
+  useEffect(() => {
+    setActiveReviewIndex(0);
+  }, [reviews.length]);
+
+  useEffect(() => {
+    if (isReviewPaused || reviews.length <= 1 || typeof window === "undefined") return undefined;
+    const timer = window.setInterval(() => {
+      setActiveReviewIndex((current) => (current + 1) % reviews.length);
+    }, TESTIMONIAL_AUTOPLAY_MS);
+    return () => window.clearInterval(timer);
+  }, [isReviewPaused, reviews.length]);
+
+  const goToReview = (index) => {
+    if (reviews.length === 0) return;
+    setActiveReviewIndex((index + reviews.length) % reviews.length);
+  };
+
+  const nextReview = () => goToReview(activeReviewIndex + 1);
+  const previousReview = () => goToReview(activeReviewIndex - 1);
+
+  const handleReviewTouchStart = (event) => {
+    reviewTouchX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleReviewTouchEnd = (event) => {
+    if (reviewTouchX.current == null) return;
+    const dx = (event.changedTouches[0]?.clientX ?? 0) - reviewTouchX.current;
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) nextReview();
+      else previousReview();
+    }
+    reviewTouchX.current = null;
+  };
 
   return (
     <>
@@ -232,6 +275,93 @@ export function PreviewSupportSections({ blogs = [], onOpenAdmin, includeFooter 
           ) : null}
         </article>
       </section>
+
+      {activeReview ? (
+        <section className="preview-reviews" id="reviews">
+          <div className="preview-centered-heading">
+            <p>Reviews</p>
+            <h2>Customers are seeing the difference.</h2>
+            <span>Real notes from people choosing better frames for work, screens, and everyday style.</span>
+          </div>
+          <div
+            className="preview-testimonial-carousel"
+            onMouseEnter={() => setIsReviewPaused(true)}
+            onMouseLeave={() => setIsReviewPaused(false)}
+            onTouchStart={handleReviewTouchStart}
+            onTouchEnd={handleReviewTouchEnd}
+            aria-roledescription="carousel"
+            aria-label="Customer reviews"
+          >
+            <article key={`${activeReview.name}-${activeReviewIndex}`} className="preview-testimonial-card">
+              <div className="preview-review-rating" aria-label={`${Number(activeReview.rating) || 5} out of 5 stars`}>
+                {Array.from({ length: 5 }).map((_, starIndex) => (
+                  <span key={starIndex} className={starIndex < Math.min(5, Math.max(1, Number(activeReview.rating) || 5)) ? "is-filled" : ""}>*</span>
+                ))}
+              </div>
+              <blockquote>"{activeReview.text}"</blockquote>
+              <footer>
+                <div className="preview-review-avatar" aria-hidden="true">
+                  {String(activeReview.name || "C").trim().slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <strong>{activeReview.name}</strong>
+                  {activeReview.role ? <span>{activeReview.role}</span> : null}
+                </div>
+                {activeReview.role ? (
+                  <div className="preview-review-result">
+                    <small>Use case</small>
+                    <b>{activeReview.role}</b>
+                  </div>
+                ) : null}
+              </footer>
+            </article>
+            {reviews.length > 1 ? (
+              <div className="preview-testimonial-controls">
+                <button type="button" onClick={previousReview} aria-label="Previous review">‹</button>
+                <div className="preview-testimonial-dots" role="tablist" aria-label="Customer reviews">
+                  {reviews.map((item, index) => (
+                    <button
+                      key={`${item.name}-${index}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={index === activeReviewIndex}
+                      className={index === activeReviewIndex ? "is-active" : ""}
+                      onClick={() => goToReview(index)}
+                      aria-label={`Go to review ${index + 1}`}
+                    />
+                  ))}
+                </div>
+                <button type="button" onClick={nextReview} aria-label="Next review">›</button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {faqs.length > 0 ? (
+        <section className="preview-faq" id="faq">
+          <div className="preview-centered-heading">
+            <p>FAQ</p>
+            <h2>Common questions</h2>
+            <span>Everything you need to know before choosing your next frame.</span>
+          </div>
+          <div className="preview-faq-list">
+            {faqs.slice(0, 8).map((item, index) => (
+              <div key={`${item.question}-${index}`} className="preview-faq-item">
+                <button
+                  type="button"
+                  onClick={() => setOpenFaqIndex(openFaqIndex === index ? null : index)}
+                  aria-expanded={openFaqIndex === index}
+                >
+                  <span>{item.question}</span>
+                  <b aria-hidden="true">{openFaqIndex === index ? "-" : "+"}</b>
+                </button>
+                {openFaqIndex === index ? <p>{item.answer}</p> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="preview-values">
         {VALUE_PROPS.map((item) => (
@@ -335,6 +465,8 @@ function PreviewStorefront({
         <nav aria-label="Primary navigation">
           <a href={`#${primaryShopTargetId}`}>Shop</a>
           <a href="#editorial">Blog</a>
+          <a href="#reviews">Reviews</a>
+          <a href="#faq">FAQ</a>
           <button type="button" onClick={onOpenAbout}>
             About
           </button>
@@ -440,7 +572,20 @@ function PreviewStorefront({
           <span>Bulk purchase discounts</span>
         </div>
 
-        {showSupportSections ? <PreviewSupportSections blogs={blogs} onOpenAdmin={onOpenAdmin} /> : null}
+        <a
+          className="preview-whatsapp-float"
+          href={`https://wa.me/${WHATSAPP_NUMBER}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Chat with IfeShadesnMore on WhatsApp"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5.2 19.4 6.4 15.9a7.4 7.4 0 1 1 2 2Z" />
+            <path d="M9.1 8.5c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.7 1.7c.1.2.1.4 0 .6l-.4.5c-.1.1-.2.3 0 .5.4.8 1.2 1.8 2.2 2.3.2.1.4.1.5-.1l.6-.7c.2-.2.4-.2.6-.1l1.8.8c.3.1.4.3.4.5 0 .5-.3 1.3-.9 1.6-.6.4-1.8.4-3.1-.2-1.5-.7-3-1.9-4.1-3.4-1-1.4-1.3-2.6-.9-3.4l.3-.6Z" />
+          </svg>
+        </a>
+
+        {showSupportSections ? <PreviewSupportSections blogs={blogs} reviewItems={settings?.reviewItems} faqItems={settings?.faqItems} onOpenAdmin={onOpenAdmin} /> : null}
       </main>
     </div>
   );

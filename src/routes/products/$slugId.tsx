@@ -39,8 +39,9 @@ export const Route = createFileRoute("/products/$slugId")({
       };
     }
     const title = `${product.name} | IfeShades & More`;
-    const description =
+    const baseDescription =
       product.description || `Shop ${product.name} from IfeShades & More. Stylish eyewear with secure checkout.`;
+    const description = `${baseDescription} Explore anti-blue glasses, photochromic glasses, and stylish frames for laptop users, phone users, tech workers, office professionals, and heavy screen use.`;
     const image = getProductShareImageUrl(product, siteUrl);
     const imageAlt = `${product.name} product image`;
     const imageType = inferImageType(product.image || image);
@@ -48,6 +49,7 @@ export const Route = createFileRoute("/products/$slugId")({
       meta: [
         { title },
         { name: "description", content: description },
+        { name: "keywords", content: `${product.name}, anti-blue glasses, photochromic glasses, laptop glasses, phone screen glasses, blue light glasses, tech worker glasses, office eyewear, IfeShadesnMore` },
         { property: "og:title", content: title },
         { property: "og:description", content: description },
         { property: "og:type", content: "product" },
@@ -602,7 +604,9 @@ function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange, onOp
       <nav aria-label="Primary navigation">
         <Link to="/" hash="shop">Shop</Link>
         <Link to="/" hash="editorial">Blog</Link>
-        <Link to="/" hash="contact">Contact</Link>
+        <Link to="/" hash="reviews">Reviews</Link>
+        <Link to="/" hash="faq">FAQ</Link>
+        <Link to="/" hash="contact">About</Link>
       </nav>
 
       <div className="preview-nav-actions">

@@ -571,6 +571,8 @@ function StorefrontPage({
           />
           <PreviewSupportSections
             blogs={blogs}
+            reviewItems={settings?.reviewItems}
+            faqItems={settings?.faqItems}
             onOpenAdmin={() => onNavigate(currentUser?.role === "admin" ? "/admin" : "/admin/login")}
             includeFooter={false}
           />
