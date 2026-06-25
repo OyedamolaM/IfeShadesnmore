@@ -238,6 +238,10 @@ function CheckoutModal({
                 disabled={isSubmitting}
                 required
               >
+                <option value="" disabled>
+                  Select a shipping option
+                </option>
+
                 {shippingTiers.map((tier) => (
                   <option key={tier.id} value={tier.id}>
                     {tier.name} - {toPrice(tier.fee)}

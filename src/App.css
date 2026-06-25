@@ -2257,6 +2257,15 @@ select {
   font-style: normal;
   line-height: 1.45;
 }
+.checkout-delivery-card address {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.checkout-hint {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 
 .checkout-delivery-card .secondary-action {
   width: 100%;
@@ -2273,7 +2282,7 @@ select {
 }
 
 .checkout-delivery-modal {
-  width: min(620px, 100%);
+  width: min(820px, 95vw);
   max-height: min(720px, calc(100dvh - 2rem));
   padding: 0;
   overflow: hidden;
