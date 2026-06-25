@@ -288,7 +288,13 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
           : DEFAULT_SETTINGS.featureItems,
         shippingTiers: Array.isArray(draft.shippingTiers)
           ? draft.shippingTiers
-          : []
+          : [],
+        reviewItems: Array.isArray(draft.reviewItems)
+          ? draft.reviewItems
+          : DEFAULT_SETTINGS.reviewItems,
+        faqItems: Array.isArray(draft.faqItems)
+          ? draft.faqItems
+          : DEFAULT_SETTINGS.faqItems
       });
       setSettings(payload.settings);
       setSettingsDraft(payload.settings);

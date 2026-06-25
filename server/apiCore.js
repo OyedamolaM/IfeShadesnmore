@@ -30,18 +30,22 @@ import {
   sendNewsletterCampaign,
   sendNewsletterAdminNotification,
   sendNewsletterWelcome,
-  sendOrderNotification
+  sendOrderNotification,
+  sendSignupAdminNotification
 } from "./mailer.js";
 import {
+  DEFAULT_FAQ_ITEMS,
   DEFAULT_FEATURE_ITEMS,
   DEFAULT_HERO_PROMISE_ITEMS,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
+  DEFAULT_REVIEW_ITEMS,
   DEFAULT_SETTINGS
 } from "./defaults.js";
 
 dotenv.config();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.SITE_URL || "http://localhost:3000";
+const STORE_OWNER_EMAIL = "ifeshadesnmore@gmail.com";
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const PRODUCT_AUDIENCE_VALUES = ["fashion", "women", "men", "sunglasses", "unisex", "antiblue", "photochromic", "prescrip"];
 const PRODUCT_AUDIENCE_SET = new Set(PRODUCT_AUDIENCE_VALUES);
@@ -647,6 +651,16 @@ const shippingTierSchema = z.object({
   fee: z.coerce.number().int().nonnegative(),
   isActive: z.boolean().optional().default(true)
 });
+const reviewItemSchema = z.object({
+  name: z.string().min(1).max(80),
+  role: z.string().max(80).optional().default(""),
+  rating: z.coerce.number().int().min(1).max(5).optional().default(5),
+  text: z.string().min(1).max(280)
+});
+const faqItemSchema = z.object({
+  question: z.string().min(1).max(140),
+  answer: z.string().min(1).max(420)
+});
 const settingsSchema = z.object({
   brandName: z.string().min(1).max(120),
   brandTagline: z.string().min(1).max(80),
@@ -657,7 +671,9 @@ const settingsSchema = z.object({
   heroImage: z.string().min(1).max(5_000_000),
   heroPromiseItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_HERO_PROMISE_ITEMS),
   featureItems: z.array(bulletItemSchema).min(1).max(6).optional().default(DEFAULT_FEATURE_ITEMS),
-  shippingTiers: z.array(shippingTierSchema).max(12).optional().default([])
+  shippingTiers: z.array(shippingTierSchema).max(12).optional().default([]),
+  reviewItems: z.array(reviewItemSchema).max(12).optional().default(DEFAULT_REVIEW_ITEMS),
+  faqItems: z.array(faqItemSchema).max(12).optional().default(DEFAULT_FAQ_ITEMS)
 });
 const productSchema = z.object({
   id: z.string().min(1).max(120).optional(),
@@ -794,6 +810,15 @@ async function register(request) {
   );
   const verification = await createVerificationToken(result.lastInsertRowid);
   await sendVerificationEmailSafe({ toEmail: email, fullName, verificationUrl: verification.verificationUrl });
+  await sendSignupAlertSafe({
+    user: {
+      email,
+      fullName,
+      phone: payload.phone.trim(),
+      address: payload.address.trim(),
+      city: payload.city.trim()
+    }
+  });
   return json({ ok: true, message: "Signup successful. Please verify your email, then login." }, 201);
 }
 
@@ -1526,7 +1551,7 @@ async function updateSettings(request) {
   if (!parsed.success) return json({ error: "Invalid settings payload." }, 400);
   const payload = parsed.data;
   await execute(
-    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_kicker = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, shipping_tiers = ?, updated_at = datetime('now') WHERE id = 1",
+    "UPDATE settings SET brand_name = ?, brand_tagline = ?, hero_kicker = ?, hero_title = ?, hero_subtitle = ?, hero_button_label = ?, hero_image = ?, hero_promise_items = ?, feature_items = ?, shipping_tiers = ?, review_items = ?, faq_items = ?, updated_at = datetime('now') WHERE id = 1",
     [
       payload.brandName.trim(),
       payload.brandTagline.trim(),
@@ -1537,7 +1562,9 @@ async function updateSettings(request) {
       payload.heroImage.trim(),
       JSON.stringify(payload.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
       JSON.stringify(payload.featureItems || DEFAULT_FEATURE_ITEMS),
-      JSON.stringify(Array.isArray(payload.shippingTiers) ? payload.shippingTiers : [])
+      JSON.stringify(Array.isArray(payload.shippingTiers) ? payload.shippingTiers : []),
+      JSON.stringify(payload.reviewItems || DEFAULT_REVIEW_ITEMS),
+      JSON.stringify(payload.faqItems || DEFAULT_FAQ_ITEMS)
     ]
   );
   const row = await queryOne("SELECT * FROM settings WHERE id = 1");
@@ -2066,12 +2093,33 @@ function sanitizeUploadFileName(value) {
 
 function getOrderAlertRecipients() {
   const configured = String(process.env.ORDER_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
-  return [...new Set(configured.split(",").map((entry) => normalizeEmail(entry)).filter(Boolean))];
+  return [...new Set([...configured.split(","), STORE_OWNER_EMAIL].map((entry) => normalizeEmail(entry)).filter(Boolean))];
 }
 
 function getNewsletterAlertRecipients() {
   const configured = String(process.env.NEWSLETTER_ALERT_EMAIL || process.env.ORDER_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
-  return [...new Set(configured.split(",").map((entry) => normalizeEmail(entry)).filter(Boolean))];
+  return [...new Set([...configured.split(","), STORE_OWNER_EMAIL].map((entry) => normalizeEmail(entry)).filter(Boolean))];
+}
+
+function getSignupAlertRecipients() {
+  const configured = String(process.env.SIGNUP_ALERT_EMAIL || process.env.ADMIN_EMAIL || "");
+  return [...new Set([...configured.split(","), STORE_OWNER_EMAIL].map((entry) => normalizeEmail(entry)).filter(Boolean))];
+}
+
+async function sendSignupAlertSafe({ user }) {
+  let deliveredCount = 0;
+  for (const toEmail of getSignupAlertRecipients()) {
+    try {
+      const result = await sendSignupAdminNotification({ toEmail, user });
+      if (result?.delivered) deliveredCount += 1;
+    } catch (error) {
+      console.error("Could not send signup notification email:", {
+        message: error?.message || "",
+        mailer: getMailerRuntimeInfo()
+      });
+    }
+  }
+  return { delivered: deliveredCount > 0, deliveredCount };
 }
 
 async function sendNewsletterEmailsSafe({ email, source }) {

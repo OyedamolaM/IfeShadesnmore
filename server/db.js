@@ -4,10 +4,12 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import pg from "pg";
 import {
+  DEFAULT_FAQ_ITEMS,
   DEFAULT_FEATURE_ITEMS,
   DEFAULT_HERO_PROMISE_ITEMS,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
   DEFAULT_PRODUCTS,
+  DEFAULT_REVIEW_ITEMS,
   DEFAULT_SETTINGS
 } from "./defaults.js";
 
@@ -319,6 +321,50 @@ function parseSettingsItems(value, fallback) {
   return normalized.length > 0 ? normalized : fallbackArray;
 }
 
+function parseReviewItems(value) {
+  let parsed;
+  try {
+    parsed = value ? JSON.parse(String(value)) : [];
+  } catch {
+    parsed = [];
+  }
+  const source = Array.isArray(parsed) ? parsed : [];
+  const normalized = source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || "").trim().slice(0, 80);
+      const role = String(item.role || "").trim().slice(0, 80);
+      const text = String(item.text || "").trim().slice(0, 280);
+      const rating = Math.min(5, Math.max(1, Math.round(Number(item.rating) || 5)));
+      if (!name || !text) return null;
+      return { name, role, rating, text };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+  return normalized.length > 0 ? normalized : DEFAULT_REVIEW_ITEMS;
+}
+
+function parseFaqItems(value) {
+  let parsed;
+  try {
+    parsed = value ? JSON.parse(String(value)) : [];
+  } catch {
+    parsed = [];
+  }
+  const source = Array.isArray(parsed) ? parsed : [];
+  const normalized = source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const question = String(item.question || "").trim().slice(0, 140);
+      const answer = String(item.answer || "").trim().slice(0, 420);
+      if (!question || !answer) return null;
+      return { question, answer };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+  return normalized.length > 0 ? normalized : DEFAULT_FAQ_ITEMS;
+}
+
 function parseShippingTiers(value) {
   if (!value) return [];
 
@@ -379,6 +425,8 @@ async function runMigrationsSqlite() {
       hero_promise_items TEXT DEFAULT '[]',
       feature_items TEXT DEFAULT '[]',
       shipping_tiers TEXT DEFAULT '[]',
+      review_items TEXT DEFAULT '[]',
+      faq_items TEXT DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -544,6 +592,12 @@ async function runMigrationsSqlite() {
   if (!settingsColumns.some((column) => column.name === "shipping_tiers")) {
     sqliteDb.exec(`ALTER TABLE settings ADD COLUMN shipping_tiers TEXT DEFAULT '[]'`);
   }
+  if (!settingsColumns.some((column) => column.name === "review_items")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN review_items TEXT DEFAULT '[]'`);
+  }
+  if (!settingsColumns.some((column) => column.name === "faq_items")) {
+    sqliteDb.exec(`ALTER TABLE settings ADD COLUMN faq_items TEXT DEFAULT '[]'`);
+  }
 
   if (!orderColumns.some((column) => column.name === "shipping_tier_id")) {
     sqliteDb.exec(`ALTER TABLE orders ADD COLUMN shipping_tier_id TEXT DEFAULT ''`);
@@ -642,6 +696,8 @@ async function runMigrationsPostgres() {
       hero_promise_items TEXT DEFAULT '[]',
       feature_items TEXT DEFAULT '[]',
       shipping_tiers TEXT DEFAULT '[]',
+      review_items TEXT DEFAULT '[]',
+      faq_items TEXT DEFAULT '[]',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -768,6 +824,8 @@ async function runMigrationsPostgres() {
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_kicker TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS feature_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS shipping_tiers TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS review_items TEXT DEFAULT '[]';`);
+  await pgPool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS faq_items TEXT DEFAULT '[]';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_id TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_tier_name TEXT DEFAULT '';`);
   await pgPool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee INTEGER NOT NULL DEFAULT 0;`);
@@ -799,9 +857,9 @@ async function seedSettingsIfEmpty() {
     `
       INSERT INTO settings (
         id, brand_name, brand_tagline, hero_kicker, hero_title, hero_subtitle, hero_button_label, hero_image,
-        hero_promise_items, feature_items, shipping_tiers
+        hero_promise_items, feature_items, shipping_tiers, review_items, faq_items
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       1,
@@ -814,7 +872,9 @@ async function seedSettingsIfEmpty() {
       DEFAULT_SETTINGS.heroImage,
       JSON.stringify(DEFAULT_SETTINGS.heroPromiseItems || DEFAULT_HERO_PROMISE_ITEMS),
       JSON.stringify(DEFAULT_SETTINGS.featureItems || DEFAULT_FEATURE_ITEMS),
-      JSON.stringify(Array.isArray(DEFAULT_SETTINGS.shippingTiers) ? DEFAULT_SETTINGS.shippingTiers : [])
+      JSON.stringify(Array.isArray(DEFAULT_SETTINGS.shippingTiers) ? DEFAULT_SETTINGS.shippingTiers : []),
+      JSON.stringify(DEFAULT_SETTINGS.reviewItems || DEFAULT_REVIEW_ITEMS),
+      JSON.stringify(DEFAULT_SETTINGS.faqItems || DEFAULT_FAQ_ITEMS)
     ]
   );
 }
@@ -977,7 +1037,9 @@ export function mapSettingsRow(row) {
     heroImage: row.hero_image,
     heroPromiseItems: parseSettingsItems(row.hero_promise_items, DEFAULT_HERO_PROMISE_ITEMS),
     featureItems: parseSettingsItems(row.feature_items, DEFAULT_FEATURE_ITEMS),
-    shippingTiers: parseShippingTiers(row.shipping_tiers)
+    shippingTiers: parseShippingTiers(row.shipping_tiers),
+    reviewItems: parseReviewItems(row.review_items),
+    faqItems: parseFaqItems(row.faq_items)
   };
 }
 

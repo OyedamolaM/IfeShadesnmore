@@ -72,6 +72,42 @@ export const DEFAULT_PRODUCT_DETAIL_BULLETS = [
 
 export const DEFAULT_SHIPPING_TIERS = [];
 
+export const DEFAULT_REVIEW_ITEMS = [
+  {
+    name: "IfeShadesnMore customer",
+    role: "Laptop user",
+    rating: 5,
+    text: "The frame looked exactly like the pictures and feels comfortable for long screen hours."
+  },
+  {
+    name: "Verified buyer",
+    role: "Working professional",
+    rating: 5,
+    text: "Beautiful glasses, neatly packaged, and easy to wear from work calls to evening plans."
+  },
+  {
+    name: "Happy customer",
+    role: "Tech customer",
+    rating: 5,
+    text: "I wanted stylish anti-blue glasses for laptop work and this made the choice simple."
+  }
+];
+
+export const DEFAULT_FAQ_ITEMS = [
+  {
+    question: "Are anti-blue glasses good for laptop and phone users?",
+    answer: "Yes. Anti-blue glasses are popular with people who spend long hours on laptops, phones, tablets, and office screens."
+  },
+  {
+    question: "Who should buy photochromic glasses?",
+    answer: "Photochromic glasses are useful if you move between indoor screens and outdoor light because the lenses adapt to changing brightness."
+  },
+  {
+    question: "Do you deliver within Nigeria?",
+    answer: "Yes. Delivery options and fees are shown during checkout before payment."
+  }
+];
+
 export const DEFAULT_PRODUCTS = [];
 
 export const DEFAULT_SETTINGS = {
@@ -84,7 +120,9 @@ export const DEFAULT_SETTINGS = {
   heroImage: "/hero/hero-candidate2.jpg",
   heroPromiseItems: DEFAULT_HERO_PROMISE_ITEMS,
   featureItems: DEFAULT_FEATURE_ITEMS,
-  shippingTiers: DEFAULT_SHIPPING_TIERS
+  shippingTiers: DEFAULT_SHIPPING_TIERS,
+  reviewItems: DEFAULT_REVIEW_ITEMS,
+  faqItems: DEFAULT_FAQ_ITEMS
 };
 
 export const EMPTY_PRODUCT = {

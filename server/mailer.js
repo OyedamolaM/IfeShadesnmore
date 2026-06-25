@@ -776,6 +776,49 @@ export async function sendAccountWelcome({ toEmail, fullName }) {
   });
 }
 
+export async function sendSignupAdminNotification({ toEmail, user }) {
+  const safeUser = {
+    fullName: String(user?.fullName || "").trim(),
+    email: String(user?.email || "").trim(),
+    phone: String(user?.phone || "").trim(),
+    address: String(user?.address || "").trim(),
+    city: String(user?.city || "").trim()
+  };
+  const subject = `New IfeShadesnMore signup: ${safeUser.email || safeUser.fullName || "customer"}`;
+  const text = [
+    "A new customer signed up on IfeShadesnMore.",
+    "",
+    `Name: ${safeUser.fullName || "N/A"}`,
+    `Email: ${safeUser.email || "N/A"}`,
+    `Phone: ${safeUser.phone || "N/A"}`,
+    `Address: ${safeUser.address || "N/A"}`,
+    `City: ${safeUser.city || "N/A"}`
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1f1a17;background:#f8fafc;padding:28px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:24px;">
+        <p style="margin:0 0 8px;color:#c96e4c;font-size:11px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;">New signup</p>
+        <h2 style="margin:0 0 14px;">A customer created an account</h2>
+        <p style="margin:0 0 6px;"><strong>Name:</strong> ${escapeHtml(safeUser.fullName || "N/A")}</p>
+        <p style="margin:0 0 6px;"><strong>Email:</strong> ${escapeHtml(safeUser.email || "N/A")}</p>
+        <p style="margin:0 0 6px;"><strong>Phone:</strong> ${escapeHtml(safeUser.phone || "N/A")}</p>
+        <p style="margin:0 0 6px;"><strong>Address:</strong> ${escapeHtml(safeUser.address || "N/A")}</p>
+        <p style="margin:0;"><strong>City:</strong> ${escapeHtml(safeUser.city || "N/A")}</p>
+      </div>
+    </div>
+  `;
+
+  return sendTransactionalEmail({
+    toEmail,
+    subject,
+    text,
+    html,
+    logPrefix: "[signup-admin-notification]",
+    from: getSenderFromEnv("SIGNUP_ALERT_MAIL_FROM")
+  });
+}
+
 export async function sendOrderNotification({ toEmail, order, items }) {
   const safeOrder = {
     id: String(order?.id || "").trim(),
