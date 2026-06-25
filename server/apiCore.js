@@ -1439,8 +1439,10 @@ async function initializeCheckout(request) {
       amountInKobo: total * 100,
       reference,
       callbackUrl: `${FRONTEND_URL}/payment/callback`,
-      channels: payload.paymentMethod === "transfer" ? ["bank_transfer", "bank"] : ["card"],
-      metadata: { orderId, userId: auth.user.id }
+      metadata: {
+        orderId,
+        userId: auth.user.id
+      }
     });
     await execute("UPDATE users SET full_name = ?, phone = ?, address = ?, city = ?, updated_at = datetime('now') WHERE id = ?", [
       customerFullName,
