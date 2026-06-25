@@ -404,7 +404,7 @@ function StorefrontPage({
     const required = ["firstName", "lastName", "address", "city"];
     const missing = required.find((field) => !String(checkoutForm[field] || "").trim());
     if (missing) {
-      setCheckoutError("Please complete all checkout fields.");
+      setCheckoutError("Please complete all delivery fields.");
       return;
     }
     if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {

@@ -79,16 +79,13 @@ function CheckoutModal({
               ))}
             </ul>
             <p>
-              Items <strong>{toPrice(subtotal)}</strong>
+              Subtotal <strong>{toPrice(subtotal)}</strong>
             </p>
             <p>
               Shipping <strong>{toPrice(shippingFee)}</strong>
             </p>
             <p>
               Total <strong>{toPrice(total)}</strong>
-            </p>
-            <p className="checkout-shipping-note">
-              Shipping is included in the payment total.
             </p>
           </div>
 

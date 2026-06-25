@@ -2282,7 +2282,8 @@ select {
 }
 
 .checkout-delivery-modal {
-  width: min(820px, 95vw);
+  width: min(750px, 95vw);
+  max-width: 750px;
   max-height: min(720px, calc(100dvh - 2rem));
   padding: 0;
   overflow: hidden;
@@ -2301,6 +2302,10 @@ select {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
+.checkout-delivery-fields label {
+  width: 100%;
+  min-width: 0;
+}
 
 .checkout-form label {
   display: grid;
@@ -2311,9 +2316,15 @@ select {
 .checkout-form input,
 .checkout-form select {
   min-height: 42px;
+  width: 100%;
+  max-width: 100%;
   border: 1px solid #d8d8d8;
   border-radius: 8px;
   padding: 0 0.75rem;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .checkout-hint {
