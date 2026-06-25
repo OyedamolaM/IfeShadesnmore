@@ -1794,13 +1794,16 @@ select {
   padding: 1rem;
   position: relative;
   max-height: min(92vh, 860px);
-  overflow: hidden;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .product-modal > .close-x {
   position: absolute;
   right: 0.8rem;
   top: 0.8rem;
+  z-index: 8;
+  box-shadow: 0 10px 24px rgba(15, 16, 19, 0.16);
 }
 
 .product-modal-media {
@@ -2277,13 +2280,14 @@ select {
   z-index: 4;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: 0.75rem;
   background: rgba(17, 18, 21, 0.34);
+  overflow: hidden;
 }
 
 .checkout-delivery-modal {
-  width: min(750px, 95vw);
-  max-width: 750px;
+  width: min(560px, calc(100% - 1rem));
+  max-width: 560px;
   max-height: min(720px, calc(100dvh - 2rem));
   padding: 0;
   overflow: hidden;
@@ -2292,6 +2296,20 @@ select {
   box-shadow: 0 24px 58px rgba(15, 16, 19, 0.28);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+}
+
+.checkout-delivery-modal .checkout-header {
+  min-width: 0;
+}
+
+.checkout-delivery-modal .checkout-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-delivery-modal .close-x {
+  flex: 0 0 auto;
 }
 
 .checkout-delivery-fields {
@@ -2299,12 +2317,22 @@ select {
   gap: 0.62rem;
   padding: 1rem 1.15rem 1.2rem;
   min-height: 0;
+  max-width: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 .checkout-delivery-fields label {
   width: 100%;
   min-width: 0;
+}
+
+.checkout-delivery-fields input,
+.checkout-delivery-fields select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .checkout-form label {
@@ -3305,6 +3333,7 @@ select {
     right: 0.4rem;
     width: 30px;
     height: 30px;
+    z-index: 8;
   }
 
   .product-modal-content {

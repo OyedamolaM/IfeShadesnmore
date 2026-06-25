@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import ProductMedia from "../../components/product/ProductMedia.jsx";
+import CartDrawer from "../../components/cart/CartDrawer.jsx";
+import CheckoutModal from "../../components/cart/CheckoutModal.jsx";
 import CartIcon from "../../components/icons/CartIcon.jsx";
 import SearchIcon from "../../components/icons/SearchIcon.jsx";
 import ProfileIcon from "../../components/icons/ProfileIcon.jsx";
@@ -8,7 +10,13 @@ import PreviewStyleSwitcher from "../../components/preview/PreviewStyleSwitcher.
 import { toPrice } from "../../utils/format";
 import { getProductPageData } from "../../serverFns";
 import { CART_STORAGE_KEY, DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
-import { addWishlistItem } from "../../utils/api";
+import {
+  addWishlistItem,
+  fetchAccountDashboard,
+  fetchMe,
+  fetchStorefront,
+  initializeCheckout
+} from "../../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
 
 export const Route = createFileRoute("/products/$slugId")({
@@ -112,6 +120,19 @@ function ProductPage() {
   const [themeVariant, setThemeVariant] = useState("v1");
   const [isThemeHydrated, setIsThemeHydrated] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [cart, setCart] = useState(() =>
+    typeof window === "undefined" ? [] : parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]")
+  );
+  const [showCart, setShowCart] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [storefrontProducts, setStorefrontProducts] = useState([product]);
+  const [shippingTiers, setShippingTiers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [accountAddresses, setAccountAddresses] = useState([]);
+  const [checkoutForm, setCheckoutForm] = useState(createCheckoutForm(null));
+  const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutNotice, setCheckoutNotice] = useState("");
+  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
   const availability = normalizeAvailability(product.availability);
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
@@ -133,6 +154,42 @@ function ProductPage() {
   const selectedProduct = productImages.length > 0
     ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
     : product;
+  const catalogProducts = useMemo(() => {
+    const productMap = new Map();
+    [product, ...storefrontProducts].filter(Boolean).forEach((item) => {
+      productMap.set(item.id, item);
+    });
+    return [...productMap.values()];
+  }, [product, storefrontProducts]);
+  const cartItems = useMemo(() => {
+    const productMap = new Map(catalogProducts.map((item) => [item.id, item]));
+    return cart
+      .map((entry) => {
+        const cartProduct = productMap.get(entry.productId);
+        if (!cartProduct || normalizeAvailability(cartProduct.availability) === "out_of_stock") return null;
+        const quantity = Math.max(1, Number(entry.quantity) || 1);
+        return {
+          product: cartProduct,
+          quantity,
+          lineTotal: (Number(cartProduct.price) || 0) * quantity
+        };
+      })
+      .filter(Boolean);
+  }, [cart, catalogProducts]);
+  const cartSubtotal = useMemo(
+    () => cartItems.reduce((total, item) => total + item.lineTotal, 0),
+    [cartItems]
+  );
+  const activeShippingTiers = useMemo(
+    () => (Array.isArray(shippingTiers) ? shippingTiers : []).filter((tier) => tier?.isActive !== false),
+    [shippingTiers]
+  );
+  const selectedShippingTier = useMemo(
+    () => activeShippingTiers.find((tier) => tier.id === checkoutForm.shippingTierId) || activeShippingTiers[0] || null,
+    [activeShippingTiers, checkoutForm.shippingTierId]
+  );
+  const shippingFee = Number(selectedShippingTier?.fee) || 0;
+  const checkoutTotal = cartSubtotal + shippingFee;
 
   useEffect(() => {
     setActiveImageIndex(Math.max(0, Number(product?.mainImageIndex) || 0));
@@ -148,15 +205,47 @@ function ProductPage() {
   }, [toast, shareStatus]);
 
   useEffect(() => {
-    setCartCount(getStoredCartCount());
+    const nextCart = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
+    setCart(nextCart);
+    setCartCount(nextCart.length);
     const handleStorage = (event) => {
       if (!event.key || event.key === CART_STORAGE_KEY) {
-        setCartCount(getStoredCartCount());
+        const storedCart = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
+        setCart(storedCart);
+        setCartCount(storedCart.length);
       }
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.allSettled([fetchStorefront(), fetchMe()]).then(([storefrontResult, meResult]) => {
+      if (!isMounted) return;
+      if (storefrontResult.status === "fulfilled") {
+        const payload = storefrontResult.value || {};
+        if (Array.isArray(payload.products)) {
+          setStorefrontProducts(payload.products);
+        }
+        setShippingTiers(Array.isArray(payload.settings?.shippingTiers) ? payload.settings.shippingTiers : []);
+      }
+      if (meResult.status === "fulfilled") {
+        const user = meResult.value?.user || null;
+        setCurrentUser(user);
+        setCheckoutForm((current) => ({ ...createCheckoutForm(user), ...current }));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showCheckout || activeShippingTiers.length === 0) return;
+    if (checkoutForm.shippingTierId && activeShippingTiers.some((tier) => tier.id === checkoutForm.shippingTierId)) return;
+    setCheckoutForm((current) => ({ ...current, shippingTierId: activeShippingTiers[0].id }));
+  }, [activeShippingTiers, checkoutForm.shippingTierId, showCheckout]);
 
   useEffect(() => {
     setThemeVariant(getStoredThemeVariant());
@@ -181,11 +270,132 @@ function ProductPage() {
 
     const quantity = resolveQuantity();
     const nextCart = updateStoredCart(product.id, quantity);
+    setCart(nextCart);
     setCartCount(nextCart.length);
     setToast(
       availability === "preorder" ? `${product.name} added as preorder.` : `${product.name} added to cart.`
     );
     window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify(nextCart) }));
+  };
+
+  const setCartQuantity = (productId, quantity) => {
+    const nextQuantity = Math.max(0, Number(quantity) || 0);
+    const nextCart = nextQuantity === 0
+      ? cart.filter((entry) => entry.productId !== productId)
+      : cart.map((entry) => entry.productId === productId ? { ...entry, quantity: nextQuantity } : entry);
+    setStoredCart(nextCart);
+    setCart(nextCart);
+    setCartCount(nextCart.length);
+    window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify(nextCart) }));
+  };
+
+  const openCheckout = async () => {
+    if (cartItems.length === 0) return;
+    if (!currentUser) {
+      window.location.href = `/account/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+
+    setCheckoutError("");
+    setCheckoutNotice("");
+    setShowCart(false);
+    setShowCheckout(true);
+    const nameParts = splitFullName(currentUser.fullName || "");
+    setCheckoutForm((current) => ({
+      ...current,
+      firstName: current.firstName || nameParts.firstName,
+      lastName: current.lastName || nameParts.lastName,
+      email: current.email || currentUser.email || "",
+      phone: current.phone || currentUser.phone || "",
+      address: current.address || currentUser.address || "",
+      city: current.city || currentUser.city || ""
+    }));
+
+    let savedAddresses = accountAddresses;
+    try {
+      const accountPayload = await fetchAccountDashboard();
+      savedAddresses = Array.isArray(accountPayload.addresses) ? accountPayload.addresses : [];
+      setAccountAddresses(savedAddresses);
+    } catch {
+      savedAddresses = accountAddresses;
+    }
+    const defaultAddress = savedAddresses.find((address) => address.isDefault) || savedAddresses[0] || null;
+    setCheckoutForm((current) => ({
+      ...current,
+      firstName: current.firstName || nameParts.firstName,
+      lastName: current.lastName || nameParts.lastName,
+      email: current.email || currentUser.email || "",
+      phone: current.phone || defaultAddress?.phone || currentUser.phone || "",
+      address: current.address || defaultAddress?.street || currentUser.address || "",
+      city: current.city || defaultAddress?.city || currentUser.city || "",
+      addressId: current.addressId || (defaultAddress?.id ? String(defaultAddress.id) : "")
+    }));
+  };
+
+  const handleCheckoutFieldChange = (field, value) => {
+    if (field === "addressId") {
+      const selectedAddress = accountAddresses.find((address) => String(address.id) === String(value));
+      setCheckoutForm((current) => ({
+        ...current,
+        addressId: value,
+        ...(selectedAddress ? {
+          phone: selectedAddress.phone || current.phone,
+          address: selectedAddress.street || current.address,
+          city: selectedAddress.city || current.city
+        } : {})
+      }));
+      setCheckoutError("");
+      return;
+    }
+    setCheckoutForm((current) => ({ ...current, [field]: value }));
+    setCheckoutError("");
+  };
+
+  const handleCheckoutSubmit = async (event) => {
+    event.preventDefault();
+    if (!currentUser) {
+      window.location.href = `/account/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    const missing = ["firstName", "lastName", "address", "city"].find((field) => !String(checkoutForm[field] || "").trim());
+    if (missing) {
+      setCheckoutError("Please complete all checkout fields.");
+      return;
+    }
+    if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {
+      setCheckoutError("Phone or email is required.");
+      return;
+    }
+    if (!selectedShippingTier) {
+      setCheckoutError("Please select a shipping option.");
+      return;
+    }
+
+    setCheckoutError("");
+    setCheckoutNotice("Redirecting to secure payment...");
+    setIsSubmittingCheckout(true);
+    try {
+      const payload = await initializeCheckout({
+        items: cartItems.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
+        paymentMethod: "card",
+        shippingTierId: selectedShippingTier.id,
+        addressId: checkoutForm.addressId || undefined,
+        customer: {
+          firstName: checkoutForm.firstName.trim(),
+          lastName: checkoutForm.lastName.trim(),
+          fullName: `${checkoutForm.firstName || ""} ${checkoutForm.lastName || ""}`.trim(),
+          email: checkoutForm.email.trim(),
+          phone: checkoutForm.phone.trim(),
+          address: checkoutForm.address.trim(),
+          city: checkoutForm.city.trim()
+        }
+      });
+      window.location.href = payload.authorizationUrl;
+    } catch (requestError) {
+      setCheckoutError(requestError.message || "Could not initialize payment.");
+      setCheckoutNotice("");
+      setIsSubmittingCheckout(false);
+    }
   };
 
   const handleWishlist = async () => {
@@ -236,6 +446,7 @@ function ProductPage() {
         cartCount={cartCount}
         themeVariant={themeVariant}
         onThemeVariantChange={setThemeVariant}
+        onOpenCart={() => setShowCart(true)}
       />
       <main className="site-shell product-seo-shell">
         <section className="container product-seo-inner">
@@ -341,11 +552,44 @@ function ProductPage() {
           {toast || shareStatus}
         </p>
       ) : null}
+      <CartDrawer
+        open={showCart}
+        onClose={() => setShowCart(false)}
+        items={cartItems}
+        subtotal={cartSubtotal}
+        onDecrement={(id) => {
+          const item = cartItems.find((entry) => entry.product.id === id);
+          setCartQuantity(id, (item?.quantity || 1) - 1);
+        }}
+        onIncrement={(id) => {
+          const item = cartItems.find((entry) => entry.product.id === id);
+          setCartQuantity(id, (item?.quantity || 0) + 1);
+        }}
+        onRemove={(id) => setCartQuantity(id, 0)}
+        onOpenCheckout={openCheckout}
+      />
+      <CheckoutModal
+        open={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        items={cartItems}
+        subtotal={cartSubtotal}
+        shippingTiers={activeShippingTiers}
+        selectedShippingTierId={selectedShippingTier?.id || ""}
+        shippingFee={shippingFee}
+        total={checkoutTotal}
+        form={checkoutForm}
+        savedAddresses={accountAddresses}
+        onFieldChange={handleCheckoutFieldChange}
+        onSubmit={handleCheckoutSubmit}
+        checkoutError={checkoutError}
+        checkoutNotice={checkoutNotice}
+        isSubmitting={isSubmittingCheckout}
+      />
     </div>
   );
 }
 
-function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange }) {
+function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange, onOpenCart }) {
   const normalizedCount = Math.max(0, Number(cartCount) || 0);
 
   return (
@@ -369,10 +613,10 @@ function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange }) {
         <Link to="/account" className="preview-account-button" aria-label="Open profile">
           <ProfileIcon />
         </Link>
-        <Link to="/" search={{ openCart: "1" }} className="preview-cart-button" aria-label="Open cart">
+        <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
           <CartIcon />
           {normalizedCount > 0 ? <span>{normalizedCount > 99 ? "99+" : normalizedCount}</span> : null}
-        </Link>
+        </button>
       </div>
     </header>
   );
@@ -510,6 +754,11 @@ function parseStoredCart(rawValue) {
   }
 }
 
+function setStoredCart(cart) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+}
+
 function getStoredCartCount() {
   if (typeof window === "undefined") return 0;
   return parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]").length;
@@ -527,6 +776,31 @@ function updateStoredCart(productId, quantity) {
         );
   window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(next));
   return next;
+}
+
+function splitFullName(value) {
+  const parts = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+function createCheckoutForm(user) {
+  const nameParts = splitFullName(user?.fullName);
+  return {
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    email: user?.email || "",
+    phone: user?.phone || "",
+    address: user?.address || "",
+    city: user?.city || "",
+    addressId: "",
+    paymentMethod: "card",
+    shippingTierId: ""
+  };
 }
 
 function SocialIcon({ type }) {

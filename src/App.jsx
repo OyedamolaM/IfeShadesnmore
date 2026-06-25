@@ -299,32 +299,39 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
   };
 
   const handleProductUpload = async (event, replaceIndex = null) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
     try {
-      setAdminMessage("Uploading product image...");
-      const uploaded = await uploadImage(file, "product");
+      const replacementIndex = Number(replaceIndex);
+      const isReplacing = Number.isInteger(replacementIndex);
+      const uploadFiles = isReplacing ? files.slice(0, 1) : files.slice(0, 6);
+      setAdminMessage(isReplacing ? "Replacing product image..." : "Uploading product images...");
+      const uploadedUrls = [];
+      for (const file of uploadFiles) {
+        const uploaded = await uploadImage(file, "product");
+        if (uploaded?.secureUrl) uploadedUrls.push(uploaded.secureUrl);
+      }
+      if (uploadedUrls.length === 0) throw new Error("Could not upload selected product image.");
       setProductDraft((current) => {
         const currentImages = normalizeProductImages(current).images;
-        const replacementIndex = Number(replaceIndex);
-        const isReplacing =
+        const canReplace =
           Number.isInteger(replacementIndex) &&
           replacementIndex >= 0 &&
           replacementIndex < currentImages.length;
-        const nextImages = isReplacing
-          ? currentImages.map((image, index) => (index === replacementIndex ? uploaded.secureUrl : image))
-          : [...currentImages, uploaded.secureUrl].filter(Boolean).slice(0, 6);
+        const nextImages = canReplace
+          ? currentImages.map((image, index) => (index === replacementIndex ? uploadedUrls[0] : image))
+          : [...currentImages, ...uploadedUrls].filter(Boolean).slice(0, 6);
         const mainImageIndex = nextImages.length === 1
           ? 0
           : Math.max(0, Math.min(Number(current.mainImageIndex) || 0, nextImages.length - 1));
         return {
           ...current,
-          image: nextImages[mainImageIndex] || uploaded.secureUrl,
+          image: nextImages[mainImageIndex] || uploadedUrls[0],
           images: nextImages,
           mainImageIndex
         };
       });
-      setAdminMessage(Number.isInteger(Number(replaceIndex)) ? "Product image replaced." : "Product image uploaded.");
+      setAdminMessage(isReplacing ? "Product image replaced." : "Product images added.");
     } catch (error) {
       setAdminMessage(error.message || "Could not upload selected product image.");
     } finally {

@@ -1928,7 +1928,7 @@ function AdminOverlay({
         <form className="la-product-drawer is-open" onSubmit={handleProductModalSubmit}>
           <header><div><p>{isEditing ? "Edit" : "New"}</p><h2>{isEditing ? productDraft.name || "Product" : "Add product"}</h2></div><button type="button" onClick={closeProductModal}>x</button></header>
           <div className="la-drawer-body">
-            <label className="la-upload-card">Product images{productDraft.image ? <span><img src={productDraft.image} alt="" /></span> : <span><AdminIcon name="products" /></span>}<input type="file" accept="image/*" onChange={onProductUpload} disabled={(productDraft.images || []).length >= 6} /><small>Upload up to 6 images. The main image displays on the homepage.</small></label>
+            <label className="la-upload-card">Add product images{productDraft.image ? <span><img src={productDraft.image} alt="" /></span> : <span><AdminIcon name="products" /></span>}<input type="file" accept="image/*" multiple onChange={onProductUpload} disabled={(productDraft.images || []).length >= 6} /><small>Add up to 6 images. Use Replace on a thumbnail to swap a specific image.</small></label>
             {Array.isArray(productDraft.images) && productDraft.images.length > 0 ? (
               <div className="la-product-image-grid">
                 {productDraft.images.map((image, index) => (
