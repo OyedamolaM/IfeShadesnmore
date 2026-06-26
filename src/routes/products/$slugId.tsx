@@ -369,12 +369,12 @@ function ProductPage() {
       return;
     }
     if (!selectedShippingTier) {
-      setCheckoutError("Please select a shipping option.");
+      setCheckoutError("Please select a shipping area");
       return;
     }
 
     setCheckoutError("");
-    setCheckoutNotice("Redirecting to secure payment...");
+    setCheckoutNotice("Redirecting to paystack...");
     setIsSubmittingCheckout(true);
     try {
       const payload = await initializeCheckout({

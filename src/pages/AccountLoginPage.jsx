@@ -329,7 +329,7 @@ function AccountLoginPage({ currentUser, onAuthenticated }) {
           </button>
         ) : null}
         <button type="submit" className="primary-action" disabled={isSubmitting}>
-          {isSubmitting ? "Please wait..." : mode === "login" ? "Login" : "Create Account"}
+          {isSubmitting ? "Signing in..." : mode === "login" ? "Login" : "Create Account"}
         </button>
       </form>
     </AuthContainer>

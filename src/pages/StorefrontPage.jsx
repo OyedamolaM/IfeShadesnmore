@@ -412,12 +412,12 @@ function StorefrontPage({
       return;
     }
     if (!checkoutForm.shippingTierId) {
-      setCheckoutError("Please select a shipping option.");
+      setCheckoutError("Please select a shipping area.");
       return;
     }
 
     setCheckoutError("");
-    setCheckoutNotice("Redirecting to secure payment...");
+    setCheckoutNotice("");
     setIsSubmittingCheckout(true);
 
     try {

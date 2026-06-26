@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toPrice } from "../../utils/format";
+import { FiEdit2 } from "react-icons/fi";
 
 function normalizeAvailability(value) {
   const source = String(value || "").trim().toLowerCase();
@@ -37,19 +38,14 @@ function CheckoutModal({
   const [showShippingOptions, setShowShippingOptions] = useState(false);
   if (!open) return null;
   const selectedShippingTier = shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId));
-  const deliverySummary = [
-    [form.firstName, form.lastName].filter(Boolean).join(" "),
-    form.phone || form.email,
-    form.address,
-    form.city,
-    selectedShippingTier ? `${selectedShippingTier.name} - ${toPrice(selectedShippingTier.fee)}` : ""
-  ].filter(Boolean);
+  const deliveryAddress = form.address && form.city ? `${form.address}, ${form.city}` : "";
+  const shippingArea = selectedShippingTier?.name || "";
 
   return (
     <div className="commerce-overlay checkout-overlay" onClick={isSubmitting ? undefined : onClose}>
       <div className="checkout-modal" role="dialog" aria-modal="true" aria-label="Checkout" onClick={(event) => event.stopPropagation()}>
         <div className="checkout-header">
-          <h2>Secure Checkout</h2>
+          <h3>Checkout</h3>
           <button
             type="button"
             className="close-x"
@@ -92,33 +88,41 @@ function CheckoutModal({
 
           <form className="checkout-form checkout-payment-panel" onSubmit={onSubmit}>
             <section className="checkout-delivery-card">
-              <div>
+              <div className="delivery-card-header">
                 <h3>Delivery Details</h3>
-                {deliverySummary.length > 0 ? (
-                  <address>{deliverySummary.join(", ")}</address>
-                ) : (
-                  <span>Add delivery details before payment.</span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="secondary-action"
-                onClick={() => setShowDeliveryModal(true)}
-                disabled={isSubmitting}
-              >
-                {deliverySummary.length > 0 ? "Edit Details" : "Add Details"}
-              </button>
-            </section>
 
-            {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
-            {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
+                <button
+                  type="button"
+                  className="delivery-edit-button"
+                  onClick={() => setShowDeliveryModal(true)}
+                  aria-label="Edit delivery details"
+                  disabled={isSubmitting}
+                >
+                  <FiEdit2 />
+                </button>
+              </div>
+
+  {deliveryAddress || shippingArea ? (
+    <>
+      <p className="delivery-address">
+        <strong>Address:</strong> {deliveryAddress}
+      </p>
+
+      <p className="shipping-option">
+        <strong>Shipping Area:</strong> {shippingArea}
+      </p>
+    </>
+  ) : (
+    <span>Add delivery details before payment.</span>
+  )}
+
+  {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
+  {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
+</section>
 
             <button type="submit" className="primary-action" disabled={items.length === 0 || isSubmitting}>
-              {isSubmitting ? "Processing..." : "Pay Now"}
+              {isSubmitting ? "Paystack Loading..." : "Pay Now"}
             </button>
-            <p className="checkout-hint">
-              Payment is processed securely by Paystack.
-            </p>
           </form>
         </div>
 
@@ -241,7 +245,7 @@ function CheckoutModal({
                     disabled={isSubmitting}
                     aria-expanded={showShippingOptions}
                   >
-                    <span>{selectedShippingTier ? selectedShippingTier.name : "Select a shipping option"}</span>
+                    <span>{selectedShippingTier ? selectedShippingTier.name : "Select a shipping Area"}</span>
                     {selectedShippingTier ? <strong>{toPrice(selectedShippingTier.fee)}</strong> : null}
                   </button>
                   {showShippingOptions ? (
@@ -255,7 +259,7 @@ function CheckoutModal({
                         }}
                         disabled={isSubmitting}
                       >
-                        <span>Select a shipping option</span>
+                        <span>Select a shipping area</span>
                       </button>
                       {shippingTiers.map((tier) => {
                         const isSelected = String(selectedShippingTierId || form.shippingTierId || "") === String(tier.id);
