@@ -696,7 +696,7 @@ function StorefrontPage({
             items={cartItems}
             subtotal={cartSubtotal}
             shippingTiers={activeShippingTiers}
-            selectedShippingTierId= ""
+            selectedShippingTierId= {checkoutForm.shippingTierId}
             shippingFee={shippingFee}
             total={checkoutTotal}
             form={checkoutForm}
