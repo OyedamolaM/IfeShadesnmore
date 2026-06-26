@@ -1230,6 +1230,8 @@ function AdminOverlay({
         type: settingsModalDraft.type || "delivery",
         isActive: settingsModalDraft.isActive !== false
       };
+      console.log("nextTier", nextTier);
+      console.log("currentTiers", currentTiers);
       if (!nextTier.name) {
         pushAdminToast("Shipping tier name is required.", "error");
         return;
