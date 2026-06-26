@@ -715,8 +715,8 @@ const checkoutSchema = z.object({
       fullName: z.string().max(120).optional().default(""),
       email: z.string().email().optional().or(z.literal("")).default(""),
       phone: z.string().max(40).optional().default(""),
-      address: z.string().min(1).max(300),
-      city: z.string().min(1).max(120)
+      address: z.string().max(300).optional().default(""),
+      city: z.string().max(120).optional().default("")
     })
     .refine((value) => Boolean(`${value.phone || ""}`.trim()) || Boolean(`${value.email || ""}`.trim()), {
       message: "Phone or email is required.",
@@ -1434,6 +1434,18 @@ async function initializeCheckout(request) {
   if (subtotal <= 0) return json({ error: "Invalid checkout amount." }, 400);
   const shippingTier = await getActiveShippingTier(payload.shippingTierId);
   if (!shippingTier) return json({ error: "Please select a valid shipping option." }, 400);
+  if (
+  shippingTier.type !== "pickup" &&
+  (
+    !payload.customer.address.trim() ||
+    !payload.customer.city.trim()
+  )
+) {
+  return json(
+    { error: "Delivery orders require an address and city." },
+    400
+  );
+}
   const shippingFee = Number(shippingTier.fee) || 0;
   const total = subtotal + shippingFee;
   const orderId = createOrderId();
