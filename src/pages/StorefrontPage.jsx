@@ -134,6 +134,26 @@ function StorefrontPage({
   }, []);
 
   useEffect(() => {
+  const resetCheckoutState = () => {
+    setIsSubmittingCheckout(false);
+  };
+
+  const handleVisibility = () => {
+    if (!document.hidden) {
+      resetCheckoutState();
+    }
+  };
+
+  window.addEventListener("pageshow", resetCheckoutState);
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    window.removeEventListener("pageshow", resetCheckoutState);
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+}, []);
+
+  useEffect(() => {
     if (!isPreviewStyleHydrated) return;
     persistThemeVariant(previewStyle);
   }, [previewStyle, isPreviewStyleHydrated]);
@@ -452,8 +472,7 @@ function StorefrontPage({
           city: checkoutForm.city.trim()
         }
       });
-
-      window.location.href = payload.authorizationUrl;
+      window.location.assign(payload.authorizationUrl);
     } catch (requestError) {
       setCheckoutError(requestError.message || "Could not initialize payment.");
       setCheckoutNotice("");
