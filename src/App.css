@@ -2245,7 +2245,21 @@ select {
   justify-content: space-between;
   align-items: flex-start;
 }
-
+.shipping-fee {
+  margin-left: 4px;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+.delivery-missing {
+  color: #dc2626 !important;
+  font-size: 0.92rem !important;
+  font-weight: 500 !important;
+}
+.field-error {
+  margin-top: 0.3rem;
+  color: #dc2626;
+  font-size: 0.82rem;
+}
 .shipping-label-stack {
   display: flex;
   flex-direction: column;

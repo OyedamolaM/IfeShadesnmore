@@ -36,10 +36,63 @@ function CheckoutModal({
 }) {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showShippingOptions, setShowShippingOptions] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState(form);
+
   if (!open) return null;
+
+  const selectedDraftShippingTier = shippingTiers.find(
+    (tier) =>
+      String(tier.id) === String(deliveryForm.shippingTierId)
+  );
   const selectedShippingTier = shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId));
-  const deliveryAddress = form.address && form.city ? `${form.address}, ${form.city}` : "";
+  const deliveryAddress = form.address?.trim();
   const shippingArea = selectedShippingTier?.name || "";
+
+  const errors = {};
+
+if (!deliveryForm.firstName.trim()) {
+  errors.firstName = "First name is required.";
+}
+
+if (!deliveryForm.lastName.trim()) {
+  errors.lastName = "Last name is required.";
+}
+
+if (!deliveryForm.address.trim()) {
+  errors.address = "Shipping address is required.";
+}
+
+if (!deliveryForm.city.trim()) {
+  errors.city = "City is required.";
+}
+
+if (!deliveryForm.shippingTierId) {
+  errors.shippingTierId = "Please select a shipping area.";
+}
+
+if (
+  !deliveryForm.phone.trim() &&
+  !deliveryForm.email.trim()
+) {
+  errors.contact =
+    "Provide either a phone number or email address.";
+}
+ const handleSaveDetails = (event) => {
+  event.preventDefault();
+
+  setShowValidation(true);
+
+  if (Object.keys(errors).length > 0) {
+    return;
+  }
+
+  Object.entries(deliveryForm).forEach(([key, value]) => {
+    onFieldChange(key, value);
+  });
+
+  setShowDeliveryModal(false);
+};
 
   return (
     <div className="commerce-overlay checkout-overlay" onClick={isSubmitting ? undefined : onClose}>
@@ -94,7 +147,11 @@ function CheckoutModal({
                 <button
                   type="button"
                   className="delivery-edit-button"
-                  onClick={() => setShowDeliveryModal(true)}
+                  onClick={() => {
+                    setShowValidation(false);
+                    setShowDeliveryModal(true);
+                    setDeliveryForm({...form});
+                  }}
                   aria-label="Edit delivery details"
                   disabled={isSubmitting}
                 >
@@ -102,23 +159,43 @@ function CheckoutModal({
                 </button>
               </div>
 
-  {deliveryAddress || shippingArea ? (
-    <>
-      <p className="delivery-address">
-        <strong>Address:</strong> {deliveryAddress}
-      </p>
+              {!deliveryAddress && !shippingArea ? (
+                <span>Add delivery details before payment.</span>
+              ) : (
+                <>
+                  <p className="delivery-address">
+                    <strong>Address:</strong>{" "}
+                    {deliveryAddress ? (
+                      <>
+                        {deliveryAddress}
+                        {form.city ? `, ${form.city}` : null}
+                      </>
+                    ) : (
+                      <span className="delivery-missing">Not provided</span>
+                    )}
+                  </p>
 
-      <p className="shipping-option">
-        <strong>Shipping Area:</strong> {shippingArea}
-      </p>
-    </>
-  ) : (
-    <span>Add delivery details before payment.</span>
-  )}
+                  <p className="shipping-option">
+                    <strong>Shipping Area:</strong>{" "}
+                    {shippingArea ? (
+                      <>
+                        {shippingArea}
+                        {selectedShippingTier ? (
+                          <small className="shipping-fee">
+                            {toPrice(selectedShippingTier.fee)}
+                          </small>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="delivery-missing">Not selected</span>
+                    )}
+                  </p>
+                </>
+              )}
 
-  {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
-  {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
-</section>
+              {checkoutError ? <p className="form-error">{checkoutError}</p> : null}
+              {checkoutNotice ? <p className="form-success">{checkoutNotice}</p> : null}
+            </section>
 
             <button type="submit" className="primary-action" disabled={items.length === 0 || isSubmitting}>
               {isSubmitting ? "Paystack Loading..." : "Pay Now"}
@@ -130,10 +207,7 @@ function CheckoutModal({
           <div className="checkout-delivery-overlay" onClick={() => !isSubmitting && setShowDeliveryModal(false)}>
             <form
               className="checkout-delivery-modal checkout-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setShowDeliveryModal(false);
-              }}
+              onSubmit={handleSaveDetails}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="checkout-header">
@@ -148,151 +222,241 @@ function CheckoutModal({
                   x
                 </button>
               </div>
+
               <div className="checkout-delivery-fields">
-            <div className="split-input-row">
-              <label>
-                <span>
-                  First name <span className="required-mark">*</span>
-                </span>
-                <input
-                  value={form.firstName}
-                  onChange={(event) => onFieldChange("firstName", event.target.value)}
-                  placeholder="First name"
-                  disabled={isSubmitting}
-                />
-              </label>
-              <label>
-                <span>
-                  Last name <span className="required-mark">*</span>
-                </span>
-                <input
-                  value={form.lastName}
-                  onChange={(event) => onFieldChange("lastName", event.target.value)}
-                  placeholder="Last name"
-                  disabled={isSubmitting}
-                />
-              </label>
-            </div>
-            <label>
-              Email
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) => onFieldChange("email", event.target.value)}
-                placeholder="customer@email.com"
-                disabled={isSubmitting}
-              />
-            </label>
-            <label>
-              Phone number
-              <input
-                value={form.phone}
-                onChange={(event) => onFieldChange("phone", event.target.value)}
-                placeholder="+234..."
-                disabled={isSubmitting}
-              />
-            </label>
-            <p className="checkout-hint">Phone or email is required for order updates.</p>
-            {savedAddresses.length > 0 ? (
-              <label>
-                Saved address
-                <select
-                  value={form.addressId || ""}
-                  onChange={(event) => onFieldChange("addressId", event.target.value)}
-                  disabled={isSubmitting}
-                >
-                  <option value="">Enter a new address</option>
-                  {savedAddresses.map((address) => (
-                    <option key={address.id} value={address.id}>
-                      {address.label || "Address"} - {address.street}, {address.city}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label>
-              <span>
-                Shipping address <span className="required-mark">*</span>
-              </span>
-              <input
-                value={form.address}
-                onChange={(event) => onFieldChange("address", event.target.value)}
-                placeholder="Street and area"
-                disabled={isSubmitting}
-              />
-            </label>
-            <label>
-              <span>
-                City <span className="required-mark">*</span>
-              </span>
-              <input
-                value={form.city}
-                onChange={(event) => onFieldChange("city", event.target.value)}
-                placeholder="City"
-                disabled={isSubmitting}
-              />
-            </label>
-            <fieldset className="checkout-shipping-options">
-              <legend>Shipping</legend>
-              {shippingTiers.length === 0 ? (
-                <p className="checkout-hint">No shipping options are currently available.</p>
-              ) : (
-                <div className="checkout-shipping-picker">
-                  <button
-                    type="button"
-                    className="checkout-shipping-trigger"
-                    onClick={() => setShowShippingOptions((current) => !current)}
+                <div className="split-input-row">
+                  <label>
+                    <span>
+                      First name <span className="required-mark">*</span>
+                    </span>
+                    <input
+                      value={deliveryForm.firstName}
+                      onChange={(event) =>
+                        setDeliveryForm((prev) => ({
+                          ...prev,
+                          firstName: event.target.value,
+                        }))
+                      }
+                      placeholder="First name"
+                      disabled={isSubmitting}
+                    />
+                    {showValidation && errors.firstName && (
+                      <p className="field-error">{errors.firstName}</p>
+                    )}
+                  </label>
+                  <label>
+                    <span>
+                      Last name <span className="required-mark">*</span>
+                    </span>
+                    <input
+                      value={deliveryForm.lastName}
+                      onChange={(event) =>
+                        setDeliveryForm((prev) => ({
+                          ...prev,
+                          lastName: event.target.value,
+                        }))
+                      }
+                      placeholder="Last name"
+                      disabled={isSubmitting}
+                    />
+                    {showValidation && errors.lastName && (
+                      <p className="field-error">{errors.lastName}</p>
+                    )}
+                  </label>
+                </div>
+
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={deliveryForm.email}
+                    onChange={(event) =>
+                      setDeliveryForm((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="customer@email.com"
                     disabled={isSubmitting}
-                    aria-expanded={showShippingOptions}
-                  >
-                    <span>{selectedShippingTier ? selectedShippingTier.name : "Select a shipping Area"}</span>
-                    {selectedShippingTier ? <strong>{toPrice(selectedShippingTier.fee)}</strong> : null}
-                  </button>
-                  {showShippingOptions ? (
-                    <div className="checkout-shipping-menu">
+                  />
+                  {showValidation && errors.contact && (
+                    <p className="field-error">{errors.contact}</p>
+                  )}
+                </label>
+
+                <label>
+                  Phone number
+                  <input
+                    value={deliveryForm.phone}
+                    onChange={(event) =>
+                      setDeliveryForm((prev) => ({
+                        ...prev,
+                        phone: event.target.value,
+                      }))
+                    }
+                    placeholder="+234..."
+                    disabled={isSubmitting}
+                  />
+                  {showValidation && errors.contact && (
+                    <p className="field-error">{errors.contact}</p>
+                  )}
+                </label>
+
+                {savedAddresses.length > 0 ? (
+                  <label>
+                    Saved address
+                    <select
+                      value={deliveryForm.addressId || ""}
+                      onChange={(event) =>
+                        setDeliveryForm((prev) => ({
+                          ...prev,
+                          addressId: event.target.value,
+                        }))
+                      }
+                      disabled={isSubmitting}
+                    >
+                      <option value="">Enter a new address</option>
+                      {savedAddresses.map((address) => (
+                        <option key={address.id} value={address.id}>
+                          {address.label || "Address"} - {address.street}, {address.city}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label>
+                  <span>
+                    Shipping address <span className="required-mark">*</span>
+                  </span>
+                  <input
+                    value={deliveryForm.address}
+                    onChange={(event) =>
+  setDeliveryForm((prev) => ({
+                        ...prev,
+                        address: event.target.value,
+                      }))
+                    }
+                    placeholder="Street and area"
+                    disabled={isSubmitting}
+                  />
+                  {showValidation && errors.address && (
+                    <p className="field-error">{errors.address}</p>
+                  )}
+                </label>
+
+                <label>
+                  <span>
+                    City <span className="required-mark">*</span>
+                  </span>
+                  <input
+                    value={deliveryForm.city}
+                    onChange={(event) =>
+                      setDeliveryForm((prev) => ({
+                        ...prev,
+                        city: event.target.value,
+                      }))
+                    }
+                    placeholder="City"
+                    disabled={isSubmitting}
+                  />
+                  {showValidation && errors.city && (
+                    <p className="field-error">{errors.city}</p>
+                  )}
+                </label>
+
+               <fieldset className="checkout-shipping-options">
+                  <legend>Shipping</legend>
+
+                  {shippingTiers.length === 0 ? (
+                    <p className="checkout-hint">
+                      No shipping options are currently available.
+                    </p>
+                  ) : (
+                    <div className="checkout-shipping-picker">
                       <button
                         type="button"
-                        className={!selectedShippingTier ? "is-selected" : ""}
-                        onClick={() => {
-                          onFieldChange("shippingTierId", "");
-                          setShowShippingOptions(false);
-                        }}
+                        className="checkout-shipping-trigger"
+                        onClick={() => setShowShippingOptions((current) => !current)}
                         disabled={isSubmitting}
+                        aria-expanded={showShippingOptions}
                       >
-                        <span>Select a shipping area</span>
+                        <span>
+                          {selectedDraftShippingTier
+                            ? selectedDraftShippingTier.name
+                            : "Select a shipping area"}
+                        </span>
+
+                        {selectedDraftShippingTier ? (
+                          <strong>{toPrice(selectedDraftShippingTier.fee)}</strong>
+                        ) : null}
                       </button>
-                      {shippingTiers.map((tier) => {
-                        const isSelected = String(selectedShippingTierId || form.shippingTierId || "") === String(tier.id);
-                        return (
+
+                      {showShippingOptions ? (
+                        <div className="checkout-shipping-menu">
                           <button
-                            key={tier.id}
                             type="button"
-                            className={isSelected ? "is-selected" : ""}
+                            className={!selectedDraftShippingTier ? "is-selected" : ""}
                             onClick={() => {
-                              onFieldChange("shippingTierId", tier.id);
+                              setDeliveryForm((prev) => ({
+                                ...prev,
+                                shippingTierId: "",
+                              }));
                               setShowShippingOptions(false);
                             }}
                             disabled={isSubmitting}
                           >
-                            <span>{tier.name}</span>
-                            <strong>{toPrice(tier.fee)}</strong>
+                            <span>Select a shipping area</span>
                           </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </fieldset>
-            {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description ? (
-              <p className="checkout-hint">
-                {shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId))?.description}
-              </p>
-            ) : null}
 
-              <button type="submit" className="primary-action" disabled={isSubmitting}>
-                Save Details
-              </button>
+                          {shippingTiers.map((tier) => {
+                            const isSelected =
+                              String(deliveryForm.shippingTierId || "") ===
+                              String(tier.id);
+
+                            return (
+                              <button
+                                key={tier.id}
+                                type="button"
+                                className={isSelected ? "is-selected" : ""}
+                                onClick={() => {
+                                  setDeliveryForm((prev) => ({
+                                    ...prev,
+                                    shippingTierId: tier.id,
+                                  }));
+
+                                  setShowShippingOptions(false);
+                                }}
+                                disabled={isSubmitting}
+                              >
+                                <span>{tier.name}</span>
+                                <strong>{toPrice(tier.fee)}</strong>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </fieldset>
+
+                {showValidation && errors.shippingTierId && (
+                  <p className="field-error">{errors.shippingTierId}</p>
+                )}
+
+                {selectedDraftShippingTier?.description && (
+                  <p className="checkout-hint">
+                    {selectedDraftShippingTier.description}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="primary-action"
+                  disabled={isSubmitting}
+                >
+                  Save Details
+                </button>
               </div>
             </form>
           </div>
