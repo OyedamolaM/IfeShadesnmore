@@ -400,11 +400,24 @@ function StorefrontPage({
       setCheckoutError("Your cart is empty.");
       return;
     }
+    const selectedTier = activeShippingTiers.find(
+      (tier) => tier.id === checkoutForm.shippingTierId
+    );
+    const isPickup = selectedTier?.type === "pickup";
 
-    const required = ["firstName", "lastName", "address", "city"];
-    const missing = required.find((field) => !String(checkoutForm[field] || "").trim());
+    const required = isPickup
+      ? ["firstName", "lastName"]
+      : ["firstName", "lastName", "address", "city"];
+    const missing = required.find(
+      (field) => !String(checkoutForm[field] || "").trim()
+    );
+
     if (missing) {
-      setCheckoutError("Please complete all delivery fields.");
+      setCheckoutError(
+        isPickup
+          ? "Please complete the required pickup details."
+          : "Please complete all delivery fields."
+      );
       return;
     }
     if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {
