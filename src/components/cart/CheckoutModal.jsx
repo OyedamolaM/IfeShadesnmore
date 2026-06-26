@@ -422,21 +422,11 @@ const isPickup =
                             type="button"
                             className={!selectedDraftShippingTier ? "is-selected" : ""}
                             onClick={() => {
-                              const isPickupOption =
-                                tier.type === "pickup" ||
-                                tier.isPickup === true;
-
                               setDeliveryForm((prev) => ({
                                 ...prev,
-                                shippingTierId: tier.id,
-                                ...(isPickupOption
-                                  ? {
-                                      address: "",
-                                      city: "",
-                                      addressId: "",
-                                    }
-                                  : {}),
+                                shippingTierId: "",
                               }));
+
                               setShowShippingOptions(false);
                             }}
                             disabled={isSubmitting}
@@ -455,9 +445,21 @@ const isPickup =
                                 type="button"
                                 className={isSelected ? "is-selected" : ""}
                                 onClick={() => {
+                                  const isPickupOption =
+                                    tier.type === "pickup" ||
+                                    tier.isPickup === true;
+
                                   setDeliveryForm((prev) => ({
                                     ...prev,
                                     shippingTierId: tier.id,
+
+                                    ...(isPickupOption
+                                      ? {
+                                          address: "",
+                                          city: "",
+                                          addressId: "",
+                                        }
+                                      : {}),
                                   }));
 
                                   setShowShippingOptions(false);
