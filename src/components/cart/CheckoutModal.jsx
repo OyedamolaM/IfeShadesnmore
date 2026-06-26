@@ -38,6 +38,7 @@ function CheckoutModal({
   const [showShippingOptions, setShowShippingOptions] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
   const [deliveryForm, setDeliveryForm] = useState(form);
+  console.log("shippingTiers:", shippingTiers);
 
   if (!open) return null;
 
@@ -46,38 +47,47 @@ function CheckoutModal({
       String(tier.id) === String(deliveryForm.shippingTierId)
   );
   const selectedShippingTier = shippingTiers.find((tier) => tier.id === (selectedShippingTierId || form.shippingTierId));
+  const isDraftPickup =
+  selectedDraftShippingTier?.type === "pickup" ||
+  selectedDraftShippingTier?.isPickup === true;
+
+const isPickup =
+  selectedShippingTier?.type === "pickup" ||
+  selectedShippingTier?.isPickup === true;
   const deliveryAddress = form.address?.trim();
   const shippingArea = selectedShippingTier?.name || "";
 
   const errors = {};
 
-if (!deliveryForm.firstName.trim()) {
-  errors.firstName = "First name is required.";
-}
+  if (!deliveryForm.firstName.trim()) {
+    errors.firstName = "First name is required.";
+  }
 
-if (!deliveryForm.lastName.trim()) {
-  errors.lastName = "Last name is required.";
-}
+  if (!deliveryForm.lastName.trim()) {
+    errors.lastName = "Last name is required.";
+  }
 
-if (!deliveryForm.address.trim()) {
-  errors.address = "Shipping address is required.";
-}
+  if (!isDraftPickup) {
+    if (!deliveryForm.address.trim()) {
+      errors.address = "Shipping address is required.";
+    }
 
-if (!deliveryForm.city.trim()) {
-  errors.city = "City is required.";
-}
+    if (!deliveryForm.city.trim()) {
+      errors.city = "City is required.";
+    }
+  }
 
-if (!deliveryForm.shippingTierId) {
-  errors.shippingTierId = "Please select a shipping area.";
-}
+  if (!deliveryForm.shippingTierId) {
+    errors.shippingTierId = "Please select a shipping area.";
+  }
 
-if (
-  !deliveryForm.phone.trim() &&
-  !deliveryForm.email.trim()
-) {
-  errors.contact =
-    "Provide either a phone number or email address.";
-}
+  if (
+    !deliveryForm.phone.trim() &&
+    !deliveryForm.email.trim()
+  ) {
+    errors.contact =
+      "Provide either a phone number or email address.";
+  }
  const handleSaveDetails = (event) => {
   event.preventDefault();
 
@@ -163,33 +173,43 @@ if (
                 <span>Add delivery details before payment.</span>
               ) : (
                 <>
-                  <p className="delivery-address">
-                    <strong>Address:</strong>{" "}
-                    {deliveryAddress ? (
-                      <>
-                        {deliveryAddress}
-                        {form.city ? `, ${form.city}` : null}
-                      </>
-                    ) : (
-                      <span className="delivery-missing">Not provided</span>
-                    )}
-                  </p>
+                  {!isPickup && (
+                    <p className="delivery-address">
+                      <strong>Address:</strong>{" "}
+                      {deliveryAddress ? (
+                        <>
+                          {deliveryAddress}
+                          {form.city ? `, ${form.city}` : null}
+                        </>
+                      ) : (
+                        <span className="delivery-missing">Not provided</span>
+                      )}
+                    </p>
+                  )}
 
-                  <p className="shipping-option">
-                    <strong>Shipping Area:</strong>{" "}
-                    {shippingArea ? (
-                      <>
-                        {shippingArea}
-                        {selectedShippingTier ? (
-                          <small className="shipping-fee">
-                            {toPrice(selectedShippingTier.fee)}
-                          </small>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="delivery-missing">Not selected</span>
+                  <div className="shipping-option">
+
+                    {isPickup && (
+                      <p className="pickup-note">
+                        <strong>Collection:</strong> Pickup from the selected location.
+                      </p>
                     )}
-                  </p>
+                    <p>
+                      <strong>Shipping Area:</strong>{" "}
+                      {shippingArea ? (
+                        <>
+                          {shippingArea}
+                          {selectedShippingTier && (
+                            <small className="shipping-fee">
+                              {toPrice(selectedShippingTier.fee)}
+                            </small>
+                          )}
+                        </>
+                      ) : (
+                        <span className="delivery-missing">Not selected</span>
+                      )}
+                    </p>
+                  </div>
                 </>
               )}
 
@@ -325,31 +345,34 @@ if (
                   </label>
                 ) : null}
 
-                <label>
-                  <span>
-                    Shipping address <span className="required-mark">*</span>
-                  </span>
-                  <input
-                    value={deliveryForm.address}
-                    onChange={(event) =>
-  setDeliveryForm((prev) => ({
-                        ...prev,
-                        address: event.target.value,
-                      }))
-                    }
-                    placeholder="Street and area"
-                    disabled={isSubmitting}
-                  />
-                  {showValidation && errors.address && (
-                    <p className="field-error">{errors.address}</p>
-                  )}
-                </label>
+                {!isDraftPickup && (
+                  <label>
+                    <span>
+                      Shipping address <span className="required-mark">*</span>
+                    </span>
+                    <input
+                      value={deliveryForm.address}
+                      onChange={(event) =>
+                        setDeliveryForm((prev) => ({
+                          ...prev,
+                          address: event.target.value,
+                        }))
+                      }
+                      placeholder="Street and area"
+                      disabled={isSubmitting}
+                    />
+                    {showValidation && errors.address && (
+                      <p className="field-error">{errors.address}</p>
+                    )}
+                  </label>
+                )}
 
-                <label>
-                  <span>
-                    City <span className="required-mark">*</span>
-                  </span>
-                  <input
+                {!isDraftPickup && (
+                  <label>
+                    <span>
+                      City <span className="required-mark">*</span>
+                    </span>
+                    <input
                     value={deliveryForm.city}
                     onChange={(event) =>
                       setDeliveryForm((prev) => ({
@@ -364,6 +387,7 @@ if (
                     <p className="field-error">{errors.city}</p>
                   )}
                 </label>
+                )}
 
                <fieldset className="checkout-shipping-options">
                   <legend>Shipping</legend>
@@ -398,9 +422,20 @@ if (
                             type="button"
                             className={!selectedDraftShippingTier ? "is-selected" : ""}
                             onClick={() => {
+                              const isPickupOption =
+                                tier.type === "pickup" ||
+                                tier.isPickup === true;
+
                               setDeliveryForm((prev) => ({
                                 ...prev,
-                                shippingTierId: "",
+                                shippingTierId: tier.id,
+                                ...(isPickupOption
+                                  ? {
+                                      address: "",
+                                      city: "",
+                                      addressId: "",
+                                    }
+                                  : {}),
                               }));
                               setShowShippingOptions(false);
                             }}

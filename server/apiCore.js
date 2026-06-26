@@ -649,6 +649,7 @@ const shippingTierSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(180).optional().default(""),
   fee: z.coerce.number().int().nonnegative(),
+  type: z.enum(["delivery", "pickup"]).default("delivery"),
   isActive: z.boolean().optional().default(true)
 });
 const reviewItemSchema = z.object({

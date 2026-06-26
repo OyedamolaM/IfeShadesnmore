@@ -1060,26 +1060,32 @@ function AdminOverlay({
     onSettingsDraftChange("shippingTiers", nextTiers);
   };
 
-  const addShippingTier = () => {
-    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
-    onSettingsDraftChange("shippingTiers", [
-      ...currentTiers,
-      {
-        id: `shipping-${Date.now()}`,
-        name: "New shipping tier",
-        description: "",
-        fee: 0,
-        isActive: true
-      }
-    ]);
+  function mapOrderRow(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    email: row.email,
+    fullName: row.full_name,
+    phone: row.phone,
+    address: row.address,
+    city: row.city,
+    paymentMethod: row.payment_method,
+    paymentReference: row.payment_reference,
+    paymentChannel: row.payment_channel || "",
+    paymentStatus: row.payment_status,
+    orderStatus: row.order_status || "pending",
+    adminNotifiedAt: row.admin_notified_at || null,
+    customerNotifiedAt: row.customer_notified_at || null,
+    shippingTierId: row.shipping_tier_id || "",
+    shippingTierName: row.shipping_tier_name || "",
+    shippingFee: Number(row.shipping_fee) || 0,
+    subtotal: Number(row.subtotal) || 0,
+    total: (Number(row.subtotal) || 0) + (Number(row.shipping_fee) || 0),
+    currency: row.currency || "NGN",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
-
-  const removeShippingTier = (index) => {
-    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
-    const nextTiers = currentTiers.filter((_, tierIndex) => tierIndex !== index);
-    onSettingsDraftChange("shippingTiers", nextTiers);
-  };
-
+}
   const updateSettingsListItem = (field, index, itemField, value) => {
     const fallback = Array.isArray(DEFAULT_SETTINGS[field]) ? DEFAULT_SETTINGS[field] : [];
     const currentItems = Array.isArray(settingsDraft[field]) ? settingsDraft[field] : fallback;
@@ -1221,6 +1227,7 @@ function AdminOverlay({
         name: String(settingsModalDraft.name || "").trim(),
         description: String(settingsModalDraft.description || "").trim(),
         fee: Math.max(0, Math.round(Number(settingsModalDraft.fee) || 0)),
+        type: settingsModalDraft.type || "delivery",
         isActive: settingsModalDraft.isActive !== false
       };
       if (!nextTier.name) {
@@ -1894,6 +1901,22 @@ function AdminOverlay({
               <label>Name<input value={settingsModalDraft.name || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, name: event.target.value }))} required /></label>
               <label>Description<input value={settingsModalDraft.description || ""} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, description: event.target.value }))} /></label>
               <label>Fee<input type="number" min="0" step="100" value={settingsModalDraft.fee || 0} onChange={(event) => setSettingsModalDraft((current) => ({ ...current, fee: event.target.value }))} required /></label>
+              <label>
+                Type
+                <select
+                  value={settingsModalDraft.type || "delivery"}
+                  onChange={(event) =>
+                    setSettingsModalDraft((current) => ({
+                      ...current,
+                      type: event.target.value,
+                      fee: event.target.value === "pickup" ? 0 : current.fee,
+                    }))
+                  }
+                >
+                  <option value="delivery">Delivery</option>
+                  <option value="pickup">Pickup</option>
+                </select>
+              </label>
               <div className="la-toggle-row">
                 <span>Active</span>
                 <button type="button" className={settingsModalDraft.isActive !== false ? "is-on" : ""} onClick={() => setSettingsModalDraft((current) => ({ ...current, isActive: current.isActive === false }))} aria-label="Toggle shipping tier">
