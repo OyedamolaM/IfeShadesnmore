@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import CartIcon from "../components/icons/CartIcon";
 import ProfileIcon from "../components/icons/ProfileIcon";
 import PreviewStyleSwitcher from "../components/preview/PreviewStyleSwitcher";
+import StoreNavbar from "../components/layout/StoreNavbar";
 
 const VARIANTS = {
   v1: {
@@ -457,136 +458,101 @@ function PreviewStorefront({
 
   return (
     <div className={`preview-storefront ${variant.className}`}>
-      <header className="preview-nav">
-        <button type="button" className="preview-brand" onDoubleClick={onOpenAdmin} aria-label="Open admin">
-          <img src="/brand/ife-logo-circle.png" alt="" />
-          <strong>{brandName}</strong>
-        </button>
-        <nav aria-label="Primary navigation">
-          <a href={`#${primaryShopTargetId}`}>Shop</a>
-          <a href="#editorial">Blog</a>
-          <a href="#reviews">Reviews</a>
-          <a href="#faq">FAQ</a>
-          <button type="button" onClick={onOpenAbout}>
-            About
-          </button>
-        </nav>
-        <div className="preview-nav-actions">
-          <PreviewStyleSwitcher value={styleVariant} onChange={onStyleVariantChange} compactLabel="Theme" />
-          {onOpenProfile ? (
-            <button
-              type="button"
-              className="preview-account-button"
-              onClick={onOpenProfile}
-              aria-label={currentUser ? "Open account" : "Log in"}
-              title={currentUser ? "Account" : "Login"}
-            >
-              <ProfileIcon />
-            </button>
-          ) : null}
-          {currentUser?.role === "admin" && onOpenAdmin ? (
-            <button
-              type="button"
-              className="preview-account-button preview-admin-button"
-              onClick={onOpenAdmin}
-              aria-label="Open admin"
-              title="Admin"
-            >
-              <AdminProfileIcon />
-            </button>
-          ) : null}
-          {allowOrdering ? (
-            <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
-              <CartIcon />
-              {cartCount > 0 ? <span>{cartCount > 99 ? "99+" : cartCount}</span> : null}
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <main>
-        <section className="preview-hero" id="home">
-          <div className="preview-hero-copy">
-            <p className="preview-kicker">
-              <span />
-              {heroKicker}
-            </p>
-            {variant.label ? <p className="preview-season">{variant.label}</p> : null}
-            <h1>
-              <span className="preview-hero-line">{variant.headline[0]}</span>
-              <br />
-              <span className="preview-hero-tail">
-                <em className="preview-hero-emphasis">{variant.headline[1]}</em>
-                {" "}
-                {variant.headline[2]}
-              </span>
-            </h1>
-            <p className="preview-hero-text">{variant.description}</p>
-            <div className="preview-actions">
-              <button type="button" onClick={shopNow}>
-                {variant.primary}
-                <span aria-hidden="true">-&gt;</span>
-              </button>
-              <button type="button" onClick={shopNow}>
-                {variant.secondary}
-              </button>
+      <StoreNavbar
+        brandName={brandName}
+        cartCount={cartCount}
+        currentUser={currentUser}
+        styleVariant={styleVariant}
+        onStyleVariantChange={onStyleVariantChange}
+        onOpenCart={onOpenCart}
+        onOpenProfile={onOpenProfile}
+        onOpenAdmin={onOpenAdmin}
+        showAdmin={currentUser?.role === "admin"}
+        primaryShopTargetId={primaryShopTargetId}
+      />
+        <main>
+          <section className="preview-hero" id="home">
+            <div className="preview-hero-copy">
+              <p className="preview-kicker">
+                <span />
+                {heroKicker}
+              </p>
+              {variant.label ? <p className="preview-season">{variant.label}</p> : null}
+              <h1>
+                <span className="preview-hero-line">{variant.headline[0]}</span>
+                <br />
+                <span className="preview-hero-tail">
+                  <em className="preview-hero-emphasis">{variant.headline[1]}</em>
+                  {" "}
+                  {variant.headline[2]}
+                </span>
+              </h1>
+              <p className="preview-hero-text">{variant.description}</p>
+              <div className="preview-actions">
+                <button type="button" onClick={shopNow}>
+                  {variant.primary}
+                  <span aria-hidden="true">-&gt;</span>
+                </button>
+                <button type="button" onClick={shopNow}>
+                  {variant.secondary}
+                </button>
+              </div>
+              <div className="preview-proof" aria-label={variant.statTone}>
+                <span className="preview-proof-dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>{variant.statTone}</span>
+              </div>
             </div>
-            <div className="preview-proof" aria-label={variant.statTone}>
-              <span className="preview-proof-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-              <span>{variant.statTone}</span>
-            </div>
-          </div>
-          <div className="preview-hero-media" aria-live="off">
-            <div className="preview-hero-image-stack">
-              {HERO_SLIDES.map((slide, index) => (
-                <img
-                  key={slide.id}
-                  className={index === activeHeroIndex ? "is-active" : ""}
-                  src={slide.image}
-                  alt={index === activeHeroIndex ? slide.alt : ""}
-                  aria-hidden={index === activeHeroIndex ? undefined : "true"}
-                />
-              ))}
-            </div>
-            {rotateHeroImages ? (
-              <div className="preview-hero-dots" aria-hidden="true">
+            <div className="preview-hero-media" aria-live="off">
+              <div className="preview-hero-image-stack">
                 {HERO_SLIDES.map((slide, index) => (
-                  <span key={slide.id} className={index === activeHeroIndex ? "is-active" : ""} />
+                  <img
+                    key={slide.id}
+                    className={index === activeHeroIndex ? "is-active" : ""}
+                    src={slide.image}
+                    alt={index === activeHeroIndex ? slide.alt : ""}
+                    aria-hidden={index === activeHeroIndex ? undefined : "true"}
+                  />
                 ))}
               </div>
-            ) : null}
-            <aside>
-              <span>{activeHeroSlide.label}</span>
-              <strong>{activeHeroSlide.title}</strong>
-            </aside>
+              {rotateHeroImages ? (
+                <div className="preview-hero-dots" aria-hidden="true">
+                  {HERO_SLIDES.map((slide, index) => (
+                    <span key={slide.id} className={index === activeHeroIndex ? "is-active" : ""} />
+                  ))}
+                </div>
+              ) : null}
+              <aside>
+                <span>{activeHeroSlide.label}</span>
+                <strong>{activeHeroSlide.title}</strong>
+              </aside>
+            </div>
+          </section>
+
+          <div className="preview-ticker">
+            <span>New drops every Month</span>
+            <span>Nationwide delivery</span>
+            <span>Bulk purchase discounts</span>
           </div>
-        </section>
 
-        <div className="preview-ticker">
-          <span>New drops every Month</span>
-          <span>Nationwide delivery</span>
-          <span>Bulk purchase discounts</span>
-        </div>
+          <a
+            className="preview-whatsapp-float"
+            href={`https://wa.me/${WHATSAPP_NUMBER}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Chat with IfeShadesnMore on WhatsApp"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5.2 19.4 6.4 15.9a7.4 7.4 0 1 1 2 2Z" />
+              <path d="M9.1 8.5c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.7 1.7c.1.2.1.4 0 .6l-.4.5c-.1.1-.2.3 0 .5.4.8 1.2 1.8 2.2 2.3.2.1.4.1.5-.1l.6-.7c.2-.2.4-.2.6-.1l1.8.8c.3.1.4.3.4.5 0 .5-.3 1.3-.9 1.6-.6.4-1.8.4-3.1-.2-1.5-.7-3-1.9-4.1-3.4-1-1.4-1.3-2.6-.9-3.4l.3-.6Z" />
+            </svg>
+          </a>
 
-        <a
-          className="preview-whatsapp-float"
-          href={`https://wa.me/${WHATSAPP_NUMBER}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Chat with IfeShadesnMore on WhatsApp"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5.2 19.4 6.4 15.9a7.4 7.4 0 1 1 2 2Z" />
-            <path d="M9.1 8.5c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.7 1.7c.1.2.1.4 0 .6l-.4.5c-.1.1-.2.3 0 .5.4.8 1.2 1.8 2.2 2.3.2.1.4.1.5-.1l.6-.7c.2-.2.4-.2.6-.1l1.8.8c.3.1.4.3.4.5 0 .5-.3 1.3-.9 1.6-.6.4-1.8.4-3.1-.2-1.5-.7-3-1.9-4.1-3.4-1-1.4-1.3-2.6-.9-3.4l.3-.6Z" />
-          </svg>
-        </a>
-
-        {showSupportSections ? <PreviewSupportSections blogs={blogs} reviewItems={settings?.reviewItems} faqItems={settings?.faqItems} onOpenAdmin={onOpenAdmin} /> : null}
-      </main>
+          {showSupportSections ? <PreviewSupportSections blogs={blogs} reviewItems={settings?.reviewItems} faqItems={settings?.faqItems} onOpenAdmin={onOpenAdmin} /> : null}
+        </main>
     </div>
   );
 }

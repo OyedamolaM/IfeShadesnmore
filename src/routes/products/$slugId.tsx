@@ -3,21 +3,15 @@ import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import ProductMedia from "../../components/product/ProductMedia.jsx";
 import CartDrawer from "../../components/cart/CartDrawer.jsx";
 import CheckoutModal from "../../components/cart/CheckoutModal.jsx";
-import CartIcon from "../../components/icons/CartIcon.jsx";
-import SearchIcon from "../../components/icons/SearchIcon.jsx";
-import ProfileIcon from "../../components/icons/ProfileIcon.jsx";
-import PreviewStyleSwitcher from "../../components/preview/PreviewStyleSwitcher.jsx";
 import { toPrice } from "../../utils/format";
 import { getProductPageData } from "../../serverFns";
-import { CART_STORAGE_KEY, DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
-import {
-  addWishlistItem,
-  fetchAccountDashboard,
-  fetchMe,
-  fetchStorefront,
-  initializeCheckout
-} from "../../utils/api";
+import { DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
+import { addWishlistItem, fetchMe, fetchStorefront } from "../../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
+import { CartProvider, useCart } from "../../hooks/cart";
+import { useCheckout } from "../../hooks/useCheckout";
+import { normalizeAvailability } from "../../utils/cart";
+import StoreNavbar from "../../components/layout/StoreNavbar.jsx";
 
 export const Route = createFileRoute("/products/$slugId")({
   loader: async ({ params }) => {
@@ -109,8 +103,17 @@ export const Route = createFileRoute("/products/$slugId")({
       ]
     };
   },
-  component: ProductPage
+  component: ProductPageRoot
 });
+
+// CartProvider wraps here so useCart() has context on both SSR and client
+function ProductPageRoot() {
+  return (
+    <CartProvider>
+      <ProductPage />
+    </CartProvider>
+  );
+}
 
 function ProductPage() {
   const product = Route.useLoaderData();
@@ -118,23 +121,22 @@ function ProductPage() {
   const [toast, setToast] = useState("");
   const [shareStatus, setShareStatus] = useState("");
   const [isSavingWishlist, setIsSavingWishlist] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
   const [themeVariant, setThemeVariant] = useState("v1");
   const [isThemeHydrated, setIsThemeHydrated] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [cart, setCart] = useState(() =>
-    typeof window === "undefined" ? [] : parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]")
-  );
   const [showCart, setShowCart] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
   const [storefrontProducts, setStorefrontProducts] = useState([product]);
   const [shippingTiers, setShippingTiers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
-  const [accountAddresses, setAccountAddresses] = useState([]);
-  const [checkoutForm, setCheckoutForm] = useState(createCheckoutForm(null));
-  const [checkoutError, setCheckoutError] = useState("");
-  const [checkoutNotice, setCheckoutNotice] = useState("");
-  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
+
+  const brandName = "IfeShadesnMore";
+  const styleVariant = themeVariant;
+  const onStyleVariantChange = setThemeVariant;
+  const primaryShopTargetId = "shop";
+  const onOpenCart = () => setShowCart(true);
+  const onOpenProfile = () => { window.location.href = "/account"; };
+  const onOpenAdmin = () => { window.location.href = "/admin"; };
+
   const availability = normalizeAvailability(product.availability);
   const availabilityLabel =
     availability === "out_of_stock" ? "Out of Stock" : availability === "preorder" ? "Preorder" : "In Stock";
@@ -153,9 +155,11 @@ function ProductPage() {
       : `${window.location.origin}/products/${productSlugId(product)}`;
   const productImages = normalizeProductImages(product);
   const selectedImageIndex = Math.max(0, Math.min(activeImageIndex, productImages.length - 1));
-  const selectedProduct = productImages.length > 0
-    ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
-    : product;
+  const selectedProduct =
+    productImages.length > 0
+      ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
+      : product;
+
   const catalogProducts = useMemo(() => {
     const productMap = new Map();
     [product, ...storefrontProducts].filter(Boolean).forEach((item) => {
@@ -163,35 +167,55 @@ function ProductPage() {
     });
     return [...productMap.values()];
   }, [product, storefrontProducts]);
+
+  const productsById = useMemo(() => {
+    const map = new Map();
+    catalogProducts.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [catalogProducts]);
+
+  // Same hook as StorefrontPage — reads from the same CartProvider/localStorage
+  const { cart, cartCount, addToCart: addToCartRaw, setCartQuantity } = useCart();
+
   const cartItems = useMemo(() => {
-    const productMap = new Map(catalogProducts.map((item) => [item.id, item]));
     return cart
-      .map((entry) => {
-        const cartProduct = productMap.get(entry.productId);
-        if (!cartProduct || normalizeAvailability(cartProduct.availability) === "out_of_stock") return null;
-        const quantity = Math.max(1, Number(entry.quantity) || 1);
-        return {
-          product: cartProduct,
-          quantity,
-          lineTotal: (Number(cartProduct.price) || 0) * quantity
-        };
-      })
-      .filter(Boolean);
-  }, [cart, catalogProducts]);
-  const cartSubtotal = useMemo(
-    () => cartItems.reduce((total, item) => total + item.lineTotal, 0),
-    [cartItems]
-  );
-  const activeShippingTiers = useMemo(
-    () => (Array.isArray(shippingTiers) ? shippingTiers : []).filter((tier) => tier?.isActive !== false),
-    [shippingTiers]
-  );
-  const selectedShippingTier = useMemo(
-    () => activeShippingTiers.find((tier) => tier.id === checkoutForm.shippingTierId) || activeShippingTiers[0] || null,
-    [activeShippingTiers, checkoutForm.shippingTierId]
-  );
-  const shippingFee = Number(selectedShippingTier?.fee) || 0;
-  const checkoutTotal = cartSubtotal + shippingFee;
+      .map((entry) => ({
+        product: productsById.get(entry.productId),
+        quantity: entry.quantity
+      }))
+      .filter((item) => item.product);
+  }, [cart, productsById]);
+
+  const cartSubtotal = useMemo(() => {
+    return cartItems.reduce(
+      (sum, item) => sum + (Number(item.product.price) || 0) * item.quantity,
+      0
+    );
+  }, [cartItems]);
+
+  const onNavigate = (path) => { window.location.href = path; };
+
+  const {
+    checkoutForm,
+    accountAddresses,
+    activeShippingTiers,
+    selectedShippingTier,
+    shippingFee,
+    checkoutTotal,
+    showCheckout,
+    setShowCheckout,
+    checkoutError,
+    checkoutNotice,
+    isSubmittingCheckout,
+    openCheckout: openCheckoutRaw,
+    onFieldChange,
+    handleCheckoutSubmit
+  } = useCheckout({
+    currentUser,
+    cartItems,
+    shippingTiers,
+    onNavigate
+  });
 
   useEffect(() => {
     setActiveImageIndex(Math.max(0, Number(product?.mainImageIndex) || 0));
@@ -207,47 +231,20 @@ function ProductPage() {
   }, [toast, shareStatus]);
 
   useEffect(() => {
-    const nextCart = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
-    setCart(nextCart);
-    setCartCount(nextCart.length);
-    const handleStorage = (event) => {
-      if (!event.key || event.key === CART_STORAGE_KEY) {
-        const storedCart = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
-        setCart(storedCart);
-        setCartCount(storedCart.length);
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  useEffect(() => {
     let isMounted = true;
     Promise.allSettled([fetchStorefront(), fetchMe()]).then(([storefrontResult, meResult]) => {
       if (!isMounted) return;
       if (storefrontResult.status === "fulfilled") {
         const payload = storefrontResult.value || {};
-        if (Array.isArray(payload.products)) {
-          setStorefrontProducts(payload.products);
-        }
+        if (Array.isArray(payload.products)) setStorefrontProducts(payload.products);
         setShippingTiers(Array.isArray(payload.settings?.shippingTiers) ? payload.settings.shippingTiers : []);
       }
       if (meResult.status === "fulfilled") {
-        const user = meResult.value?.user || null;
-        setCurrentUser(user);
-        setCheckoutForm((current) => ({ ...createCheckoutForm(user), ...current }));
+        setCurrentUser(meResult.value?.user || null);
       }
     });
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
-
-  useEffect(() => {
-    if (!showCheckout || activeShippingTiers.length === 0) return;
-    if (checkoutForm.shippingTierId && activeShippingTiers.some((tier) => tier.id === checkoutForm.shippingTierId)) return;
-    setCheckoutForm((current) => ({ ...current, shippingTierId: activeShippingTiers[0].id }));
-  }, [activeShippingTiers, checkoutForm.shippingTierId, showCheckout]);
 
   useEffect(() => {
     setThemeVariant(getStoredThemeVariant());
@@ -269,26 +266,11 @@ function ProductPage() {
       setToast(`${product.name} is currently out of stock.`);
       return;
     }
-
     const quantity = resolveQuantity();
-    const nextCart = updateStoredCart(product.id, quantity);
-    setCart(nextCart);
-    setCartCount(nextCart.length);
+    addToCartRaw(product.id, quantity);
     setToast(
       availability === "preorder" ? `${product.name} added as preorder.` : `${product.name} added to cart.`
     );
-    window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify(nextCart) }));
-  };
-
-  const setCartQuantity = (productId, quantity) => {
-    const nextQuantity = Math.max(0, Number(quantity) || 0);
-    const nextCart = nextQuantity === 0
-      ? cart.filter((entry) => entry.productId !== productId)
-      : cart.map((entry) => entry.productId === productId ? { ...entry, quantity: nextQuantity } : entry);
-    setStoredCart(nextCart);
-    setCart(nextCart);
-    setCartCount(nextCart.length);
-    window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify(nextCart) }));
   };
 
   const openCheckout = async () => {
@@ -297,107 +279,8 @@ function ProductPage() {
       window.location.href = `/account/login?redirect=${encodeURIComponent(window.location.pathname)}`;
       return;
     }
-
-    setCheckoutError("");
-    setCheckoutNotice("");
-    setShowCart(false);
-    setShowCheckout(true);
-    const nameParts = splitFullName(currentUser.fullName || "");
-    setCheckoutForm((current) => ({
-      ...current,
-      firstName: current.firstName || nameParts.firstName,
-      lastName: current.lastName || nameParts.lastName,
-      email: current.email || currentUser.email || "",
-      phone: current.phone || currentUser.phone || "",
-      address: current.address || currentUser.address || "",
-      city: current.city || currentUser.city || ""
-    }));
-
-    let savedAddresses = accountAddresses;
-    try {
-      const accountPayload = await fetchAccountDashboard();
-      savedAddresses = Array.isArray(accountPayload.addresses) ? accountPayload.addresses : [];
-      setAccountAddresses(savedAddresses);
-    } catch {
-      savedAddresses = accountAddresses;
-    }
-    const defaultAddress = savedAddresses.find((address) => address.isDefault) || savedAddresses[0] || null;
-    setCheckoutForm((current) => ({
-      ...current,
-      firstName: current.firstName || nameParts.firstName,
-      lastName: current.lastName || nameParts.lastName,
-      email: current.email || currentUser.email || "",
-      phone: current.phone || defaultAddress?.phone || currentUser.phone || "",
-      address: current.address || defaultAddress?.street || currentUser.address || "",
-      city: current.city || defaultAddress?.city || currentUser.city || "",
-      addressId: current.addressId || (defaultAddress?.id ? String(defaultAddress.id) : "")
-    }));
-  };
-
-  const handleCheckoutFieldChange = (field, value) => {
-    if (field === "addressId") {
-      const selectedAddress = accountAddresses.find((address) => String(address.id) === String(value));
-      setCheckoutForm((current) => ({
-        ...current,
-        addressId: value,
-        ...(selectedAddress ? {
-          phone: selectedAddress.phone || current.phone,
-          address: selectedAddress.street || current.address,
-          city: selectedAddress.city || current.city
-        } : {})
-      }));
-      setCheckoutError("");
-      return;
-    }
-    setCheckoutForm((current) => ({ ...current, [field]: value }));
-    setCheckoutError("");
-  };
-
-  const handleCheckoutSubmit = async (event) => {
-    event.preventDefault();
-    if (!currentUser) {
-      window.location.href = `/account/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-      return;
-    }
-    const missing = ["firstName", "lastName", "address", "city"].find((field) => !String(checkoutForm[field] || "").trim());
-    if (missing) {
-      setCheckoutError("Please complete all checkout fields.");
-      return;
-    }
-    if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {
-      setCheckoutError("Phone or email is required.");
-      return;
-    }
-    if (!selectedShippingTier) {
-      setCheckoutError("Please select a shipping area");
-      return;
-    }
-
-    setCheckoutError("");
-    setCheckoutNotice("Redirecting to paystack...");
-    setIsSubmittingCheckout(true);
-    try {
-      const payload = await initializeCheckout({
-        items: cartItems.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
-        paymentMethod: "card",
-        shippingTierId: selectedShippingTier.id,
-        addressId: checkoutForm.addressId || undefined,
-        customer: {
-          firstName: checkoutForm.firstName.trim(),
-          lastName: checkoutForm.lastName.trim(),
-          fullName: `${checkoutForm.firstName || ""} ${checkoutForm.lastName || ""}`.trim(),
-          email: checkoutForm.email.trim(),
-          phone: checkoutForm.phone.trim(),
-          address: checkoutForm.address.trim(),
-          city: checkoutForm.city.trim()
-        }
-      });
-      window.location.href = payload.authorizationUrl;
-    } catch (requestError) {
-      setCheckoutError(requestError.message || "Could not initialize payment.");
-      setCheckoutNotice("");
-      setIsSubmittingCheckout(false);
-    }
+    const opened = await openCheckoutRaw();
+    if (opened) setShowCart(false);
   };
 
   const handleWishlist = async () => {
@@ -423,7 +306,6 @@ function ProductPage() {
       text: product.name ? `View ${product.name} on IfeShadesnMore` : "View this product on IfeShadesnMore",
       url: productUrl
     };
-
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         await navigator.share(shareData);
@@ -444,11 +326,17 @@ function ProductPage() {
 
   return (
     <div className={`page product-seo-page preview-storefront preview-${themeVariant}`}>
-      <ProductPageHeader
+      <StoreNavbar
+        brandName={brandName}
         cartCount={cartCount}
-        themeVariant={themeVariant}
-        onThemeVariantChange={setThemeVariant}
-        onOpenCart={() => setShowCart(true)}
+        currentUser={currentUser}
+        styleVariant={styleVariant}
+        onStyleVariantChange={onStyleVariantChange}
+        onOpenCart={onOpenCart}
+        onOpenProfile={onOpenProfile}
+        onOpenAdmin={onOpenAdmin}
+        showAdmin={currentUser?.role === "admin"}
+        primaryShopTargetId={primaryShopTargetId}
       />
       <main className="site-shell product-seo-shell">
         <section className="container product-seo-inner">
@@ -461,7 +349,9 @@ function ProductPage() {
                     <button
                       type="button"
                       className="product-gallery-nav product-gallery-prev"
-                      onClick={() => setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)}
+                      onClick={() =>
+                        setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)
+                      }
                       aria-label="Show previous product image"
                     >
                       &lt;
@@ -469,7 +359,9 @@ function ProductPage() {
                     <button
                       type="button"
                       className="product-gallery-nav product-gallery-next"
-                      onClick={() => setActiveImageIndex((current) => (current + 1) % productImages.length)}
+                      onClick={() =>
+                        setActiveImageIndex((current) => (current + 1) % productImages.length)
+                      }
                       aria-label="Show next product image"
                     >
                       &gt;
@@ -581,7 +473,7 @@ function ProductPage() {
         total={checkoutTotal}
         form={checkoutForm}
         savedAddresses={accountAddresses}
-        onFieldChange={handleCheckoutFieldChange}
+        onFieldChange={onFieldChange}
         onSubmit={handleCheckoutSubmit}
         checkoutError={checkoutError}
         checkoutNotice={checkoutNotice}
@@ -591,55 +483,15 @@ function ProductPage() {
   );
 }
 
-function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange, onOpenCart }) {
-  const normalizedCount = Math.max(0, Number(cartCount) || 0);
-
-  return (
-    <header className="preview-nav product-page-header">
-      <Link to="/" className="preview-brand" aria-label="IfeShadesnMore home">
-        <img src="/brand/ife-logo-circle.png" alt="" />
-        <strong>IfeShadesnMore</strong>
-      </Link>
-
-      <nav aria-label="Primary navigation">
-        <Link to="/" hash="shop">Shop</Link>
-        <Link to="/" hash="editorial">Blog</Link>
-        <Link to="/" hash="reviews">Reviews</Link>
-        <Link to="/" hash="faq">FAQ</Link>
-        <Link to="/" hash="contact">About</Link>
-      </nav>
-
-      <div className="preview-nav-actions">
-        <PreviewStyleSwitcher value={themeVariant} onChange={onThemeVariantChange} compactLabel="Theme" />
-        <Link to="/" hash="shop" className="preview-account-button" aria-label="Search products">
-          <SearchIcon />
-        </Link>
-        <Link to="/account" className="preview-account-button" aria-label="Open profile">
-          <ProfileIcon />
-        </Link>
-        <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
-          <CartIcon />
-          {normalizedCount > 0 ? <span>{normalizedCount > 99 ? "99+" : normalizedCount}</span> : null}
-        </button>
-      </div>
-    </header>
-  );
-}
-
 function ProductPageFooter() {
   return (
     <footer className="site-footer product-page-footer">
       <div className="container footer-inner">
         <div className="footer-links">
-          <Link to="/privacy-policy" className="footer-link-button">
-            Privacy Policy
-          </Link>
+          <Link to="/privacy-policy" className="footer-link-button">Privacy Policy</Link>
           <span>|</span>
-          <Link to="/terms-of-service" className="footer-link-button">
-            Terms of Service
-          </Link>
+          <Link to="/terms-of-service" className="footer-link-button">Terms of Service</Link>
         </div>
-
         <div className="footer-contact-stack">
           <div className="footer-contact-links">
             <a href="mailto:oluborodedeborah2000@gmail.com" target="_blank" rel="noopener noreferrer">
@@ -658,7 +510,6 @@ function ProductPageFooter() {
           </div>
           <p>1, Sunday Akinbo Str, command Ipaja, Lagos</p>
         </div>
-
         <div className="footer-socials" aria-label="Social media links">
           <a href="https://www.facebook.com/share/1CJYVRj8hQ/" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
             <SocialIcon type="facebook" />
@@ -676,7 +527,9 @@ function ProductPageFooter() {
 }
 
 function getSiteUrl(runtimeSiteUrl?: string) {
-  return String(runtimeSiteUrl || import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  return String(
+    runtimeSiteUrl || import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000"
+  ).replace(/\/+$/, "");
 }
 
 function absoluteUrl(value: string, siteUrl: string) {
@@ -715,21 +568,11 @@ function inferImageType(value: string) {
       return String(value || "").toLowerCase();
     }
   })();
-
   if (pathname.endsWith(".png")) return "image/png";
   if (pathname.endsWith(".webp")) return "image/webp";
   if (pathname.endsWith(".gif")) return "image/gif";
   if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
   return "";
-}
-
-function normalizeAvailability(value) {
-  const source = String(value || "").trim().toLowerCase();
-  if (source === "out_of_stock" || source === "preorder" || source === "in_stock") return source;
-  const compact = source.replace(/[^a-z]/g, "");
-  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
-  if (compact === "preorder" || compact === "preorderonly") return "preorder";
-  return "in_stock";
 }
 
 function productSlugId(product) {
@@ -743,70 +586,6 @@ function productSlugId(product) {
   return `${slug}--${encodeURIComponent(product.id)}`;
 }
 
-function parseStoredCart(rawValue) {
-  try {
-    const parsed = JSON.parse(rawValue);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((entry) => ({
-        productId: String(entry?.productId || "").trim(),
-        quantity: Math.max(0, Number(entry?.quantity) || 0)
-      }))
-      .filter((entry) => entry.productId && entry.quantity > 0);
-  } catch {
-    return [];
-  }
-}
-
-function setStoredCart(cart) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
-}
-
-function getStoredCartCount() {
-  if (typeof window === "undefined") return 0;
-  return parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]").length;
-}
-
-function updateStoredCart(productId, quantity) {
-  if (typeof window === "undefined") return [];
-  const current = parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
-  const index = current.findIndex((entry) => entry.productId === productId);
-  const next =
-    index === -1
-      ? [...current, { productId, quantity }]
-      : current.map((entry, idx) =>
-          idx === index ? { ...entry, quantity: entry.quantity + quantity } : entry
-        );
-  window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(next));
-  return next;
-}
-
-function splitFullName(value) {
-  const parts = String(value || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return { firstName: "", lastName: "" };
-  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
-  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
-}
-
-function createCheckoutForm(user) {
-  const nameParts = splitFullName(user?.fullName);
-  return {
-    firstName: nameParts.firstName,
-    lastName: nameParts.lastName,
-    email: user?.email || "",
-    phone: user?.phone || "",
-    address: user?.address || "",
-    city: user?.city || "",
-    addressId: "",
-    paymentMethod: "card",
-    shippingTierId: ""
-  };
-}
-
 function SocialIcon({ type }) {
   if (type === "facebook") {
     return (
@@ -815,7 +594,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   if (type === "instagram") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -825,7 +603,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   if (type === "tiktok") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -833,7 +610,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   return null;
 }
 

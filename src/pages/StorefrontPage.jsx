@@ -5,75 +5,16 @@ import ProductDetailsModal from "../components/product/ProductDetailsModal";
 import CartDrawer from "../components/cart/CartDrawer";
 import CheckoutModal from "../components/cart/CheckoutModal";
 import PreviewStorefront, { PreviewSupportSections } from "./PreviewStorefront";
-import { CART_STORAGE_KEY } from "../constants/storefront";
-import { addWishlistItem, createSubscription, fetchAccountDashboard, initializeCheckout } from "../utils/api";
+import { addWishlistItem, createSubscription, } from "../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../utils/themePreference";
+import { useCart } from "../hooks/cart";
+import { useCheckout } from "../hooks/useCheckout";
+import { buildLoginRedirect, normalizeAvailability } from "../utils/cart";
 
 const NEWSLETTER_DISMISS_MS = 24 * 60 * 60 * 1000;
 const NEWSLETTER_POPUP_DELAY_MS = 90 * 1000;
 const NEWSLETTER_DISMISSED_UNTIL_KEY = "ife_newsletter_dismissed_until";
 const NEWSLETTER_SUBSCRIBED_KEY = "ife_newsletter_subscribed";
-
-function normalizeAvailability(value) {
-  const source = String(value || "").trim().toLowerCase();
-  if (source === "in_stock" || source === "out_of_stock" || source === "preorder") return source;
-  const compact = source.replace(/[^a-z]/g, "");
-  if (compact === "outofstock" || compact === "soldout") return "out_of_stock";
-  if (compact === "preorder" || compact === "preorderonly") return "preorder";
-  return "in_stock";
-}
-
-function splitFullName(value) {
-  const parts = String(value || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return { firstName: "", lastName: "" };
-  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
-  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
-}
-
-function createCheckoutForm(user) {
-  const nameParts = splitFullName(user?.fullName);
-  return {
-    firstName: nameParts.firstName,
-    lastName: nameParts.lastName,
-    email: user?.email || "",
-    phone: user?.phone || "",
-    address: user?.address || "",
-    city: user?.city || "",
-    addressId: "",
-    paymentMethod: "card",
-    shippingTierId: ""
-  };
-}
-
-function parseStoredCart(rawValue) {
-  try {
-    const parsed = JSON.parse(rawValue);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((entry) => ({
-        productId: String(entry?.productId || "").trim(),
-        quantity: Math.max(0, Number(entry?.quantity) || 0)
-      }))
-      .filter((entry) => entry.productId && entry.quantity > 0);
-  } catch {
-    return [];
-  }
-}
-
-function buildCheckoutLoginRedirect() {
-  const params = new URLSearchParams({
-    openCart: "1",
-    openCheckout: "1"
-  });
-  return `/account/login?redirect=${encodeURIComponent(`/?${params.toString()}`)}`;
-}
-
-function buildLoginRedirect() {
-  return `/account/login?redirect=${encodeURIComponent("/")}`;
-}
 
 function getStoredNewsletterDismissedUntil() {
   if (typeof window === "undefined") return 0;
@@ -104,16 +45,6 @@ function StorefrontPage({
 }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showCart, setShowCart] = useState(false);
-  const [cart, setCart] = useState(() => {
-    if (typeof window === "undefined") return [];
-    return parseStoredCart(window.localStorage.getItem(CART_STORAGE_KEY) || "[]");
-  });
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [checkoutForm, setCheckoutForm] = useState(createCheckoutForm(currentUser));
-  const [checkoutError, setCheckoutError] = useState("");
-  const [checkoutNotice, setCheckoutNotice] = useState("");
-  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
-  const [accountAddresses, setAccountAddresses] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [email, setEmail] = useState("");
@@ -134,42 +65,9 @@ function StorefrontPage({
   }, []);
 
   useEffect(() => {
-  const resetCheckoutState = () => {
-    setIsSubmittingCheckout(false);
-  };
-
-  const handleVisibility = () => {
-    if (!document.hidden) {
-      resetCheckoutState();
-    }
-  };
-
-  window.addEventListener("pageshow", resetCheckoutState);
-  document.addEventListener("visibilitychange", handleVisibility);
-
-  return () => {
-    window.removeEventListener("pageshow", resetCheckoutState);
-    document.removeEventListener("visibilitychange", handleVisibility);
-  };
-}, []);
-
-  useEffect(() => {
     if (!isPreviewStyleHydrated) return;
     persistThemeVariant(previewStyle);
   }, [previewStyle, isPreviewStyleHydrated]);
-
-  useEffect(() => {
-    const nameParts = splitFullName(currentUser?.fullName || "");
-    setCheckoutForm((current) => ({
-      ...current,
-      firstName: current.firstName || nameParts.firstName,
-      lastName: current.lastName || nameParts.lastName,
-      email: current.email || currentUser?.email || "",
-      phone: current.phone || currentUser?.phone || "",
-      address: current.address || currentUser?.address || "",
-      city: current.city || currentUser?.city || ""
-    }));
-  }, [currentUser]);
 
   useEffect(() => {
     setNewsletterPopupEmail((current) => current || currentUser?.email || "");
@@ -202,63 +100,85 @@ function StorefrontPage({
     return map;
   }, [products]);
 
+  // ---- Shared cart logic ----
+  const { cart, cartCount, addToCart: addToCartRaw, setCartQuantity,  replaceCart,} =
+    useCart();
+  // ---- Shared checkout logic ----
   const cartItems = useMemo(() => {
-    return cart
-      .map((entry) => {
-        const product = productsById.get(entry.productId);
-        const quantity = Math.max(0, Number(entry.quantity) || 0);
-        if (!product || quantity <= 0) return null;
-        return {
-          product,
-          quantity,
-          lineTotal: product.price * quantity
-        };
-      })
-      .filter(Boolean);
-  }, [cart, productsById]);
+  return cart
+    .map((entry) => {
+      const product = products.find(
+        (product) => String(product.id) === String(entry.productId)
+      );
 
-  const cartCount = useMemo(
-    () => cartItems.length,
-    [cartItems]
-  );
+      if (!product) {
+        return null;
+      }
 
-  const cartSubtotal = useMemo(
-    () => cartItems.reduce((total, item) => total + item.lineTotal, 0),
-    [cartItems]
-  );
-  const activeShippingTiers = useMemo(
-    () => (Array.isArray(settings?.shippingTiers) ? settings.shippingTiers : []).filter((tier) => tier?.isActive !== false),
-    [settings?.shippingTiers]
-  );
-  const selectedShippingTier = useMemo(
-    () =>
-      activeShippingTiers.find(
-        (tier) => tier.id === checkoutForm.shippingTierId
-      ) || null,
-    [activeShippingTiers, checkoutForm.shippingTierId]
-  );
-  const shippingFee = Number(selectedShippingTier?.fee) || 0;
-  const checkoutTotal = cartSubtotal + shippingFee;
+      return {
+        product,
+        quantity: entry.quantity,
+        lineTotal: Number(product.price || 0) * entry.quantity,
+      };
+    })
+    .filter(Boolean);
+}, [cart, products]);
 
+const cartSubtotal = useMemo(() => {
+  return cartItems.reduce((total, item) => total + item.lineTotal, 0);
+}, [cartItems]);
+
+  const {
+    checkoutForm,
+    accountAddresses,
+    activeShippingTiers,
+    shippingFee,
+    checkoutTotal,
+    showCheckout,
+    setShowCheckout,
+    checkoutError,
+    setCheckoutError,
+    checkoutNotice,
+    setCheckoutNotice,
+    isSubmittingCheckout,
+    openCheckout: openCheckoutRaw,
+    onFieldChange,
+    handleCheckoutSubmit
+  } = useCheckout({
+    currentUser,
+    cartItems,
+    shippingTiers: settings?.shippingTiers,
+    onNavigate
+  });
   useEffect(() => {
-    if (!Array.isArray(products) || products.length === 0) return;
-    const availableProductIds = new Set(
-      products
-        .filter((item) => normalizeAvailability(item.availability) !== "out_of_stock")
-        .map((item) => item.id)
+  if (!Array.isArray(products) || products.length === 0) return;
+
+  const availableProductIds = new Set(
+    products
+      .filter(
+        (item) =>
+          normalizeAvailability(item.availability) !== "out_of_stock"
+      )
+      .map((item) => item.id)
+  );
+
+  const nextCart = cart.filter(
+    (item) =>
+      availableProductIds.has(item.productId) &&
+      item.quantity > 0
+  );
+
+  if (nextCart.length !== cart.length) {
+    replaceCart(nextCart);
+    setCartToast(
+      "Some out-of-stock items were removed from your cart."
     );
-    const nextCart = cart.filter((item) => availableProductIds.has(item.productId) && item.quantity > 0);
-    if (nextCart.length !== cart.length) {
-      setCart(nextCart);
-      setCartToast("Some out-of-stock items were removed from your cart.");
-      setCheckoutError("Your cart was updated because some items are out of stock.");
-    }
-  }, [cart, products]);
+    setCheckoutError(
+      "Your cart was updated because some items are out of stock."
+    );
+  }
+}, [cart, products, replaceCart, setCheckoutError]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
-  }, [cart]);
 
   useEffect(() => {
     if (location.pathname !== "/") return;
@@ -272,10 +192,10 @@ function StorefrontPage({
       setShowCart(true);
     }
 
-    if (shouldOpenCheckout && currentUser && cartItems.length > 0) {
-      setCheckoutError("");
-      setCheckoutNotice("");
-      setShowCheckout(true);
+    if (shouldOpenCheckout && currentUser && (cartItems ?? []).length > 0)  {
+      openCheckoutRaw().then((opened) => {
+        if (opened) setShowCart(false);
+      });
     }
 
     const cleaned = new URLSearchParams(location.search || "");
@@ -283,7 +203,8 @@ function StorefrontPage({
     cleaned.delete("openCheckout");
     const nextQuery = cleaned.toString();
     onNavigate(nextQuery ? `/?${nextQuery}` : "/", { replace: true });
-  }, [location.pathname, location.search, currentUser, cartItems.length, onNavigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search, currentUser, (cartItems ?? []).length, onNavigate]);
 
   useEffect(() => {
     if (location.pathname !== "/" || !pendingSearchFocus) return;
@@ -304,17 +225,6 @@ function StorefrontPage({
     return () => window.clearTimeout(timer);
   }, [cartToast]);
 
-  const setCartQuantity = (productId, nextQuantity) => {
-    setCart((current) => {
-      const quantity = Math.max(0, Number(nextQuantity) || 0);
-      const index = current.findIndex((entry) => entry.productId === productId);
-      if (index === -1 && quantity > 0) return [...current, { productId, quantity }];
-      if (index === -1) return current;
-      if (quantity <= 0) return current.filter((entry) => entry.productId !== productId);
-      return current.map((entry, idx) => (idx === index ? { ...entry, quantity } : entry));
-    });
-  };
-
   const addToCart = (product, quantity = 1) => {
     if (!orderingEnabled) {
       setCheckoutNotice("Ordering is disabled in admin preview mode.");
@@ -328,14 +238,7 @@ function StorefrontPage({
       return;
     }
 
-    const qty = Math.max(1, Number(quantity) || 1);
-    setCart((current) => {
-      const index = current.findIndex((entry) => entry.productId === product.id);
-      if (index === -1) return [...current, { productId: product.id, quantity: qty }];
-      return current.map((entry, idx) =>
-        idx === index ? { ...entry, quantity: entry.quantity + qty } : entry
-      );
-    });
+    addToCartRaw(product.id, quantity);
     setCartToast(
       availability === "preorder" ? `${product.name} added as preorder.` : `${product.name} added to cart.`
     );
@@ -365,119 +268,9 @@ function StorefrontPage({
       return;
     }
 
-    if (cartItems.length === 0) return;
-    if (!currentUser) {
-      setCheckoutError("Please login first to complete checkout.");
-      onNavigate(buildCheckoutLoginRedirect());
-      return;
-    }
-
-    setCheckoutError("");
-    setCheckoutNotice("");
-    setShowCheckout(true);
-    setShowCart(false);
-    const nameParts = splitFullName(currentUser.fullName || "");
-    setCheckoutForm((current) => ({
-      ...current,
-      firstName: current.firstName || nameParts.firstName,
-      lastName: current.lastName || nameParts.lastName,
-      email: current.email || currentUser.email || "",
-      phone: current.phone || currentUser.phone || "",
-      address: current.address || currentUser.address || "",
-      city: current.city || currentUser.city || ""
-    }));
-
-    let savedAddresses = accountAddresses;
-    try {
-      const accountPayload = await fetchAccountDashboard();
-      savedAddresses = Array.isArray(accountPayload.addresses) ? accountPayload.addresses : [];
-      setAccountAddresses(savedAddresses);
-    } catch {
-      savedAddresses = accountAddresses;
-    }
-    const defaultAddress = savedAddresses.find((address) => address.isDefault) || savedAddresses[0] || null;
-    setCheckoutForm((current) => ({
-      ...current,
-      firstName: current.firstName || nameParts.firstName,
-      lastName: current.lastName || nameParts.lastName,
-      email: current.email || currentUser.email || "",
-      phone: current.phone || defaultAddress?.phone || currentUser.phone || "",
-      address: current.address || defaultAddress?.street || currentUser.address || "",
-      city: current.city || defaultAddress?.city || currentUser.city || "",
-      addressId: current.addressId || (defaultAddress?.id ? String(defaultAddress.id) : "")
-    }));
-  };
-
-  const handleCheckoutSubmit = async (event) => {
-    event.preventDefault();
-    if (!currentUser) {
-      setCheckoutError("Please login first.");
-      onNavigate(buildCheckoutLoginRedirect());
-      return;
-    }
-
-    if (cartItems.length === 0) {
-      setCheckoutError("Your cart is empty.");
-      return;
-    }
-    const selectedTier = activeShippingTiers.find(
-      (tier) => tier.id === checkoutForm.shippingTierId
-    );
-    const isPickup = selectedTier?.type === "pickup";
-
-    const required = isPickup
-      ? ["firstName", "lastName"]
-      : ["firstName", "lastName", "address", "city"];
-    const missing = required.find(
-      (field) => !String(checkoutForm[field] || "").trim()
-    );
-
-    if (missing) {
-      setCheckoutError(
-        isPickup
-          ? "Please complete the required pickup details."
-          : "Please complete all delivery fields."
-      );
-      return;
-    }
-    if (!String(checkoutForm.phone || "").trim() && !String(checkoutForm.email || "").trim()) {
-      setCheckoutError("Phone or email is required.");
-      return;
-    }
-    if (!checkoutForm.shippingTierId) {
-      setCheckoutError("Please select a shipping area.");
-      return;
-    }
-
-    setCheckoutError("");
-    setCheckoutNotice("");
-    setIsSubmittingCheckout(true);
-
-    try {
-      const payload = await initializeCheckout({
-        items: cartItems.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity
-        })),
-        paymentMethod: checkoutForm.paymentMethod,
-        shippingTierId: checkoutForm.shippingTierId,
-        addressId: checkoutForm.addressId || undefined,
-        customer: {
-          firstName: checkoutForm.firstName.trim(),
-          lastName: checkoutForm.lastName.trim(),
-          fullName: `${checkoutForm.firstName || ""} ${checkoutForm.lastName || ""}`.trim(),
-          email: checkoutForm.email.trim(),
-          phone: checkoutForm.phone.trim(),
-          address: checkoutForm.address.trim(),
-          city: checkoutForm.city.trim()
-        }
-      });
-      window.location.assign(payload.authorizationUrl);
-    } catch (requestError) {
-      setCheckoutError(requestError.message || "Could not initialize payment.");
-      setCheckoutNotice("");
-      setIsSubmittingCheckout(false);
-    }
+    if ((cartItems ?? []).length === 0) return;
+    const opened = await openCheckoutRaw();
+    if (opened) setShowCart(false);
   };
 
   const openSearch = () => {
@@ -728,29 +521,12 @@ function StorefrontPage({
             items={cartItems}
             subtotal={cartSubtotal}
             shippingTiers={activeShippingTiers}
-            selectedShippingTierId= {checkoutForm.shippingTierId}
+            selectedShippingTierId={checkoutForm.shippingTierId}
             shippingFee={shippingFee}
             total={checkoutTotal}
             form={checkoutForm}
             savedAddresses={accountAddresses}
-            onFieldChange={(field, value) => {
-              if (field === "addressId") {
-                const selectedAddress = accountAddresses.find((address) => String(address.id) === String(value));
-                setCheckoutForm((current) => ({
-                  ...current,
-                  addressId: value,
-                  ...(selectedAddress ? {
-                    phone: selectedAddress.phone || current.phone,
-                    address: selectedAddress.street || current.address,
-                    city: selectedAddress.city || current.city
-                  } : {})
-                }));
-                setCheckoutError("");
-                return;
-              }
-              setCheckoutForm((current) => ({ ...current, [field]: value }));
-              setCheckoutError("");
-            }}
+            onFieldChange={onFieldChange}
             onSubmit={handleCheckoutSubmit}
             checkoutError={checkoutError}
             checkoutNotice={checkoutNotice}
