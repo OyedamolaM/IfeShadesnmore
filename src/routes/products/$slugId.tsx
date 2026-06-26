@@ -3,18 +3,15 @@ import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import ProductMedia from "../../components/product/ProductMedia.jsx";
 import CartDrawer from "../../components/cart/CartDrawer.jsx";
 import CheckoutModal from "../../components/cart/CheckoutModal.jsx";
-import CartIcon from "../../components/icons/CartIcon.jsx";
-import SearchIcon from "../../components/icons/SearchIcon.jsx";
-import ProfileIcon from "../../components/icons/ProfileIcon.jsx";
-import PreviewStyleSwitcher from "../../components/preview/PreviewStyleSwitcher.jsx";
 import { toPrice } from "../../utils/format";
 import { getProductPageData } from "../../serverFns";
 import { DEFAULT_PRODUCT_DETAIL_BULLETS } from "../../constants/storefront";
 import { addWishlistItem, fetchMe, fetchStorefront } from "../../utils/api";
 import { getStoredThemeVariant, persistThemeVariant } from "../../utils/themePreference";
-import { useCart} from "../../hooks/cart";
+import { CartProvider, useCart } from "../../hooks/cart";
 import { useCheckout } from "../../hooks/useCheckout";
 import { normalizeAvailability } from "../../utils/cart";
+import StoreNavbar from "../../components/layout/StoreNavbar.jsx";
 
 export const Route = createFileRoute("/products/$slugId")({
   loader: async ({ params }) => {
@@ -106,8 +103,17 @@ export const Route = createFileRoute("/products/$slugId")({
       ]
     };
   },
-  component: ProductPage
+  component: ProductPageRoot
 });
+
+// CartProvider wraps here so useCart() has context on both SSR and client
+function ProductPageRoot() {
+  return (
+    <CartProvider>
+      <ProductPage />
+    </CartProvider>
+  );
+}
 
 function ProductPage() {
   const product = Route.useLoaderData();
@@ -122,6 +128,14 @@ function ProductPage() {
   const [storefrontProducts, setStorefrontProducts] = useState([product]);
   const [shippingTiers, setShippingTiers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+
+  const brandName = "IfeShadesnMore";
+  const styleVariant = themeVariant;
+  const onStyleVariantChange = setThemeVariant;
+  const primaryShopTargetId = "shop";
+  const onOpenCart = () => setShowCart(true);
+  const onOpenProfile = () => { window.location.href = "/account"; };
+  const onOpenAdmin = () => { window.location.href = "/admin"; };
 
   const availability = normalizeAvailability(product.availability);
   const availabilityLabel =
@@ -141,9 +155,10 @@ function ProductPage() {
       : `${window.location.origin}/products/${productSlugId(product)}`;
   const productImages = normalizeProductImages(product);
   const selectedImageIndex = Math.max(0, Math.min(activeImageIndex, productImages.length - 1));
-  const selectedProduct = productImages.length > 0
-    ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
-    : product;
+  const selectedProduct =
+    productImages.length > 0
+      ? { ...product, image: productImages[selectedImageIndex], images: productImages, mainImageIndex: selectedImageIndex }
+      : product;
 
   const catalogProducts = useMemo(() => {
     const productMap = new Map();
@@ -159,8 +174,9 @@ function ProductPage() {
     return map;
   }, [catalogProducts]);
 
-  // ---- Shared cart logic (same storage key/shape as StorefrontPage) ----
+  // Same hook as StorefrontPage — reads from the same CartProvider/localStorage
   const { cart, cartCount, addToCart: addToCartRaw, setCartQuantity } = useCart();
+
   const cartItems = useMemo(() => {
     return cart
       .map((entry) => ({
@@ -169,6 +185,7 @@ function ProductPage() {
       }))
       .filter((item) => item.product);
   }, [cart, productsById]);
+
   const cartSubtotal = useMemo(() => {
     return cartItems.reduce(
       (sum, item) => sum + (Number(item.product.price) || 0) * item.quantity,
@@ -176,10 +193,7 @@ function ProductPage() {
     );
   }, [cartItems]);
 
-  // ---- Shared checkout logic ----
-  const onNavigate = (path) => {
-    window.location.href = path;
-  };
+  const onNavigate = (path) => { window.location.href = path; };
 
   const {
     checkoutForm,
@@ -222,19 +236,14 @@ function ProductPage() {
       if (!isMounted) return;
       if (storefrontResult.status === "fulfilled") {
         const payload = storefrontResult.value || {};
-        if (Array.isArray(payload.products)) {
-          setStorefrontProducts(payload.products);
-        }
+        if (Array.isArray(payload.products)) setStorefrontProducts(payload.products);
         setShippingTiers(Array.isArray(payload.settings?.shippingTiers) ? payload.settings.shippingTiers : []);
       }
       if (meResult.status === "fulfilled") {
-        const user = meResult.value?.user || null;
-        setCurrentUser(user);
+        setCurrentUser(meResult.value?.user || null);
       }
     });
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
   useEffect(() => {
@@ -257,7 +266,6 @@ function ProductPage() {
       setToast(`${product.name} is currently out of stock.`);
       return;
     }
-
     const quantity = resolveQuantity();
     addToCartRaw(product.id, quantity);
     setToast(
@@ -298,7 +306,6 @@ function ProductPage() {
       text: product.name ? `View ${product.name} on IfeShadesnMore` : "View this product on IfeShadesnMore",
       url: productUrl
     };
-
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         await navigator.share(shareData);
@@ -319,11 +326,17 @@ function ProductPage() {
 
   return (
     <div className={`page product-seo-page preview-storefront preview-${themeVariant}`}>
-      <ProductPageHeader
+      <StoreNavbar
+        brandName={brandName}
         cartCount={cartCount}
-        themeVariant={themeVariant}
-        onThemeVariantChange={setThemeVariant}
-        onOpenCart={() => setShowCart(true)}
+        currentUser={currentUser}
+        styleVariant={styleVariant}
+        onStyleVariantChange={onStyleVariantChange}
+        onOpenCart={onOpenCart}
+        onOpenProfile={onOpenProfile}
+        onOpenAdmin={onOpenAdmin}
+        showAdmin={currentUser?.role === "admin"}
+        primaryShopTargetId={primaryShopTargetId}
       />
       <main className="site-shell product-seo-shell">
         <section className="container product-seo-inner">
@@ -336,7 +349,9 @@ function ProductPage() {
                     <button
                       type="button"
                       className="product-gallery-nav product-gallery-prev"
-                      onClick={() => setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)}
+                      onClick={() =>
+                        setActiveImageIndex((current) => (current - 1 + productImages.length) % productImages.length)
+                      }
                       aria-label="Show previous product image"
                     >
                       &lt;
@@ -344,7 +359,9 @@ function ProductPage() {
                     <button
                       type="button"
                       className="product-gallery-nav product-gallery-next"
-                      onClick={() => setActiveImageIndex((current) => (current + 1) % productImages.length)}
+                      onClick={() =>
+                        setActiveImageIndex((current) => (current + 1) % productImages.length)
+                      }
                       aria-label="Show next product image"
                     >
                       &gt;
@@ -466,55 +483,15 @@ function ProductPage() {
   );
 }
 
-function ProductPageHeader({ cartCount, themeVariant, onThemeVariantChange, onOpenCart }) {
-  const normalizedCount = Math.max(0, Number(cartCount) || 0);
-
-  return (
-    <header className="preview-nav product-page-header">
-      <Link to="/" className="preview-brand" aria-label="IfeShadesnMore home">
-        <img src="/brand/ife-logo-circle.png" alt="" />
-        <strong>IfeShadesnMore</strong>
-      </Link>
-
-      <nav aria-label="Primary navigation">
-        <Link to="/" hash="shop">Shop</Link>
-        <Link to="/" hash="editorial">Blog</Link>
-        <Link to="/" hash="reviews">Reviews</Link>
-        <Link to="/" hash="faq">FAQ</Link>
-        <Link to="/" hash="contact">About</Link>
-      </nav>
-
-      <div className="preview-nav-actions">
-        <PreviewStyleSwitcher value={themeVariant} onChange={onThemeVariantChange} compactLabel="Theme" />
-        <Link to="/" hash="shop" className="preview-account-button" aria-label="Search products">
-          <SearchIcon />
-        </Link>
-        <Link to="/account" className="preview-account-button" aria-label="Open profile">
-          <ProfileIcon />
-        </Link>
-        <button type="button" className="preview-cart-button" onClick={onOpenCart} aria-label="Open cart">
-          <CartIcon />
-          {normalizedCount > 0 ? <span>{normalizedCount > 99 ? "99+" : normalizedCount}</span> : null}
-        </button>
-      </div>
-    </header>
-  );
-}
-
 function ProductPageFooter() {
   return (
     <footer className="site-footer product-page-footer">
       <div className="container footer-inner">
         <div className="footer-links">
-          <Link to="/privacy-policy" className="footer-link-button">
-            Privacy Policy
-          </Link>
+          <Link to="/privacy-policy" className="footer-link-button">Privacy Policy</Link>
           <span>|</span>
-          <Link to="/terms-of-service" className="footer-link-button">
-            Terms of Service
-          </Link>
+          <Link to="/terms-of-service" className="footer-link-button">Terms of Service</Link>
         </div>
-
         <div className="footer-contact-stack">
           <div className="footer-contact-links">
             <a href="mailto:oluborodedeborah2000@gmail.com" target="_blank" rel="noopener noreferrer">
@@ -533,7 +510,6 @@ function ProductPageFooter() {
           </div>
           <p>1, Sunday Akinbo Str, command Ipaja, Lagos</p>
         </div>
-
         <div className="footer-socials" aria-label="Social media links">
           <a href="https://www.facebook.com/share/1CJYVRj8hQ/" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
             <SocialIcon type="facebook" />
@@ -551,7 +527,9 @@ function ProductPageFooter() {
 }
 
 function getSiteUrl(runtimeSiteUrl?: string) {
-  return String(runtimeSiteUrl || import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  return String(
+    runtimeSiteUrl || import.meta.env.VITE_SITE_URL || import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000"
+  ).replace(/\/+$/, "");
 }
 
 function absoluteUrl(value: string, siteUrl: string) {
@@ -590,7 +568,6 @@ function inferImageType(value: string) {
       return String(value || "").toLowerCase();
     }
   })();
-
   if (pathname.endsWith(".png")) return "image/png";
   if (pathname.endsWith(".webp")) return "image/webp";
   if (pathname.endsWith(".gif")) return "image/gif";
@@ -617,7 +594,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   if (type === "instagram") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -627,7 +603,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   if (type === "tiktok") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -635,7 +610,6 @@ function SocialIcon({ type }) {
       </svg>
     );
   }
-
   return null;
 }
 
