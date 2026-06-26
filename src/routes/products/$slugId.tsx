@@ -178,19 +178,21 @@ function ProductPage() {
   const { cart, cartCount, addToCart: addToCartRaw, setCartQuantity } = useCart();
 
   const cartItems = useMemo(() => {
-    return cart
-      .map((entry) => ({
-        product: productsById.get(entry.productId),
-        quantity: entry.quantity
-      }))
-      .filter((item) => item.product);
-  }, [cart, productsById]);
+  return cart
+    .map((entry) => {
+      const product = productsById.get(entry.productId);
+      if (!product) return null;
+      return {
+        product,
+        quantity: entry.quantity,
+        lineTotal: Number(product.price || 0) * entry.quantity
+      };
+    })
+    .filter(Boolean);
+}, [cart, productsById]);
 
   const cartSubtotal = useMemo(() => {
-    return cartItems.reduce(
-      (sum, item) => sum + (Number(item.product.price) || 0) * item.quantity,
-      0
-    );
+    return cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
   }, [cartItems]);
 
   const onNavigate = (path) => { window.location.href = path; };
