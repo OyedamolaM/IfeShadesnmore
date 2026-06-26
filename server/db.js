@@ -384,8 +384,11 @@ function parseShippingTiers(value) {
       const name = String(tier.name || "").trim();
       const description = String(tier.description || "").trim();
       const fee = Math.max(0, Math.round(Number(tier.fee) || 0));
+      const type = tier.type === "pickup"
+        ? "pickup"
+        : "delivery";
       if (!id || !name) return null;
-      return { id, name, description, fee, isActive: tier.isActive !== false };
+      return { id, name, description, fee, type, isActive: tier.isActive !== false };
     })
     .filter(Boolean);
 

@@ -38,7 +38,6 @@ function CheckoutModal({
   const [showShippingOptions, setShowShippingOptions] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
   const [deliveryForm, setDeliveryForm] = useState(form);
-  console.log("shippingTiers:", shippingTiers);
 
   if (!open) return null;
 
@@ -188,27 +187,37 @@ const isPickup =
                   )}
 
                   <div className="shipping-option">
-
-                    {isPickup && (
-                      <p className="pickup-note">
-                        <strong>Collection:</strong> Pickup from the selected location.
-                      </p>
-                    )}
-                    <p>
-                      <strong>Shipping Area:</strong>{" "}
-                      {shippingArea ? (
-                        <>
-                          {shippingArea}
-                          {selectedShippingTier && (
+                   {isPickup ? (
+    <p className="pickup-note">
+      <strong>Pickup:</strong>{" "}
+      {selectedShippingTier ? (
+        <>
+          {selectedShippingTier.name}
+          {selectedShippingTier.fee > 0 && (
+            <small className="shipping-fee">
+              {toPrice(selectedShippingTier.fee)}
+            </small>
+          )}
+        </>
+      ) : (
+        <span className="delivery-missing">Not selected</span>
+      )}
+    </p>
+                    ) : (
+                      <p>
+                        <strong>Shipping Area:</strong>{" "}
+                        {shippingArea ? (
+                          <>
+                            {shippingArea}
                             <small className="shipping-fee">
                               {toPrice(selectedShippingTier.fee)}
                             </small>
-                          )}
-                        </>
-                      ) : (
-                        <span className="delivery-missing">Not selected</span>
-                      )}
-                    </p>
+                          </>
+                        ) : (
+                          <span className="delivery-missing">Not selected</span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </>
               )}

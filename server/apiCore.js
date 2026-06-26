@@ -1570,6 +1570,11 @@ async function updateSettings(request) {
     ]
   );
   const row = await queryOne("SELECT * FROM settings WHERE id = 1");
+  console.log(
+  JSON.parse(
+    row.shipping_tiers
+  )
+);
   return json({ settings: mapSettingsRow(row) });
 }
 

@@ -1046,9 +1046,17 @@ function AdminOverlay({
     onProductDraftChange("audiences", reconciled);
     onProductDraftChange("audience", reconciled[0]);
   };
+  const normalizedShippingTiers = (settingsDraft.shippingTiers || []).map((tier) => ({
+    id: tier.id,
+    name: tier.name,
+    description: tier.description || "",
+    fee: Number(tier.fee) || 0,
+    type: tier.type || "delivery",
+    isActive: tier.isActive !== false
+  }));
 
   const updateShippingTier = (index, field, value) => {
-    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const currentTiers = normalizedShippingTiers;
     const nextTiers = currentTiers.map((tier, tierIndex) =>
       tierIndex === index
         ? {
@@ -1135,7 +1143,7 @@ function AdminOverlay({
   };
 
   const openShippingTierEditor = (index = -1) => {
-    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+   const currentTiers = normalizedShippingTiers;
     const tier = index >= 0
       ? currentTiers[index]
       : {
@@ -1143,7 +1151,9 @@ function AdminOverlay({
           name: "",
           description: "",
           fee: 0,
+          type: "delivery",
           isActive: true
+          
         };
     setSettingsEditor({ kind: "shippingTier", index, label: index >= 0 ? "Edit shipping tier" : "Add shipping tier" });
     setSettingsModalDraft({ ...tier });
@@ -1186,7 +1196,7 @@ function AdminOverlay({
 
   const removeShippingTierAndSave = async (event, index) => {
     event.preventDefault();
-    const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+    const currentTiers = normalizedShippingTiers;
     const nextSettings = {
       ...settingsDraft,
       shippingTiers: currentTiers.filter((_, tierIndex) => tierIndex !== index)
@@ -1221,7 +1231,7 @@ function AdminOverlay({
     }
 
     if (settingsEditor.kind === "shippingTier") {
-      const currentTiers = Array.isArray(settingsDraft.shippingTiers) ? settingsDraft.shippingTiers : [];
+     const currentTiers = normalizedShippingTiers;
       const nextTier = {
         id: settingsModalDraft.id || `shipping-${Date.now()}`,
         name: String(settingsModalDraft.name || "").trim(),
@@ -1230,8 +1240,6 @@ function AdminOverlay({
         type: settingsModalDraft.type || "delivery",
         isActive: settingsModalDraft.isActive !== false
       };
-      console.log("nextTier", nextTier);
-      console.log("currentTiers", currentTiers);
       if (!nextTier.name) {
         pushAdminToast("Shipping tier name is required.", "error");
         return;
