@@ -416,7 +416,10 @@ const isPickup =
                       >
                         <span>
                           {selectedDraftShippingTier
-                            ? selectedDraftShippingTier.name
+                            ? selectedDraftShippingTier.type === "pickup" ||
+                              selectedDraftShippingTier.isPickup
+                              ? `Pickup - ${selectedDraftShippingTier.name}`
+                              : selectedDraftShippingTier.name
                             : "Select a shipping area"}
                         </span>
 
@@ -475,7 +478,11 @@ const isPickup =
                                 }}
                                 disabled={isSubmitting}
                               >
-                                <span>{tier.name}</span>
+                                <span>
+                                  {tier.type === "pickup" || tier.isPickup
+                                    ? `Pickup - ${tier.name}`
+                                    : tier.name}
+                                </span>
                                 <strong>{toPrice(tier.fee)}</strong>
                               </button>
                             );

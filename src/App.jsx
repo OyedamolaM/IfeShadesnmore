@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import AdminOverlay from "./components/admin/AdminOverlay";
+import { CartProvider } from "./hooks/cart";
+
 import {
   DEFAULT_HERO_ROTATION_IMAGES,
   DEFAULT_PRODUCT_DETAIL_BULLETS,
@@ -405,33 +407,37 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     };
 
     return (
-      <StorefrontPage
-        products={products}
-        settings={settings}
-        heroSlides={heroSlides}
-        blogs={blogs}
-        currentUser={currentUser}
-        location={{ ...routeLocation, pathname: "/admin/storefront" }}
-        onNavigate={handleAdminPreviewNavigate}
-        orderingEnabled={false}
-        isAdminPreview
-      />
+      <CartProvider>
+        <StorefrontPage
+          products={products}
+          settings={settings}
+          heroSlides={heroSlides}
+          blogs={blogs}
+          currentUser={currentUser}
+          location={{ ...routeLocation, pathname: "/admin/storefront" }}
+          onNavigate={handleAdminPreviewNavigate}
+          orderingEnabled={false}
+          isAdminPreview
+        />
+      </CartProvider>
     );
   }
 
   if (screen === "home" || screen === "admin-preview") {
     return (
-      <StorefrontPage
-        products={products}
-        settings={settings}
-        heroSlides={heroSlides}
-        blogs={blogs}
-        currentUser={currentUser}
-        location={routeLocation}
-        onNavigate={navigateTo}
-        orderingEnabled={screen === "home" && currentUser?.role !== "admin"}
-        isAdminPreview={screen === "admin-preview"}
-      />
+      <CartProvider>
+        <StorefrontPage
+          products={products}
+          settings={settings}
+          heroSlides={heroSlides}
+          blogs={blogs}
+          currentUser={currentUser}
+          location={routeLocation}
+          onNavigate={navigateTo}
+          orderingEnabled={screen === "home" && currentUser?.role !== "admin"}
+          isAdminPreview={screen === "admin-preview"}
+        />
+      </CartProvider>
     );
   }
 
@@ -494,7 +500,8 @@ function App({ screen = "home", initialStorefront = null, initialUser = null }) 
     return <PaymentCallbackPage />;
   }
 
-  return <StorefrontPage products={products} settings={settings} heroSlides={heroSlides} blogs={blogs} currentUser={currentUser} location={routeLocation} onNavigate={navigateTo} />;
+  return <CartProvider>
+    <StorefrontPage products={products} settings={settings} heroSlides={heroSlides} blogs={blogs} currentUser={currentUser} location={routeLocation} onNavigate={navigateTo} /></CartProvider>;
 }
 
 export default App;
